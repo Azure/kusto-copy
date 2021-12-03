@@ -56,30 +56,35 @@ namespace kusto_copy
                     ? 0
                     : 1;
             }
-            //catch (DeltaException ex)
-            //{
-            //    DisplayDeltaException(ex);
-
-            //    return 1;
-            //}
             catch (Exception ex)
             {
-                //DisplayGenericException(ex);
+                DisplayGenericException(ex);
 
                 return 1;
+            }
+        }
+
+        private static void DisplayGenericException(Exception ex, string tab = "")
+        {
+            Console.Error.WriteLine(
+                $"{tab}Exception encountered:  {ex.GetType().FullName} ; {ex.Message}");
+            Console.Error.WriteLine($"{tab}Stack trace:  {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                DisplayGenericException(ex.InnerException, tab + "  ");
             }
         }
 
         private static async Task RunOptionsAsync(CommandLineOptions options)
         {
             ConfigureTrace(options.Verbose);
-            
+
             Trace.WriteLine("");
 
             //  Dependency injection
-            var orchestration = new CopyOrchestration(
+            var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,
-                options.Source);
+                new Uri(options.Source));
             //var success = await orchestration.ComputeDeltaAsync(
             //    options.ParameterFilePath,
             //    options.Overrides);

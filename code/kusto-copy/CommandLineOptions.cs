@@ -13,7 +13,7 @@ namespace kusto_copy
         [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL")]
         public string Lake { get; set; } = string.Empty;
 
-        [Option('s', "source", Required = true, HelpText = "Source Cluster URI")]
+        [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
 
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
