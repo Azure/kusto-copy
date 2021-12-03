@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace kusto_copy
+namespace KustoCopyBlobs
 {
     public class CopyException : Exception
     {

@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
+using KustoCopyBlobs;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
