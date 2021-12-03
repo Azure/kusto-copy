@@ -2,6 +2,7 @@
 using CommandLine.Text;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -35,7 +36,6 @@ namespace kusto_copy
 
             Console.WriteLine();
             Console.WriteLine($"kusto-copy { AssemblyVersion }");
-            Console.WriteLine();
 
             //  Use CommandLineParser NuGet package to parse command line
             //  See https://github.com/commandlineparser/commandline
@@ -72,10 +72,9 @@ namespace kusto_copy
 
         private static async Task RunOptionsAsync(CommandLineOptions options)
         {
-            if (options.Verbose)
-            {
-                Console.WriteLine("Verbose output enabled");
-            }
+            ConfigureTrace(options.Verbose);
+            
+            Trace.WriteLine("");
 
             //  Dependency injection
             //var tracer = new ConsoleTracer(options.Verbose);
@@ -93,6 +92,20 @@ namespace kusto_copy
             //}
 
             await Task.CompletedTask;
+        }
+
+        private static void ConfigureTrace(bool isVerbose)
+        {
+            var consoleListener = new TextWriterTraceListener(Console.Out)
+            {
+                Filter = new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning)
+            };
+
+            Trace.Listeners.Add(consoleListener);
+            if (isVerbose)
+            {
+                Trace.TraceInformation("Verbose output enabled");
+            }
         }
 
         private static void HandleParseError(
