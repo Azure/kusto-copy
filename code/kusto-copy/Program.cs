@@ -77,11 +77,9 @@ namespace kusto_copy
             Trace.WriteLine("");
 
             //  Dependency injection
-            //var tracer = new ConsoleTracer(options.Verbose);
-            //var apiClient = new ApiClient(tracer, new SimpleHttpClientFactory(tracer));
-            //var orchestration = new DeltaOrchestration(
-            //    tracer,
-            //    apiClient);
+            var orchestration = new CopyOrchestration(
+                options.Lake,
+                options.Source);
             //var success = await orchestration.ComputeDeltaAsync(
             //    options.ParameterFilePath,
             //    options.Overrides);
