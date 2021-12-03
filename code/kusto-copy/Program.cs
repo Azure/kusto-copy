@@ -56,11 +56,33 @@ namespace kusto_copy
                     ? 0
                     : 1;
             }
+            catch (CopyException ex)
+            {
+                DisplayCopyException(ex);
+
+                return 1;
+            }
             catch (Exception ex)
             {
                 DisplayGenericException(ex);
 
                 return 1;
+            }
+        }
+
+        private static void DisplayCopyException(CopyException ex, string tab = "")
+        {
+            Trace.TraceError($"{tab}Error:  {ex.Message}");
+
+            var copyInnerException = ex.InnerException as CopyException;
+
+            if (copyInnerException != null)
+            {
+                DisplayCopyException(copyInnerException, tab + "  ");
+            }
+            if (ex.InnerException != null)
+            {
+                DisplayGenericException(ex.InnerException, tab + "  ");
             }
         }
 
