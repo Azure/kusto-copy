@@ -14,6 +14,11 @@ namespace KustoCopyBlobs
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var blocks = await bookmarkGateway.ReadAllBlocksAsync();
 
+            if (blocks.Count != 0)
+            {
+                throw new NotImplementedException();
+            }
+
             return new RootBookmark(bookmarkGateway);
         }
 

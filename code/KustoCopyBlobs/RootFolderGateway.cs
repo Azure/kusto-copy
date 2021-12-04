@@ -123,24 +123,15 @@ namespace KustoCopyBlobs
             }
             else
             {
-                var folderExists = (await folderClient.ExistsAsync()).Value;
+                await folderClient.CreateIfNotExistsAsync();
 
-                if (!folderExists)
+                var folderProperties = (await folderClient.GetPropertiesAsync()).Value;
+
+                if (!folderProperties.IsDirectory)
                 {
                     throw new CopyException(
-                        "Data lake folder URL points to non-existing folder:  "
+                        "Data lake folder URL points to a blob instead of a folder:  "
                         + $"'{dataLakeFolderUrl}'");
-                }
-                else
-                {
-                    var folderProperties = (await folderClient.GetPropertiesAsync()).Value;
-
-                    if (!folderProperties.IsDirectory)
-                    {
-                        throw new CopyException(
-                            "Data lake folder URL points to a blob instead of a folder:  "
-                            + $"'{dataLakeFolderUrl}'");
-                    }
                 }
             }
 
