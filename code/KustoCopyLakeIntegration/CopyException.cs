@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyBlobs
+namespace KustoCopyLakeIntegration
 {
     public class CopyException : Exception
     {

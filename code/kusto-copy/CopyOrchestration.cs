@@ -1,8 +1,8 @@
 ﻿using Azure.Core;
 using Azure.Identity;
 using KustoCopyAdxIntegration;
-using KustoCopyBlobs;
-using KustoCopyBlobs.Parameters;
+using KustoCopyLakeIntegration;
+using KustoCopyLakeIntegration.Parameters;
 
 namespace kusto_copy
 {

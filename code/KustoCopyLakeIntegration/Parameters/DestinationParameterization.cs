@@ -1,4 +1,4 @@
-﻿namespace KustoCopyBlobs.Parameters
+﻿namespace KustoCopyLakeIntegration.Parameters
 {
     public class DestinationParameterization
     {

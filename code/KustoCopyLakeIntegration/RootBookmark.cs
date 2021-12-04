@@ -1,7 +1,7 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
 
-namespace KustoCopyBlobs
+namespace KustoCopyLakeIntegration
 {
     public class RootBookmark
     {
