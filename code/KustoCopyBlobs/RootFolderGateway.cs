@@ -73,7 +73,7 @@ namespace KustoCopyBlobs
         private readonly RootBookmark _rootBookmark;
         private readonly IAsyncDisposable _rootBookmarkLock;
 
-        public async static Task<RootFolderGateway> CreateFolderGatewayAsync(
+        public async static Task<RootFolderGateway> CreateGatewayAsync(
             TokenCredential credential,
             string dataLakeFolderUrl)
         {

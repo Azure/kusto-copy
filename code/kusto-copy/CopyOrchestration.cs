@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Identity;
+using KustoCopyAdxIntegration;
 using KustoCopyBlobs;
 using KustoCopyBlobs.Parameters;
 
@@ -8,10 +9,14 @@ namespace kusto_copy
     internal class CopyOrchestration : IAsyncDisposable
     {
         private readonly RootFolderGateway _rootFolderGateway;
+        private readonly ClusterQueryGateway _sourceGateway;
 
-        private CopyOrchestration(RootFolderGateway rootFolderGateway)
+        private CopyOrchestration(
+            RootFolderGateway rootFolderGateway,
+            ClusterQueryGateway sourceGateway)
         {
             _rootFolderGateway = rootFolderGateway;
+            _sourceGateway = sourceGateway;
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -19,16 +24,19 @@ namespace kusto_copy
             MainParameterization parameterization)
         {
             var credential = new InteractiveBrowserCredential();
-            var rootFolderGateway = await RootFolderGateway.CreateFolderGatewayAsync(
+            var rootFolderGateway = await RootFolderGateway.CreateGatewayAsync(
                 credential,
                 dataLakeFolderUrl);
+            var sourceGateway = await ClusterQueryGateway.CreateGatewayAsync(
+                parameterization.Source!.ClusterQueryUri!);
 
-            return new CopyOrchestration(rootFolderGateway);
+            return new CopyOrchestration(rootFolderGateway, sourceGateway);
         }
 
         public async Task RunAsync()
         {
             //var rootBookmark = await _rootFolderGateway.RetrieveAndLockRootBookmark();
+            _sourceGateway.Hi();
 
             await ValueTask.CompletedTask;
         }

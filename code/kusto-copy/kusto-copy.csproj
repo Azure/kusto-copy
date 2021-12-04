@@ -25,6 +25,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\KustoCopyAdxIntegration\KustoCopyAdxIntegration.csproj" />
 		<ProjectReference Include="..\KustoCopyBlobs\KustoCopyBlobs.csproj" />
 	</ItemGroup>
 

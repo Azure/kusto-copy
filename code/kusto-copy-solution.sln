@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "kusto-copy", "kusto-copy\kusto-copy.csproj", "{7077067F-E8F2-411E-9D20-8E755080D8C3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "kusto-copy", "kusto-copy\kusto-copy.csproj", "{7077067F-E8F2-411E-9D20-8E755080D8C3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyBlobs", "KustoCopyBlobs\KustoCopyBlobs.csproj", "{C57886E2-926E-4CC4-8C4D-E2F0AE25F217}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KustoCopyBlobs", "KustoCopyBlobs\KustoCopyBlobs.csproj", "{C57886E2-926E-4CC4-8C4D-E2F0AE25F217}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyAdxIntegration", "KustoCopyAdxIntegration\KustoCopyAdxIntegration.csproj", "{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{C57886E2-926E-4CC4-8C4D-E2F0AE25F217}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C57886E2-926E-4CC4-8C4D-E2F0AE25F217}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C57886E2-926E-4CC4-8C4D-E2F0AE25F217}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
