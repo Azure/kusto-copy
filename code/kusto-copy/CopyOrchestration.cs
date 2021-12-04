@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using Azure.Identity;
 using KustoCopyBlobs;
+using KustoCopyBlobs.Parameters;
 
 namespace kusto_copy
 {
@@ -15,11 +16,12 @@ namespace kusto_copy
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
             string dataLakeFolderUrl,
-            Uri sourceClusterUri)
+            MainParameterization parameterization)
         {
             var credential = new InteractiveBrowserCredential();
-            var rootFolderGateway =
-                await RootFolderGateway.CreateFolderGatewayAsync(credential, dataLakeFolderUrl);
+            var rootFolderGateway = await RootFolderGateway.CreateFolderGatewayAsync(
+                credential,
+                dataLakeFolderUrl);
 
             return new CopyOrchestration(rootFolderGateway);
         }

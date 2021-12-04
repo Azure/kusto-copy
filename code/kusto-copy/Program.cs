@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using KustoCopyBlobs;
+using KustoCopyBlobs.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -106,7 +107,13 @@ namespace kusto_copy
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,
-                new Uri(options.Source)))
+                new MainParameterization
+                {
+                    Source = new SourceParameterization
+                    {
+                        ClusterQueryUri = options.Source
+                    }
+                }))
             {
                 await orchestration.RunAsync();
             }
