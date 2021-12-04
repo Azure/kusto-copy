@@ -104,20 +104,12 @@ namespace kusto_copy
 
             Trace.WriteLine("");
 
-            //  Dependency injection
-            var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
+            await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,
-                new Uri(options.Source));
-            //var success = await orchestration.ComputeDeltaAsync(
-            //    options.ParameterFilePath,
-            //    options.Overrides);
-
-            //if (!success)
-            //{
-            //    throw new DeltaException("Failure due to drop commands");
-            //}
-
-            await Task.CompletedTask;
+                new Uri(options.Source)))
+            {
+                await orchestration.RunAsync();
+            }
         }
 
         private static void ConfigureTrace(bool isVerbose)

@@ -4,9 +4,14 @@ using KustoCopyBlobs;
 
 namespace kusto_copy
 {
-    internal class CopyOrchestration
+    internal class CopyOrchestration : IAsyncDisposable
     {
         private readonly RootFolderGateway _rootFolderGateway;
+
+        private CopyOrchestration(RootFolderGateway rootFolderGateway)
+        {
+            _rootFolderGateway = rootFolderGateway;
+        }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
             string dataLakeFolderUrl,
@@ -19,9 +24,16 @@ namespace kusto_copy
             return new CopyOrchestration(rootFolderGateway);
         }
 
-        private CopyOrchestration(RootFolderGateway rootFolderGateway)
+        public async Task RunAsync()
         {
-            _rootFolderGateway = rootFolderGateway;
+            //var rootBookmark = await _rootFolderGateway.RetrieveAndLockRootBookmark();
+
+            await ValueTask.CompletedTask;
+        }
+
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            await ((IAsyncDisposable)_rootFolderGateway).DisposeAsync();
         }
     }
 }

@@ -1,9 +1,10 @@
 ﻿using Azure.Core;
+using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 
 namespace KustoCopyBlobs
 {
-    public class RootFolderGateway
+    public class RootFolderGateway : IAsyncDisposable
     {
         #region Inner Types
         private class DataLakeFolder
@@ -68,6 +69,9 @@ namespace KustoCopyBlobs
         #endregion
 
         private readonly DataLakeDirectoryClient _rootFolderClient;
+        private readonly TokenCredential _credential;
+        private readonly RootBookmark _rootBookmark;
+        private readonly IAsyncDisposable _rootBookmarkLock;
 
         public async static Task<RootFolderGateway> CreateFolderGatewayAsync(
             TokenCredential credential,
@@ -75,13 +79,29 @@ namespace KustoCopyBlobs
         {
             var folder = new DataLakeFolder(dataLakeFolderUrl);
             var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
+            var rootBookmark = await RootBookmark.RetrieveAsync(
+                folderClient.GetFileClient("root.bookmark"),
+                credential);
+            var rootBookmarkLock = await rootBookmark.PermanentLockAsync();
 
-            return new RootFolderGateway(folderClient);
+            return new RootFolderGateway(folderClient, credential, rootBookmark, rootBookmarkLock);
         }
 
-        private RootFolderGateway(DataLakeDirectoryClient folderClient)
+        private RootFolderGateway(
+            DataLakeDirectoryClient folderClient,
+            TokenCredential credential,
+            RootBookmark rootBookmark,
+            IAsyncDisposable rootBookmarkLock)
         {
-            this._rootFolderClient = folderClient;
+            _rootFolderClient = folderClient;
+            _credential = credential;
+            _rootBookmark = rootBookmark;
+            _rootBookmarkLock = rootBookmarkLock;
+        }
+
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            await _rootBookmarkLock.DisposeAsync();
         }
 
         private static async Task<DataLakeDirectoryClient> GetFolderClientAsync(
