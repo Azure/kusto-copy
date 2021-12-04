@@ -57,9 +57,7 @@ namespace KustoCopyBlobs
         public BookmarkGateway(DataLakeFileClient fileClient, TokenCredential credential, bool shouldExist)
         {
             _fileClient = fileClient;
-            _blobClient = new BlockBlobClient(
-                fileClient.Uri,
-                credential);
+            _blobClient = new BlockBlobClient(fileClient.Uri, credential);
             _shouldExist = shouldExist;
         }
 
@@ -75,39 +73,50 @@ namespace KustoCopyBlobs
         {
             await EnsureExistAsync();
 
-            var blockListTask = _blobClient.GetBlockListAsync(BlockListTypes.Committed);
-            var contentTask = _blobClient.DownloadContentAsync();
-            var blockList = (await blockListTask).Value.CommittedBlocks;
-            var content = (await contentTask).Value.Content.ToMemory();
-            var builder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
-            var offset = 0;
+            var content = (await _blobClient.DownloadContentAsync()).Value.Content.ToMemory();
 
-            foreach (var block in blockList)
-            {
-                var id = block.Name;
-                var buffer = content.Slice(offset, block.Size);
-                var bookmarkBlock = new BookmarkBlock(id, buffer);
+            if (content.Length == 0)
+            {   //  No content
+                _blockIds = ImmutableArray<string>.Empty;
 
-                if (offset == 0)
-                {   //  This is the header ; let's validate it
-                    var header = JsonSerializer.Deserialize<BookmarkHeader>(buffer.Span);
-
-                    if (header == null || header.BookmarkVersion != new BookmarkHeader().BookmarkVersion)
-                    {
-                        throw new CopyException($"Wrong header on ${_fileClient.Uri}");
-                    }
-                }
-                else
-                {
-                    builder.Add(bookmarkBlock);
-                }
-                offset += block.Size;
+                return ImmutableArray<BookmarkBlock>.Empty;
             }
-            _blockIds = blockList
-                .Select(b => b.Name)
-                .ToImmutableArray();
+            else
+            {
+                var blockList = (await _blobClient.GetBlockListAsync(BlockListTypes.Committed))
+                    .Value
+                    .CommittedBlocks;
+                var builder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
+                var offset = 0;
 
-            return builder.ToImmutable();
+                foreach (var block in blockList)
+                {
+                    var id = block.Name;
+                    var buffer = content.Slice(offset, block.Size);
+                    var bookmarkBlock = new BookmarkBlock(id, buffer);
+
+                    if (offset == 0)
+                    {   //  This is the header ; let's validate it
+                        var header = JsonSerializer.Deserialize<BookmarkHeader>(buffer.Span);
+
+                        if (header == null || header.BookmarkVersion != new BookmarkHeader().BookmarkVersion)
+                        {
+                            throw new CopyException($"Wrong header on ${_fileClient.Uri}");
+                        }
+                    }
+                    else
+                    {
+                        builder.Add(bookmarkBlock);
+                    }
+                    offset += block.Size;
+                }
+                _blockIds = blockList
+                    .Select(b => b.Name)
+                    .Prepend(HEADER_ID)
+                    .ToImmutableArray();
+
+                return builder.ToImmutable();
+            }
         }
 
         private async Task EnsureExistAsync()
