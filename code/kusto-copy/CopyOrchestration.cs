@@ -36,8 +36,6 @@ namespace kusto_copy
 
         public async Task RunAsync()
         {
-            //var rootBookmark = await _rootFolderGateway.RetrieveAndLockRootBookmark();
-
             await ValueTask.CompletedTask;
         }
 
