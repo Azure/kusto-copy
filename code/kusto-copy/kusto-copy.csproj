@@ -22,11 +22,12 @@
 	<ItemGroup>
 		<PackageReference Include="Azure.Identity" Version="1.5.0" />
 		<PackageReference Include="CommandLineParser" Version="2.8.0" />
+		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="9.4.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\KustoCopyAdxIntegration\KustoCopyAdxIntegration.csproj" />
-		<ProjectReference Include="..\KustoCopyLakeIntegration\KustoCopyLakeIntegration.csproj" />
+	  <ProjectReference Include="..\KustoCopyBookmarks\KustoCopyBookmarks.csproj" />
+	  <ProjectReference Include="..\KustoCopyServices\KustoCopyServices.csproj" />
 	</ItemGroup>
 
 </Project>

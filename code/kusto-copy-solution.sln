@@ -5,9 +5,9 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "kusto-copy", "kusto-copy\kusto-copy.csproj", "{7077067F-E8F2-411E-9D20-8E755080D8C3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyAdxIntegration", "KustoCopyAdxIntegration\KustoCopyAdxIntegration.csproj", "{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyBookmarks", "KustoCopyBookmarks\KustoCopyBookmarks.csproj", "{ECC8F4AB-97AF-4521-88BB-DB12FA63836D}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KustoCopyLakeIntegration", "KustoCopyLakeIntegration\KustoCopyLakeIntegration.csproj", "{30332555-6BCB-48B0-83F3-8CB05DCB3674}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyServices", "KustoCopyServices\KustoCopyServices.csproj", "{64E20F44-9685-4288-BA06-F1FED0681B6B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,14 +19,14 @@ Global
 		{7077067F-E8F2-411E-9D20-8E755080D8C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7077067F-E8F2-411E-9D20-8E755080D8C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7077067F-E8F2-411E-9D20-8E755080D8C3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8AC72DFC-DA9D-4D28-AE3C-0E1DD2CA2FF6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{30332555-6BCB-48B0-83F3-8CB05DCB3674}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{30332555-6BCB-48B0-83F3-8CB05DCB3674}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{30332555-6BCB-48B0-83F3-8CB05DCB3674}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{30332555-6BCB-48B0-83F3-8CB05DCB3674}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECC8F4AB-97AF-4521-88BB-DB12FA63836D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECC8F4AB-97AF-4521-88BB-DB12FA63836D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECC8F4AB-97AF-4521-88BB-DB12FA63836D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECC8F4AB-97AF-4521-88BB-DB12FA63836D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{64E20F44-9685-4288-BA06-F1FED0681B6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{64E20F44-9685-4288-BA06-F1FED0681B6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{64E20F44-9685-4288-BA06-F1FED0681B6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{64E20F44-9685-4288-BA06-F1FED0681B6B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

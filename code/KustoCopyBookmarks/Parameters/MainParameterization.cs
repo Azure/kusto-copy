@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyLakeIntegration.Parameters
+namespace KustoCopyBookmarks.Parameters
 {
     public class MainParameterization
     {

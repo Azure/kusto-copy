@@ -1,4 +1,4 @@
-﻿namespace KustoCopyLakeIntegration.Parameters
+﻿namespace KustoCopyBookmarks.Parameters
 {
     public class SourceParameterization
     {

@@ -2,7 +2,7 @@
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 
-namespace KustoCopyLakeIntegration
+namespace KustoCopyBookmarks
 {
     public class RootFolderGateway : IAsyncDisposable
     {

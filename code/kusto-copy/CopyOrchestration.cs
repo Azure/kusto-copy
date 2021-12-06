@@ -1,22 +1,20 @@
 ﻿using Azure.Core;
 using Azure.Identity;
-using KustoCopyAdxIntegration;
-using KustoCopyLakeIntegration;
-using KustoCopyLakeIntegration.Parameters;
+using Kusto.Data;
+using Kusto.Data.Net.Client;
+using KustoCopyBookmarks;
+using KustoCopyBookmarks.Parameters;
 
 namespace kusto_copy
 {
     internal class CopyOrchestration : IAsyncDisposable
     {
         private readonly RootFolderGateway _rootFolderGateway;
-        private readonly ClusterQueryGateway _sourceGateway;
 
         private CopyOrchestration(
-            RootFolderGateway rootFolderGateway,
-            ClusterQueryGateway sourceGateway)
+            RootFolderGateway rootFolderGateway)
         {
             _rootFolderGateway = rootFolderGateway;
-            _sourceGateway = sourceGateway;
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -24,19 +22,21 @@ namespace kusto_copy
             MainParameterization parameterization)
         {
             var credential = new InteractiveBrowserCredential();
+            var clusterQueryUri =
+                ValidateClusterQueryUri(parameterization.Source!.ClusterQueryUri!);
+            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
+                .WithAadUserPromptAuthentication();
+            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
             var rootFolderGateway = await RootFolderGateway.CreateGatewayAsync(
                 credential,
                 dataLakeFolderUrl);
-            var sourceGateway = await ClusterQueryGateway.CreateGatewayAsync(
-                parameterization.Source!.ClusterQueryUri!);
 
-            return new CopyOrchestration(rootFolderGateway, sourceGateway);
+            return new CopyOrchestration(rootFolderGateway);
         }
 
         public async Task RunAsync()
         {
             //var rootBookmark = await _rootFolderGateway.RetrieveAndLockRootBookmark();
-            _sourceGateway.Hi();
 
             await ValueTask.CompletedTask;
         }
@@ -44,6 +44,20 @@ namespace kusto_copy
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             await ((IAsyncDisposable)_rootFolderGateway).DisposeAsync();
+        }
+
+        private static Uri ValidateClusterQueryUri(string clusterQueryUrl)
+        {
+            Uri? clusterUri;
+
+            if(Uri.TryCreate(clusterQueryUrl, UriKind.Absolute, out clusterUri))
+            {
+                return clusterUri;
+            }
+            else
+            {
+                throw new CopyException($"Invalid cluster query uri:  '{clusterQueryUrl}'");
+            }
         }
     }
 }

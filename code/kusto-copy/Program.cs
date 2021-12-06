@@ -1,7 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
-using KustoCopyLakeIntegration;
-using KustoCopyLakeIntegration.Parameters;
+using KustoCopyBookmarks;
+using KustoCopyBookmarks.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
