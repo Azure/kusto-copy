@@ -17,14 +17,6 @@ namespace KustoCopyBookmarks
     internal partial class BookmarkGateway
     {
         #region Inner Types
-        private class FakeLock : IAsyncDisposable
-        {
-            ValueTask IAsyncDisposable.DisposeAsync()
-            {
-                return ValueTask.CompletedTask;
-            }
-        }
-
         private class BookmarkHeader
         {
             public Version BookmarkVersion { get; set; } = new Version(0, 1);
@@ -74,14 +66,6 @@ namespace KustoCopyBookmarks
             _fileClient = fileClient;
             _blobClient = new BlockBlobClient(fileClient.Uri, credential);
             _shouldExist = shouldExist;
-        }
-
-        public async Task<IAsyncDisposable> PermanentLockAsync()
-        {
-            await EnsureExistAsync();
-            await ValueTask.CompletedTask;
-
-            return new FakeLock();
         }
 
         public async Task<IImmutableList<BookmarkBlock>> ReadAllBlocksAsync()

@@ -1,6 +1,8 @@
 ﻿using Azure.Core;
 using Azure.Identity;
+using Azure.Storage.Blobs;
 using Azure.Storage.Files.DataLake;
+using Kusto.Cloud.Platform.Utils;
 using Kusto.Data;
 using Kusto.Data.Net.Client;
 using KustoCopyBookmarks;
@@ -74,12 +76,12 @@ namespace kusto_copy
         #endregion
 
         private readonly RootBookmark _rootBookmark;
-        private readonly IAsyncDisposable _rootBookmarkLock;
+        private readonly IAsyncDisposable _blobLock;
 
-        private CopyOrchestration(RootBookmark rootBookmark, IAsyncDisposable rootBookmarkLock)
+        private CopyOrchestration(RootBookmark rootBookmark, IAsyncDisposable blobLock)
         {
             _rootBookmark = rootBookmark;
-            _rootBookmarkLock = rootBookmarkLock;
+            _blobLock = blobLock;
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -89,29 +91,48 @@ namespace kusto_copy
             var credential = new InteractiveBrowserCredential();
             var folder = new DataLakeFolder(dataLakeFolderUrl);
             var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
-            var rootBookmark = await RootBookmark.RetrieveAsync(
-                folderClient.GetFileClient("root.bookmark"),
-                credential);
-            var rootBookmarkLock = await rootBookmark.PermanentLockAsync();
+            var lockClient = folderClient.GetFileClient("lock");
 
-            if (rootBookmark.Parameterization == null)
-            {
-                await rootBookmark.SetParameterizationAsync(parameterization);
-            }
-            else if (!rootBookmark.Parameterization!.Equals(parameterization))
+            await lockClient.CreateIfNotExistsAsync();
+
+            var lockBlob = await BlobLock.CreateAsync(new BlobClient(lockClient.Uri, credential));
+
+            if (lockBlob == null)
             {
                 throw new CopyException(
-                    "Parameters can't be different from one run to "
-                    + "the other in the same data lake folder");
+                    $"Can't acquire lock on '{lockClient.Uri}' ; "
+                    + "is there another instance of the application running?");
             }
+            try
+            {
+                var rootBookmark = await RootBookmark.RetrieveAsync(
+                    folderClient.GetFileClient("root.bookmark"),
+                    credential);
 
-            var clusterQueryUri =
-                ValidateClusterQueryUri(parameterization.Source!.ClusterQueryUri!);
-            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                .WithAadUserPromptAuthentication();
-            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+                if (rootBookmark.Parameterization == null)
+                {
+                    await rootBookmark.SetParameterizationAsync(parameterization);
+                }
+                else if (!rootBookmark.Parameterization!.Equals(parameterization))
+                {
+                    throw new CopyException(
+                        "Parameters can't be different from one run to "
+                        + "the other in the same data lake folder");
+                }
 
-            return new CopyOrchestration(rootBookmark, rootBookmarkLock);
+                var clusterQueryUri =
+                    ValidateClusterQueryUri(parameterization.Source!.ClusterQueryUri!);
+                var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
+                    .WithAadUserPromptAuthentication();
+                var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+
+                return new CopyOrchestration(rootBookmark, lockBlob);
+            }
+            catch
+            {
+                await lockBlob.DisposeAsync();
+                throw;
+            }
         }
 
         public async Task RunAsync()
@@ -121,7 +142,7 @@ namespace kusto_copy
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await _rootBookmarkLock.DisposeAsync();
+            await _blobLock.DisposeAsync();
         }
 
         private static Uri ValidateClusterQueryUri(string clusterQueryUrl)

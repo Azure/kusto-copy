@@ -76,10 +76,5 @@ namespace KustoCopyBookmarks.Root
 
             _parameterization = new BookmarkBlockValue<MainParameterization>(result.AddedBlockIds.First(), parameterization);
         }
-
-        public async Task<IAsyncDisposable> PermanentLockAsync()
-        {
-            return await _bookmarkGateway.PermanentLockAsync();
-        }
     }
 }
