@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
 using KustoCopyBookmarks.Parameters;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using System.Text.Json;
 
@@ -26,13 +27,40 @@ namespace KustoCopyBookmarks.Root
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var blocks = await bookmarkGateway.ReadAllBlocksAsync();
+            var aggregates = blocks
+                .Select(b => new BookmarkBlockValue<RootAggregate>(
+                    b.Id,
+                    SerializationHelper.ToObject<RootAggregate>(b.Buffer)))
+                .ToImmutableArray();
 
-            if (blocks.Count != 0)
+            if (aggregates.Count() != 0)
             {
-                throw new NotImplementedException();
-            }
+                var firstAggregate = aggregates.First();
+                var parameterization = firstAggregate.Value.Parameterization;
 
-            return new RootBookmark(bookmarkGateway);
+                if (parameterization == null)
+                {
+                    throw new InvalidOperationException(
+                        "Expected first block of root bookmark to be a parameterization");
+                }
+                var value = new BookmarkBlockValue<MainParameterization>(
+                    firstAggregate.BlockId,
+                    parameterization);
+
+                return new RootBookmark(bookmarkGateway, value);
+            }
+            else
+            {
+                return new RootBookmark(bookmarkGateway, null);
+            }
+        }
+
+        private RootBookmark(
+            BookmarkGateway bookmarkGateway,
+            BookmarkBlockValue<MainParameterization>? parameterization)
+        {
+            _bookmarkGateway = bookmarkGateway;
+            _parameterization = parameterization;
         }
 
         public async Task SetParameterizationAsync(MainParameterization parameterization)
@@ -47,11 +75,6 @@ namespace KustoCopyBookmarks.Root
             var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
 
             _parameterization = new BookmarkBlockValue<MainParameterization>(result.AddedBlockIds.First(), parameterization);
-        }
-
-        private RootBookmark(BookmarkGateway bookmarkGateway)
-        {
-            _bookmarkGateway = bookmarkGateway;
         }
 
         public async Task<IAsyncDisposable> PermanentLockAsync()

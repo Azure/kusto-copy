@@ -30,5 +30,17 @@ namespace KustoCopyBookmarks
 
             return buffer;
         }
+
+        public static T ToObject<T>(ReadOnlyMemory<byte> buffer)
+        {
+            var obj = JsonSerializer.Deserialize<T>(buffer.Span);
+
+            if (obj == null)
+            {
+                throw new InvalidOperationException($"Couldn't deserialize object of type '{typeof(T).Name}'");
+            }
+
+            return obj;
+        }
     }
 }
