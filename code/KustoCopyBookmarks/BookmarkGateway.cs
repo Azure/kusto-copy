@@ -107,6 +107,18 @@ namespace KustoCopyBookmarks
             return bookmarkBlockBuilder.ToImmutable();
         }
 
+        public async Task<IImmutableList<BookmarkBlockValue<T>>> ReadAllBlockValuesAsync<T>()
+        {
+            var blocks = await ReadAllBlocksAsync();
+            var values = blocks
+                .Select(b => new BookmarkBlockValue<T>(
+                    b.Id,
+                    SerializationHelper.ToObject<T>(b.Buffer)))
+                .ToImmutableArray();
+
+            return values;
+        }
+
         public async Task<BookmarkTransactionResult> ApplyTransactionAsync(BookmarkTransaction transaction)
         {
             if (_blockIds == null)

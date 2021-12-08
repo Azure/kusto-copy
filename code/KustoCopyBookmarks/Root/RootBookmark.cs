@@ -26,12 +26,7 @@ namespace KustoCopyBookmarks.Root
             TokenCredential credential)
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
-            var blocks = await bookmarkGateway.ReadAllBlocksAsync();
-            var aggregates = blocks
-                .Select(b => new BookmarkBlockValue<RootAggregate>(
-                    b.Id,
-                    SerializationHelper.ToObject<RootAggregate>(b.Buffer)))
-                .ToImmutableArray();
+            var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<RootAggregate>();
 
             if (aggregates.Count() != 0)
             {

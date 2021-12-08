@@ -9,6 +9,7 @@ using Kusto.Data.Net.Client;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
 using KustoCopyBookmarks.Root;
+using KustoCopyServices;
 
 namespace kusto_copy
 {
@@ -121,8 +122,14 @@ namespace kusto_copy
                         + "the other in the same data lake folder");
                 }
 
+                var tempFolderService = await TempFolderService.CreateAsync(folderClient);
                 var sourceCommandProvider = CreateCommandProvider(
                     parameterization.Source!.ClusterQueryUri!);
+                var exportPipeline = ExportPipeline.CreateAsync(
+                    folderClient,
+                    credential,
+                    sourceCommandProvider,
+                    tempFolderService);
 
                 return new CopyOrchestration(rootBookmark, lockBlob);
             }
