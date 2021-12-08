@@ -4,6 +4,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Files.DataLake;
 using Kusto.Cloud.Platform.Utils;
 using Kusto.Data;
+using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
@@ -120,11 +121,8 @@ namespace kusto_copy
                         + "the other in the same data lake folder");
                 }
 
-                var clusterQueryUri =
-                    ValidateClusterQueryUri(parameterization.Source!.ClusterQueryUri!);
-                var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                    .WithAadUserPromptAuthentication();
-                var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+                var sourceCommandProvider = CreateCommandProvider(
+                    parameterization.Source!.ClusterQueryUri!);
 
                 return new CopyOrchestration(rootBookmark, lockBlob);
             }
@@ -143,6 +141,16 @@ namespace kusto_copy
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             await _blobLock.DisposeAsync();
+        }
+
+        private static ICslAdminProvider CreateCommandProvider(string clusterQueryUrl)
+        {
+            var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
+            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
+                .WithAadUserPromptAuthentication();
+            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+
+            return commandProvider;
         }
 
         private static Uri ValidateClusterQueryUri(string clusterQueryUrl)
