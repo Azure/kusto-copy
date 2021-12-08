@@ -50,7 +50,9 @@ namespace KustoCopyServices
         {
             if (_exportBookmark.IsBackfill == null)
             {
-                var tempFolder = _tempFolderService.GetTempFolder();
+                using (var tempFolder = _tempFolderService.LeaseTempFolder())
+                {
+                }
 
                 await Task.CompletedTask;
             }

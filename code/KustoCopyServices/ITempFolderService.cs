@@ -12,6 +12,6 @@ namespace KustoCopyServices
     {
         TokenCredential Credential { get; }
 
-        DataLakeDirectoryClient GetTempFolder();
+        ITempFolderLease LeaseTempFolder();
     }
 }
