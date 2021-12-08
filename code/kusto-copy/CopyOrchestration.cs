@@ -77,13 +77,21 @@ namespace kusto_copy
         }
         #endregion
 
-        private readonly RootBookmark _rootBookmark;
         private readonly IAsyncDisposable _blobLock;
+        private readonly RootBookmark _rootBookmark;
+        private readonly TempFolderService _tempFolderService;
+        private readonly ExportPipeline _exportPipeline;
 
-        private CopyOrchestration(RootBookmark rootBookmark, IAsyncDisposable blobLock)
+        private CopyOrchestration(
+            IAsyncDisposable blobLock,
+            RootBookmark rootBookmark,
+            TempFolderService tempFolderService,
+            ExportPipeline exportPipeline)
         {
-            _rootBookmark = rootBookmark;
             _blobLock = blobLock;
+            _rootBookmark = rootBookmark;
+            _tempFolderService = tempFolderService;
+            _exportPipeline = exportPipeline;
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -97,9 +105,9 @@ namespace kusto_copy
 
             await lockClient.CreateIfNotExistsAsync();
 
-            var lockBlob = await BlobLock.CreateAsync(new BlobClient(lockClient.Uri, credential));
+            var blobLock = await BlobLock.CreateAsync(new BlobClient(lockClient.Uri, credential));
 
-            if (lockBlob == null)
+            if (blobLock == null)
             {
                 throw new CopyException(
                     $"Can't acquire lock on '{lockClient.Uri}' ; "
@@ -122,27 +130,35 @@ namespace kusto_copy
                         + "the other in the same data lake folder");
                 }
 
-                var tempFolderService = await TempFolderService.CreateAsync(folderClient);
+                var tempFolderService =
+                    await TempFolderService.CreateAsync(folderClient, credential);
                 var sourceCommandProvider = CreateCommandProvider(
                     parameterization.Source!.ClusterQueryUri!);
-                var exportPipeline = ExportPipeline.CreateAsync(
+                var exportPipeline = await ExportPipeline.CreateAsync(
                     folderClient,
                     credential,
                     sourceCommandProvider,
                     tempFolderService);
 
-                return new CopyOrchestration(rootBookmark, lockBlob);
+                return new CopyOrchestration(
+                    blobLock,
+                    rootBookmark,
+                    tempFolderService,
+                    exportPipeline);
             }
             catch
             {
-                await lockBlob.DisposeAsync();
+                await blobLock.DisposeAsync();
                 throw;
             }
         }
 
         public async Task RunAsync()
         {
-            await ValueTask.CompletedTask;
+            var tempTask = _tempFolderService.RunAsync();
+            var exportTask = _exportPipeline.RunAsync();
+
+            await Task.WhenAll(tempTask, exportTask);
         }
 
         async ValueTask IAsyncDisposable.DisposeAsync()

@@ -2,6 +2,7 @@
 using Azure.Storage.Files.DataLake;
 using Kusto.Data.Common;
 using KustoCopyBookmarks;
+using KustoCopyBookmarks.Export;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,6 +39,21 @@ namespace KustoCopyServices
                 credential);
 
             return new ExportPipeline(exportBookmark, commandProvider, tempFolderService);
+        }
+
+        public async Task RunAsync()
+        {
+            await InitExportAsync();
+        }
+
+        private async Task InitExportAsync()
+        {
+            if (_exportBookmark.IsBackfill == null)
+            {
+                var tempFolder = _tempFolderService.GetTempFolder();
+
+                await Task.CompletedTask;
+            }
         }
     }
 }
