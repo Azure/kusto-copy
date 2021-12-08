@@ -21,7 +21,7 @@ namespace KustoCopyBookmarks.Root
 
         public MainParameterization? Parameterization => _parameterization?.Value;
 
-        internal static async Task<RootBookmark> RetrieveAsync(
+        public static async Task<RootBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential)
         {
