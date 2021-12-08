@@ -1,8 +1,9 @@
 ﻿using Azure.Core;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
+using KustoCopyBookmarks.Parameters;
 
-namespace KustoCopyBookmarks
+namespace KustoCopyBookmarks.Root
 {
     public class RootFolderGateway : IAsyncDisposable
     {
@@ -75,7 +76,8 @@ namespace KustoCopyBookmarks
 
         public async static Task<RootFolderGateway> CreateGatewayAsync(
             TokenCredential credential,
-            string dataLakeFolderUrl)
+            string dataLakeFolderUrl,
+            MainParameterization parameterization)
         {
             var folder = new DataLakeFolder(dataLakeFolderUrl);
             var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
@@ -83,6 +85,11 @@ namespace KustoCopyBookmarks
                 folderClient.GetFileClient("root.bookmark"),
                 credential);
             var rootBookmarkLock = await rootBookmark.PermanentLockAsync();
+
+            if (rootBookmark.Parameterization == null)
+            {
+                await rootBookmark.SetParameterizationAsync(parameterization);
+            }
 
             return new RootFolderGateway(folderClient, credential, rootBookmark, rootBookmarkLock);
         }
@@ -109,7 +116,7 @@ namespace KustoCopyBookmarks
             TokenCredential credential,
             DataLakeFolder folder)
         {
-            var dfsUrl = $"https://{folder.AccountName}.dfs.core.windows.net";
+            var dfsUrl = $"https://{folder.AccountName}.blob.core.windows.net";
             var lakeClient = new DataLakeServiceClient(new Uri(dfsUrl), credential);
             var containerClient = lakeClient.GetFileSystemClient(folder.ContainerName);
             var containerExist = (await containerClient.ExistsAsync()).Value;

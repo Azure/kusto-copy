@@ -3,6 +3,7 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks
 {
-    internal class BookmarkGateway
+    internal partial class BookmarkGateway
     {
         #region Inner Types
         private class FakeLock : IAsyncDisposable
@@ -30,29 +31,43 @@ namespace KustoCopyBookmarks
 
             public Version AppVersion { get; set; } = new Version();
         }
-        #endregion
 
-        #region Public Inner Types
-        public class BookmarkBlock
+        private class CommitItem
         {
-            public BookmarkBlock(string id, ReadOnlyMemory<byte> buffer)
+            private readonly TaskCompletionSource _taskCompletionSource = new TaskCompletionSource();
+
+            public CommitItem(
+                IEnumerable<int> blockIdsToAdd,
+                IEnumerable<int> blockIdsToRemove)
             {
-                Id = id;
-                Buffer = buffer;
+                BlockIdsToAdd = blockIdsToAdd.ToImmutableArray();
+                BlockIdsToRemove = blockIdsToRemove.ToImmutableArray();
+                Task = _taskCompletionSource.Task;
             }
 
-            public string Id { get; }
+            public IImmutableList<int> BlockIdsToAdd { get; }
 
-            public ReadOnlyMemory<byte> Buffer { get; }
+            public IImmutableList<int> BlockIdsToRemove { get; }
+
+            public Task Task { get; }
+
+            public void CompleteItem()
+            {
+                _taskCompletionSource.SetResult();
+            }
         }
         #endregion
 
-        private const string HEADER_ID = "header";
+        private readonly object _alterBlockIdsLock = new object();
         private readonly DataLakeFileClient _fileClient;
         private readonly BlockBlobClient _blobClient;
         private readonly bool _shouldExist;
+        private readonly ConcurrentStack<CommitItem> _commitItems =
+            new ConcurrentStack<CommitItem>();
         private bool _hasExistBeenTested = false;
-        private IImmutableList<string>? _blockIds;
+        private IImmutableList<int>? _blockIds;
+        private volatile int _currentMaxBlockId = 0;
+        private volatile Task _commitingTask = Task.CompletedTask;
 
         public BookmarkGateway(DataLakeFileClient fileClient, TokenCredential credential, bool shouldExist)
         {
@@ -73,50 +88,80 @@ namespace KustoCopyBookmarks
         {
             await EnsureExistAsync();
 
+            var blockListTask = _blobClient.GetBlockListAsync(BlockListTypes.Committed);
             var content = (await _blobClient.DownloadContentAsync()).Value.Content.ToMemory();
+            var blockList = (await blockListTask).Value.CommittedBlocks;
+            var builder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
+            var offset = 0;
 
-            if (content.Length == 0)
-            {   //  No content
-                _blockIds = ImmutableArray<string>.Empty;
-
-                return ImmutableArray<BookmarkBlock>.Empty;
-            }
-            else
+            foreach (var block in blockList)
             {
-                var blockList = (await _blobClient.GetBlockListAsync(BlockListTypes.Committed))
-                    .Value
-                    .CommittedBlocks;
-                var builder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
-                var offset = 0;
+                var id = ToInt(block.Name);
+                var buffer = content.Slice(offset, block.Size);
+                var bookmarkBlock = new BookmarkBlock(id, buffer);
 
-                foreach (var block in blockList)
-                {
-                    var id = block.Name;
-                    var buffer = content.Slice(offset, block.Size);
-                    var bookmarkBlock = new BookmarkBlock(id, buffer);
+                if (offset == 0)
+                {   //  This is the header ; let's validate it
+                    var header = JsonSerializer.Deserialize<BookmarkHeader>(buffer.Span);
 
-                    if (offset == 0)
-                    {   //  This is the header ; let's validate it
-                        var header = JsonSerializer.Deserialize<BookmarkHeader>(buffer.Span);
-
-                        if (header == null || header.BookmarkVersion != new BookmarkHeader().BookmarkVersion)
-                        {
-                            throw new CopyException($"Wrong header on ${_fileClient.Uri}");
-                        }
-                    }
-                    else
+                    if (header == null || header.BookmarkVersion != new BookmarkHeader().BookmarkVersion)
                     {
-                        builder.Add(bookmarkBlock);
+                        throw new CopyException($"Wrong header on ${_fileClient.Uri}");
                     }
-                    offset += block.Size;
                 }
-                _blockIds = blockList
-                    .Select(b => b.Name)
-                    .Prepend(HEADER_ID)
-                    .ToImmutableArray();
-
-                return builder.ToImmutable();
+                else
+                {
+                    builder.Add(bookmarkBlock);
+                }
+                offset += block.Size;
             }
+            _blockIds = builder
+                .Select(b => b.Id)
+                .Prepend(0)
+                .ToImmutableArray();
+            _currentMaxBlockId = _blockIds.Any() ? _blockIds.Max() + 1 : 0;
+
+            return builder.ToImmutable();
+        }
+
+        public async Task<BookmarkTransactionResult> ApplyTransactionAsync(BookmarkTransaction transaction)
+        {
+            if (_blockIds == null)
+            {
+                throw new InvalidOperationException("Bookmark should have been read at this point");
+            }
+            var headerCount = _blockIds.Any() ? 0 : 1;
+            var newBlockCount = (_blockIds.Any() ? 0 : 1) + transaction.AddingBlockBuffers.Count;
+            var startBlockId = Interlocked.Add(ref _currentMaxBlockId, newBlockCount);
+            var headerBlockIds = Enumerable.Range(startBlockId, headerCount);
+            var addingBlockIds = Enumerable.Range(
+                startBlockId + headerCount,
+                transaction.AddingBlockBuffers.Count);
+            var updatingBlockIds = Enumerable.Range(
+                startBlockId + headerCount + transaction.AddingBlockBuffers.Count,
+                transaction.UpdatingBlocks.Count);
+            var headerTasks = headerBlockIds
+                .Select(id => _blobClient.StageBlockAsync(ToBase64(id), GetBookmarkHeaderStream()));
+            var addingTasks = addingBlockIds
+                .Zip(transaction.AddingBlockBuffers)
+                .Select(pair => _blobClient.StageBlockAsync(
+                    ToBase64(pair.First), SerializationHelper.ToStream(pair.Second)));
+            var updatingTasks = updatingBlockIds
+                .Zip(transaction.UpdatingBlocks)
+                .Select(pair => _blobClient.StageBlockAsync(
+                    ToBase64(pair.First), SerializationHelper.ToStream(pair.Second.Buffer)));
+            var blockTasks = headerTasks.Concat(addingTasks).Concat(updatingTasks).ToArray();
+
+            await Task.WhenAll(blockTasks);
+            await CommitTransactionAsync(
+                headerBlockIds.Concat(addingBlockIds).Concat(updatingBlockIds),
+                transaction.DeletingBlockIds.Concat(transaction.UpdatingBlocks.Select(b => b.Id)));
+
+            //  Do not put headerBlockIds on purpose as this is implementation detail for this class
+            return new BookmarkTransactionResult(
+                addingBlockIds,
+                updatingBlockIds,
+                transaction.DeletingBlockIds);
         }
 
         private async Task EnsureExistAsync()
@@ -138,6 +183,124 @@ namespace KustoCopyBookmarks
                 }
                 _hasExistBeenTested = true;
             }
+        }
+
+        private async Task CommitTransactionAsync(
+            IEnumerable<int> blockIdsToAdd,
+            IEnumerable<int> blockIdsToRemove)
+        {   //  A bit of multithreading synchronization here
+            var newItem = new CommitItem(blockIdsToAdd, blockIdsToRemove);
+
+            //  Stack the item
+            _commitItems.Push(newItem);
+
+            //  Wait for the 'last' commiting task to be over
+            await _commitingTask;
+
+            //  Loop until somebody commit the item
+            while (true)
+            {
+                if (newItem.Task.IsCompleted)
+                {   //  Our item has been commited:  we're out
+                    return;
+                }
+                //  Compete to be the next commiting task
+                if (Monitor.TryEnter(_commitItems))
+                {   //  This thread won and since it just queued the current item, it will process it
+                    try
+                    {   //  First let's try to grab as many items as we can
+                        var items = new List<CommitItem>();
+
+                        while (_commitItems.Any())
+                        {
+                            CommitItem? item;
+
+                            if (_commitItems.TryPop(out item))
+                            {
+                                items.Add(item);
+                            }
+                        }
+                        //  Did we actually pick any item or they all got stolen by another thread?
+                        if (items.Any())
+                        {
+                            _commitingTask = CommitItemsAsync(items);
+                            await _commitingTask;
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_commitItems);
+                    }
+                }
+                else
+                {   //  Some other thread won, let's wait for it to be over and then restart the loop
+                    await Task.WhenAny(_commitingTask, newItem.Task);
+                    //  It is possible at this point that the new _commitingTask hasn't been
+                    //  assigned, so we might loop a few times before it does
+                }
+            }
+        }
+
+        private async Task CommitItemsAsync(IEnumerable<CommitItem> items)
+        {
+            var blockIdsToAdd = items
+                .Select(i => i.BlockIdsToAdd)
+                .SelectMany(i => i);
+            var blockIdsToRemove = items
+                .Select(i => i.BlockIdsToRemove)
+                .SelectMany(i => i);
+
+            if (blockIdsToRemove.Any())
+            {
+                //  Make block id faster to manipulate
+                var blockIdSet = _blockIds!.ToHashSet();
+
+                foreach (var id in blockIdsToRemove)
+                {
+                    var success = blockIdSet.Remove(id);
+
+                    if (!success)
+                    {
+                        throw new InvalidOperationException($"Block ID '{id}' couldn't be found and removed");
+                    }
+                }
+
+                _blockIds = blockIdSet.Concat(blockIdsToAdd).OrderBy(id => id).ToImmutableArray();
+            }
+            else
+            {
+                _blockIds = _blockIds!.Concat(blockIdsToAdd).OrderBy(id => id).ToImmutableArray();
+            }
+            var newBlockIds = _blockIds
+                .Select(id => ToBase64(id));
+
+            //  Actually commit the new block list to the blob
+            await _blobClient.CommitBlockListAsync(newBlockIds);
+
+            //  Release all threads waiting for the items
+            foreach (var item in items)
+            {
+                item.CompleteItem();
+            }
+        }
+
+        private static MemoryStream GetBookmarkHeaderStream()
+        {
+            return SerializationHelper.SerializeToStream(new BookmarkHeader());
+        }
+
+        private static string ToBase64(int i)
+        {
+            var buffer = BitConverter.GetBytes(i);
+
+            return Convert.ToBase64String(buffer);
+        }
+
+        private static int ToInt(string base64)
+        {
+            var buffer = Convert.FromBase64String(base64);
+
+            return BitConverter.ToInt32(buffer);
         }
     }
 }

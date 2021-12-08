@@ -1,9 +1,9 @@
-﻿using Azure.Core;
-using Azure.Identity;
+﻿using Azure.Identity;
 using Kusto.Data;
 using Kusto.Data.Net.Client;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
+using KustoCopyBookmarks.Root;
 
 namespace kusto_copy
 {
@@ -29,7 +29,8 @@ namespace kusto_copy
             var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
             var rootFolderGateway = await RootFolderGateway.CreateGatewayAsync(
                 credential,
-                dataLakeFolderUrl);
+                dataLakeFolderUrl,
+                parameterization);
 
             return new CopyOrchestration(rootFolderGateway);
         }
