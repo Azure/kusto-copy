@@ -42,7 +42,7 @@ namespace KustoCopyBookmarks.Root
                 throw new NotImplementedException();
             }
 
-            var buffer = SerializationHelper.SerializeToMemory(new RootAggregate { Parameterization = parameterization });
+            var buffer = SerializationHelper.ToMemory(new RootAggregate { Parameterization = parameterization });
             var transaction = new BookmarkTransaction(new[] { buffer }, null, null);
             var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
 

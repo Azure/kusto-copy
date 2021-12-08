@@ -66,7 +66,7 @@ namespace KustoCopyBookmarks
             new ConcurrentStack<CommitItem>();
         private bool _hasExistBeenTested = false;
         private IImmutableList<int>? _blockIds;
-        private volatile int _currentMaxBlockId = 0;
+        private volatile int _nextBlockId = 0;
         private volatile Task _commitingTask = Task.CompletedTask;
 
         public BookmarkGateway(DataLakeFileClient fileClient, TokenCredential credential, bool shouldExist)
@@ -91,12 +91,13 @@ namespace KustoCopyBookmarks
             var blockListTask = _blobClient.GetBlockListAsync(BlockListTypes.Committed);
             var content = (await _blobClient.DownloadContentAsync()).Value.Content.ToMemory();
             var blockList = (await blockListTask).Value.CommittedBlocks;
-            var builder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
+            var bookmarkBlockBuilder = ImmutableArray<BookmarkBlock>.Empty.ToBuilder();
+            var blockIdBuilder = ImmutableArray<int>.Empty.ToBuilder();
             var offset = 0;
 
             foreach (var block in blockList)
             {
-                var id = ToInt(block.Name);
+                var id = DecodeId(block.Name);
                 var buffer = content.Slice(offset, block.Size);
                 var bookmarkBlock = new BookmarkBlock(id, buffer);
 
@@ -111,17 +112,15 @@ namespace KustoCopyBookmarks
                 }
                 else
                 {
-                    builder.Add(bookmarkBlock);
+                    bookmarkBlockBuilder.Add(bookmarkBlock);
                 }
+                blockIdBuilder.Add(id);
                 offset += block.Size;
             }
-            _blockIds = builder
-                .Select(b => b.Id)
-                .Prepend(0)
-                .ToImmutableArray();
-            _currentMaxBlockId = _blockIds.Any() ? _blockIds.Max() + 1 : 0;
+            _blockIds = blockIdBuilder.ToImmutableArray();
+            _nextBlockId = _blockIds.Any() ? _blockIds.Max() + 1 : 0;
 
-            return builder.ToImmutable();
+            return bookmarkBlockBuilder.ToImmutable();
         }
 
         public async Task<BookmarkTransactionResult> ApplyTransactionAsync(BookmarkTransaction transaction)
@@ -132,7 +131,7 @@ namespace KustoCopyBookmarks
             }
             var headerCount = _blockIds.Any() ? 0 : 1;
             var newBlockCount = (_blockIds.Any() ? 0 : 1) + transaction.AddingBlockBuffers.Count;
-            var startBlockId = Interlocked.Add(ref _currentMaxBlockId, newBlockCount);
+            var startBlockId = Interlocked.Add(ref _nextBlockId, newBlockCount);
             var headerBlockIds = Enumerable.Range(startBlockId, headerCount);
             var addingBlockIds = Enumerable.Range(
                 startBlockId + headerCount,
@@ -141,15 +140,15 @@ namespace KustoCopyBookmarks
                 startBlockId + headerCount + transaction.AddingBlockBuffers.Count,
                 transaction.UpdatingBlocks.Count);
             var headerTasks = headerBlockIds
-                .Select(id => _blobClient.StageBlockAsync(ToBase64(id), GetBookmarkHeaderStream()));
+                .Select(id => _blobClient.StageBlockAsync(EncodeId(id), GetBookmarkHeaderStream()));
             var addingTasks = addingBlockIds
                 .Zip(transaction.AddingBlockBuffers)
                 .Select(pair => _blobClient.StageBlockAsync(
-                    ToBase64(pair.First), SerializationHelper.ToStream(pair.Second)));
+                    EncodeId(pair.First), new MemoryStream(pair.Second.ToArray())));
             var updatingTasks = updatingBlockIds
                 .Zip(transaction.UpdatingBlocks)
                 .Select(pair => _blobClient.StageBlockAsync(
-                    ToBase64(pair.First), SerializationHelper.ToStream(pair.Second.Buffer)));
+                    EncodeId(pair.First), new MemoryStream(pair.Second.Buffer.ToArray())));
             var blockTasks = headerTasks.Concat(addingTasks).Concat(updatingTasks).ToArray();
 
             await Task.WhenAll(blockTasks);
@@ -272,7 +271,7 @@ namespace KustoCopyBookmarks
                 _blockIds = _blockIds!.Concat(blockIdsToAdd).OrderBy(id => id).ToImmutableArray();
             }
             var newBlockIds = _blockIds
-                .Select(id => ToBase64(id));
+                .Select(id => EncodeId(id));
 
             //  Actually commit the new block list to the blob
             await _blobClient.CommitBlockListAsync(newBlockIds);
@@ -286,21 +285,23 @@ namespace KustoCopyBookmarks
 
         private static MemoryStream GetBookmarkHeaderStream()
         {
-            return SerializationHelper.SerializeToStream(new BookmarkHeader());
+            return new MemoryStream(SerializationHelper.ToBytes(new BookmarkHeader()));
         }
 
-        private static string ToBase64(int i)
+        private static string EncodeId(int id)
         {
-            var buffer = BitConverter.GetBytes(i);
+            var paddedId = id.ToString("D10");
+            var buffer = UTF8Encoding.UTF8.GetBytes(paddedId);
 
             return Convert.ToBase64String(buffer);
         }
 
-        private static int ToInt(string base64)
+        private static int DecodeId(string base64)
         {
             var buffer = Convert.FromBase64String(base64);
+            var paddedId = UTF8Encoding.UTF8.GetString(buffer);
 
-            return BitConverter.ToInt32(buffer);
+            return int.Parse(paddedId);
         }
     }
 }

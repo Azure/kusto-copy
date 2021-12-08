@@ -3,35 +3,32 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Unicode;
 using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks
 {
     internal static class SerializationHelper
     {
-        public static ReadOnlyMemory<byte> SerializeToMemory<T>(T obj)
+        private readonly static JsonSerializerOptions _options = new JsonSerializerOptions
         {
-            using (var stream = SerializeToStream(obj))
-            {
-                return new ReadOnlyMemory<byte>(stream.ToArray());
-            }
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true,
+        };
+
+        public static ReadOnlyMemory<byte> ToMemory<T>(T obj)
+        {
+            return new ReadOnlyMemory<byte>(ToBytes(obj));
         }
 
-        public static MemoryStream SerializeToStream<T>(T obj)
+        public static byte[] ToBytes<T>(T obj)
         {
-            var stream = new MemoryStream();
+            var originalJson = JsonSerializer.Serialize(obj, _options);
+            var spacedJson = originalJson + "\r\n";
+            var buffer = UTF8Encoding.UTF8.GetBytes(spacedJson);
 
-            JsonSerializer.Serialize(stream, obj);
-            stream.Position = 0;
-
-            return stream;
-        }
-
-        public static MemoryStream ToStream(ReadOnlyMemory<byte> buffer)
-        {
-            var stream = new MemoryStream(buffer.ToArray());
-
-            return stream;
+            return buffer;
         }
     }
 }
