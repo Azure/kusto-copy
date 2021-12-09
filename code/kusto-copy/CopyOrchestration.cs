@@ -132,12 +132,12 @@ namespace kusto_copy
 
                 var tempFolderService =
                     await TempFolderService.CreateAsync(folderClient, credential);
-                var sourceCommandProvider = CreateCommandProvider(
-                    parameterization.Source!.ClusterQueryUri!);
+                var sourceKustoClient =
+                    new KustoClient(parameterization.Source!.ClusterQueryUri!);
                 var exportPipeline = await ExportPipeline.CreateAsync(
                     folderClient,
                     credential,
-                    sourceCommandProvider,
+                    sourceKustoClient,
                     tempFolderService);
 
                 return new CopyOrchestration(
@@ -164,30 +164,6 @@ namespace kusto_copy
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             await _blobLock.DisposeAsync();
-        }
-
-        private static ICslAdminProvider CreateCommandProvider(string clusterQueryUrl)
-        {
-            var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
-            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                .WithAadUserPromptAuthentication();
-            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
-
-            return commandProvider;
-        }
-
-        private static Uri ValidateClusterQueryUri(string clusterQueryUrl)
-        {
-            Uri? clusterUri;
-
-            if (Uri.TryCreate(clusterQueryUrl, UriKind.Absolute, out clusterUri))
-            {
-                return clusterUri;
-            }
-            else
-            {
-                throw new CopyException($"Invalid cluster query uri:  '{clusterQueryUrl}'");
-            }
         }
 
         private static async Task<DataLakeDirectoryClient> GetFolderClientAsync(
