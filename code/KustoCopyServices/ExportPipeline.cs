@@ -44,10 +44,10 @@ namespace KustoCopyServices
 
         public async Task RunAsync()
         {
-            await InitExportAsync();
+            await EnsureExportInitAsync();
         }
 
-        private async Task InitExportAsync()
+        private async Task EnsureExportInitAsync()
         {
             if (_exportBookmark.IsBackfill == null)
             {
