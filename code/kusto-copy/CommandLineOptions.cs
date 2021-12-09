@@ -16,6 +16,15 @@ namespace kusto_copy
         [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
 
+        [Option('t', "tenant", Required = false, HelpText = "AAD Tenant ID")]
+        public string Tenant { get; set; } = string.Empty;
+
+        [Option('i', "app-id", Required = false, HelpText = "Application (Client) ID")]
+        public string AppId { get; set; } = string.Empty;
+
+        [Option('s', "app-secret", Required = false, HelpText = "Application Secret")]
+        public string AppSecret { get; set; } = string.Empty;
+
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
         public string ParameterFilePath { get; set; } = string.Empty;
     }
