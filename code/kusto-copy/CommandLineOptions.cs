@@ -22,7 +22,7 @@ namespace kusto_copy
         [Option('i', "app-id", Required = false, HelpText = "Application (Client) ID")]
         public string AppId { get; set; } = string.Empty;
 
-        [Option('s', "app-secret", Required = false, HelpText = "Application Secret")]
+        [Option('c', "app-secret", Required = false, HelpText = "Application Secret (credential)")]
         public string AppSecret { get; set; } = string.Empty;
 
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]

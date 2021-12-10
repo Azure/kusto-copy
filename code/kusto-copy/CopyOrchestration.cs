@@ -80,13 +80,13 @@ namespace kusto_copy
         private readonly IAsyncDisposable _blobLock;
         private readonly RootBookmark _rootBookmark;
         private readonly TempFolderService _tempFolderService;
-        private readonly ExportPipeline _exportPipeline;
+        private readonly ClusterExportPipeline _exportPipeline;
 
         private CopyOrchestration(
             IAsyncDisposable blobLock,
             RootBookmark rootBookmark,
             TempFolderService tempFolderService,
-            ExportPipeline exportPipeline)
+            ClusterExportPipeline exportPipeline)
         {
             _blobLock = blobLock;
             _rootBookmark = rootBookmark;
@@ -117,13 +117,10 @@ namespace kusto_copy
             {
                 var rootBookmark = await RootBookmark.RetrieveAsync(
                     folderClient.GetFileClient("root.bookmark"),
-                    credential);
+                    credential,
+                    parameterization);
 
-                if (rootBookmark.Parameterization == null)
-                {
-                    await rootBookmark.SetParameterizationAsync(parameterization);
-                }
-                else if (!rootBookmark.Parameterization!.Equals(parameterization))
+                if (!rootBookmark.Parameterization!.Equals(parameterization))
                 {
                     throw new CopyException(
                         "Parameters can't be different from one run to "
@@ -134,7 +131,7 @@ namespace kusto_copy
                     await TempFolderService.CreateAsync(folderClient, credential);
                 var sourceKustoClient =
                     new KustoClient(parameterization.Source!.ClusterQueryUri!);
-                var exportPipeline = await ExportPipeline.CreateAsync(
+                var exportPipeline = await ClusterExportPipeline.CreateAsync(
                     folderClient,
                     credential,
                     sourceKustoClient,
