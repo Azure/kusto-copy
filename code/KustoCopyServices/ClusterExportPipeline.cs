@@ -79,7 +79,7 @@ namespace KustoCopyServices
             {
                 _dbExportPipelineMap.Remove(db);
             }
-            foreach (var dbPipeline in newDbExportPipelineTasks.Select(t=>t.Result))
+            foreach (var dbPipeline in newDbExportPipelineTasks.Select(t => t.Result))
             {
                 _dbExportPipelineMap.Add(dbPipeline.DbName, dbPipeline);
             }

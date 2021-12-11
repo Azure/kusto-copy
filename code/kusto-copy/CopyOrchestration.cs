@@ -124,7 +124,7 @@ namespace kusto_copy
                 {
                     throw new CopyException(
                         "Parameters can't be different from one run to "
-                        + "the other in the same data lake folder");
+                        + "another in the same data lake folder");
                 }
 
                 var tempFolderService =

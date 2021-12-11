@@ -13,59 +13,81 @@ namespace KustoCopyBookmarks.Export
         private class ExportAggregate
         {
             public string? BackfillCursor { get; set; }
+
+            public TableBookmark? TableBookmark { get; set; }
         }
         #endregion
 
         private readonly BookmarkGateway _bookmarkGateway;
-        private BookmarkBlockValue<string> _backfillCursor;
+        private readonly BookmarkBlockValue<string> _backfillCursor;
+        private readonly IImmutableList<BookmarkBlockValue<TableBookmark>> _backfillTables;
 
         public string BackfillCursor => _backfillCursor.Value;
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential,
-            Func<Task<string>> fetchLatestCursorAsync)
+            Func<Task<(string, IImmutableList<TableBookmark>)>> fetchDefaultContentAsync)
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
 
             if (aggregates.Count() == 0)
             {   //  Fill default content:  latest cursor as backfill cursor
-                var latestCursor = await fetchLatestCursorAsync();
-                var buffer = SerializationHelper.ToMemory(
+                var (latestCursor, tables) = await fetchDefaultContentAsync();
+                var latestCursorBuffer = SerializationHelper.ToMemory(
                     new ExportAggregate { BackfillCursor = latestCursor });
-                var transaction = new BookmarkTransaction(new[] { buffer }, null, null);
+                var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
+                        new ExportAggregate { TableBookmark = t }));
+                var transaction =
+                    new BookmarkTransaction(tableBuffers.Prepend(latestCursorBuffer), null, null);
                 var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
-                var value = new BookmarkBlockValue<string>(
+                var backFillCursorvalue = new BookmarkBlockValue<string>(
                     result.AddedBlockIds.First(),
                     latestCursor);
+                var tableValues = result.AddedBlockIds.Skip(1).Zip(
+                    tables,
+                    (r, t) => new BookmarkBlockValue<TableBookmark>(r, t));
 
-                return new DbExportBookmark(bookmarkGateway, value);
+                return new DbExportBookmark(bookmarkGateway, backFillCursorvalue, tableValues);
             }
             else
             {
-                var firstAggregate = aggregates.First();
-                var backfillCursor = firstAggregate.Value.BackfillCursor;
+                var backfillCursors = aggregates.Where(a => a.Value.BackfillCursor != null);
+                var backfillTables = aggregates.Where(a => a.Value.TableBookmark != null);
 
-                if (backfillCursor == null)
+                if (!backfillCursors.Any())
+                {
+                    throw new InvalidOperationException("Expected a backfill cursor block");
+                }
+                if (backfillCursors.Count() > 1)
                 {
                     throw new InvalidOperationException(
-                        "Expected first block of export bookmark to be backfill cursor");
+                        "Expected only one backfill cursor block "
+                        + $"(got {backfillCursors.Count()})");
                 }
+                var backfillCursor = backfillCursors.First();
                 var backfillCursorValue = new BookmarkBlockValue<string>(
-                    firstAggregate.BlockId,
-                    backfillCursor);
+                    backfillCursor.BlockId,
+                    backfillCursor.Value.BackfillCursor!);
+                var backfillTableValues = backfillTables
+                    .Select(t => new BookmarkBlockValue<TableBookmark>(
+                        t.BlockId,
+                        t.Value.TableBookmark!));
 
-                return new DbExportBookmark(bookmarkGateway, backfillCursorValue);
+                return new DbExportBookmark(
+                    bookmarkGateway, backfillCursorValue, backfillTableValues);
             }
         }
 
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
-            BookmarkBlockValue<string> backfillCursor)
+            BookmarkBlockValue<string> backfillCursor,
+            IEnumerable<BookmarkBlockValue<TableBookmark>> backfillTables)
         {
             _bookmarkGateway = bookmarkGateway;
             _backfillCursor = backfillCursor;
+            _backfillTables = backfillTables.ToImmutableArray();
         }
     }
 }

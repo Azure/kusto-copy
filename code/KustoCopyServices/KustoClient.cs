@@ -19,6 +19,7 @@ namespace KustoCopyServices
         private readonly Uri _clusterQueryUri;
         private readonly ICslAdminProvider _commandProvider;
         private readonly ICslQueryProvider _queryProvider;
+        private readonly ClientRequestProperties _properties;
 
         public KustoClient(string clusterQueryUrl)
         {
@@ -31,6 +32,19 @@ namespace KustoCopyServices
             _clusterQueryUri = clusterQueryUri;
             _commandProvider = commandProvider;
             _queryProvider = queryProvider;
+            _properties = EMPTY_REQUEST_PROPERTIES;
+        }
+
+        private KustoClient(
+            Uri clusterQueryUri,
+            ICslAdminProvider commandProvider,
+            ICslQueryProvider queryProvider,
+            ClientRequestProperties properties)
+        {
+            _clusterQueryUri = clusterQueryUri;
+            _commandProvider = commandProvider;
+            _queryProvider = queryProvider;
+            _properties = properties;
         }
 
         public async Task<ImmutableArray<T>> ExecuteCommandAsync<T>(
@@ -67,7 +81,7 @@ namespace KustoCopyServices
                 using (var reader = await _queryProvider.ExecuteQueryAsync(
                     database,
                     query,
-                    EMPTY_REQUEST_PROPERTIES))
+                    _properties))
                 {
                     var enumerableProjection = Project(reader, projection);
 
@@ -81,6 +95,33 @@ namespace KustoCopyServices
                     + $"database '{database}':  '{query}'",
                     ex);
             }
+        }
+
+        public KustoClient SetParameter(string name, string value)
+        {
+            var newProperties = _properties.Clone();
+
+            newProperties.SetParameter(name, value);
+
+            return WithNewProperties(newProperties);
+        }
+
+        public KustoClient SetParameter(string name, DateTime value)
+        {
+            var newProperties = _properties.Clone();
+
+            newProperties.SetParameter(name, value);
+
+            return WithNewProperties(newProperties);
+        }
+
+        private KustoClient WithNewProperties(ClientRequestProperties newProperties)
+        {
+            return new KustoClient(
+                _clusterQueryUri,
+                _commandProvider,
+                _queryProvider,
+                newProperties);
         }
 
         private static IEnumerable<T> Project<T>(
