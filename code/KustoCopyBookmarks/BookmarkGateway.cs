@@ -58,6 +58,7 @@ namespace KustoCopyBookmarks
             new ConcurrentStack<CommitItem>();
         private bool _hasExistBeenTested = false;
         private IImmutableList<int>? _blockIds;
+        private volatile int _lightweightLock = 0;
         private volatile int _nextBlockId = 0;
         private volatile Task _commitingTask = Task.CompletedTask;
 
@@ -200,7 +201,7 @@ namespace KustoCopyBookmarks
                     return;
                 }
                 //  Compete to be the next commiting task
-                if (Monitor.TryEnter(_commitItems))
+                if (TryAcquireLightweightLock())
                 {   //  This thread won and since it just queued the current item, it will process it
                     try
                     {   //  First let's try to grab as many items as we can
@@ -224,7 +225,7 @@ namespace KustoCopyBookmarks
                     }
                     finally
                     {
-                        Monitor.Exit(_commitItems);
+                        ReleaseLightweightLock();
                     }
                 }
                 else
@@ -277,6 +278,16 @@ namespace KustoCopyBookmarks
             {
                 item.CompleteItem();
             }
+        }
+
+        private bool TryAcquireLightweightLock()
+        {
+            return Interlocked.CompareExchange(ref _lightweightLock, 1, 0) == 0;
+        }
+
+        private void ReleaseLightweightLock()
+        {
+            Interlocked.Decrement(ref _lightweightLock);
         }
 
         private static MemoryStream GetBookmarkHeaderStream()
