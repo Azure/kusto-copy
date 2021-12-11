@@ -2,12 +2,13 @@
 using Azure.Storage.Files.DataLake;
 using KustoCopyBookmarks.Export;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyServices
 {
     internal class DbExportPipeline
     {
-        private const int DEFAULT_FETCH_TABLES_SIZE = 100;
+        private const int DEFAULT_FETCH_TABLES_SIZE = 10;
 
         private readonly DbExportBookmark _exportBookmark;
         private readonly KustoClient _kustoClient;

@@ -104,6 +104,7 @@ namespace kusto_copy
             ConfigureTrace(options.Verbose);
 
             Trace.WriteLine("");
+            Trace.WriteLine("Initialization...");
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,

@@ -10,6 +10,7 @@ using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
 using KustoCopyBookmarks.Root;
 using KustoCopyServices;
+using System.Diagnostics;
 
 namespace kusto_copy
 {
@@ -98,6 +99,8 @@ namespace kusto_copy
             string dataLakeFolderUrl,
             MainParameterization parameterization)
         {
+            Trace.WriteLine("Connecting to Data Lake...");
+
             var credential = new InteractiveBrowserCredential();
             var folder = new DataLakeFolder(dataLakeFolderUrl);
             var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
@@ -129,6 +132,9 @@ namespace kusto_copy
 
                 var tempFolderService =
                     await TempFolderService.CreateAsync(folderClient, credential);
+
+                Trace.WriteLine("Connecting to source cluster...");
+
                 var sourceKustoClient =
                     new KustoClient(parameterization.Source!.ClusterQueryUri!);
                 var exportPipeline = await ClusterExportPipeline.CreateAsync(

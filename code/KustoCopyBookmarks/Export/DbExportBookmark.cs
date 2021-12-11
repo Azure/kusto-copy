@@ -2,6 +2,7 @@
 using Azure.Storage.Files.DataLake;
 using KustoCopyBookmarks.Parameters;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection.Metadata;
 using System.Text.Json;
 
@@ -34,6 +35,8 @@ namespace KustoCopyBookmarks.Export
 
             if (aggregates.Count() == 0)
             {   //  Fill default content:  latest cursor as backfill cursor
+                Trace.WriteLine($"Preparing {fileClient.Uri.PathAndQuery}...");
+
                 var (latestCursor, tables) = await fetchDefaultContentAsync();
                 var latestCursorBuffer = SerializationHelper.ToMemory(
                     new ExportAggregate { BackfillCursor = latestCursor });
@@ -49,6 +52,8 @@ namespace KustoCopyBookmarks.Export
                     tables,
                     (r, t) => new BookmarkBlockValue<TableBookmark>(r, t));
 
+                Trace.WriteLine($"{fileClient.Uri.PathAndQuery} is ready");
+                
                 return new DbExportBookmark(bookmarkGateway, backFillCursorvalue, tableValues);
             }
             else

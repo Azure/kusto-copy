@@ -6,6 +6,7 @@ using KustoCopyBookmarks.Export;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -52,6 +53,7 @@ namespace KustoCopyServices
 
         public async Task RunAsync()
         {
+            Trace.WriteLine("Synchronizing source cluster...");
             await SyncDbListAsync();
         }
 
