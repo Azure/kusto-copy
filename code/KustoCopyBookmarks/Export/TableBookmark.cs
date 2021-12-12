@@ -15,7 +15,9 @@ namespace KustoCopyBookmarks.Export
         public DateTime? MinTime { get; set; }
         
         public DateTime? MaxTime { get; set; }
-        
-        public DateTime? ExportedUntilTime { get; set; }
+
+        public DateTime? RemainingMinTime { get; set; }
+
+        public DateTime? RemainingMaxTime { get; set; }
     }
 }

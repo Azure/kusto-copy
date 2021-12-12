@@ -125,7 +125,8 @@ let fetchRange = (tableName:string) {
                     IsBackfill = true,
                     MinTime = r["Min"].To<DateTime>(),
                     MaxTime = r["Max"].To<DateTime>(),
-                    ExportedUntilTime = r["Min"].To<DateTime>()
+                    RemainingMinTime = r["Min"].To<DateTime>(),
+                    RemainingMaxTime = r["Min"].To<DateTime>()
                 });
 
             return bookmarks;
