@@ -50,6 +50,24 @@ namespace KustoCopyServices
 
         public string DbName { get; }
 
+        public async Task RunAsync()
+        {
+            var backfillTask = BackfillCopyAsync();
+            var currentTask = CurrentCopyAsync();
+
+            await Task.WhenAll(backfillTask, currentTask);
+        }
+
+        private async Task BackfillCopyAsync()
+        {
+            await ValueTask.CompletedTask;
+        }
+
+        private async Task CurrentCopyAsync()
+        {
+            await ValueTask.CompletedTask;
+        }
+
         private static async Task<(string, IImmutableList<TableBookmark>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)

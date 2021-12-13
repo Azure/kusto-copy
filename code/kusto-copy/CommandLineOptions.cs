@@ -13,19 +13,22 @@ namespace kusto_copy
         [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL")]
         public string Lake { get; set; } = string.Empty;
 
+        [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
+        public string? ParameterFilePath { get; set; }
+
         [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
 
+        [Option('e', "export-slots", Required = false, HelpText = "# or % of export slots")]
+        public string? ExportSlots { get; set; }
+
         [Option('t', "tenant", Required = false, HelpText = "AAD Tenant ID")]
-        public string Tenant { get; set; } = string.Empty;
+        public string? Tenant { get; set; }
 
         [Option('i', "app-id", Required = false, HelpText = "Application (Client) ID")]
-        public string AppId { get; set; } = string.Empty;
+        public string? AppId { get; set; }
 
         [Option('c', "app-secret", Required = false, HelpText = "Application Secret (credential)")]
-        public string AppSecret { get; set; } = string.Empty;
-
-        [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
-        public string ParameterFilePath { get; set; } = string.Empty;
+        public string? AppSecret { get; set; }
     }
 }

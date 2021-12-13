@@ -101,20 +101,27 @@ namespace kusto_copy
 
         private static async Task RunOptionsAsync(CommandLineOptions options)
         {
+            var parameterization = new MainParameterization
+            {
+                Source = new SourceParameterization
+                {
+                    ClusterQueryUri = options.Source
+                }
+            };
+
             ConfigureTrace(options.Verbose);
 
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
 
+            if (options.ExportSlots != null)
+            {
+                parameterization.Configuration.ExportSlots = options.ExportSlots;
+            }
+
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,
-                new MainParameterization
-                {
-                    Source = new SourceParameterization
-                    {
-                        ClusterQueryUri = options.Source
-                    }
-                }))
+                parameterization))
             {
                 await orchestration.RunAsync();
             }

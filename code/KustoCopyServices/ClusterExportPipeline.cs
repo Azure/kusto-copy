@@ -55,6 +55,7 @@ namespace KustoCopyServices
         {
             Trace.WriteLine("Synchronizing source cluster...");
             await SyncDbListAsync();
+            await Task.WhenAll(_dbExportPipelineMap.Values.Select(d => d.RunAsync()));
         }
 
         private async Task SyncDbListAsync()
