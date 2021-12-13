@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
+using KustoCopyBookmarks;
 using KustoCopyBookmarks.Export;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -60,7 +61,14 @@ namespace KustoCopyServices
 
         private async Task BackfillCopyAsync()
         {
+            var emptyIngestionTask = ProcessEmptyIngestionTableAsync(true);
+
             await ValueTask.CompletedTask;
+        }
+
+        private Task ProcessEmptyIngestionTableAsync(bool isBackfill)
+        {
+            throw new NotImplementedException();
         }
 
         private async Task CurrentCopyAsync()
@@ -127,7 +135,7 @@ namespace KustoCopyServices
 declare query_parameters(Cursor:string);
 let fetchRange = (tableName:string) {
     table(tableName)
-    | where cursor_before_or_at(Cursor)
+    | where cursor_before_or_at(Cursor) or isnull(ingestion_time())
     | summarize by IngestionDayTime=bin(ingestion_time(), 1d)
     | extend TableName = tableName
 };
@@ -140,9 +148,25 @@ let fetchRange = (tableName:string) {
                 r => new
                 {
                     TableName = (string)r["TableName"],
-                    IngestionDayTime = (DateTime)r["IngestionDayTime"]
+                    IngestionDayTime = r["IngestionDayTime"].To<DateTime>()
                 });
-            var tableGroups = protoBookmarks.GroupBy(p => p.TableName);
+            var noIngestionTimeTables = protoBookmarks
+                .Where(p => p.IngestionDayTime == null)
+                .Select(p => p.TableName)
+                .Distinct()
+                .ToHashSet();
+
+            WarningIngestionPolicy(dbName, noIngestionTimeTables);
+
+            var validProtoBookmarks = protoBookmarks
+                .Where(p => !noIngestionTimeTables.Contains(p.TableName))
+                .Select(p => new
+                {
+                    TableName = p.TableName,
+                    //  MinValue should never occur as we validate before
+                    IngestionDayTime = p.IngestionDayTime ?? DateTime.MinValue
+                });
+            var tableGroups = validProtoBookmarks.GroupBy(p => p.TableName);
             var tableMap = tableGroups.ToImmutableDictionary(g => g.Key);
             var emptyTableBookmarks = tableNames
                 .Where(t => !tableMap.ContainsKey(t))
@@ -162,6 +186,20 @@ let fetchRange = (tableName:string) {
             var bookmarks = emptyTableBookmarks.Concat(nonEmptyTableBookmarks).ToImmutableArray();
 
             return bookmarks;
+        }
+
+        private static void WarningIngestionPolicy(
+            string dbName,
+            IEnumerable<string> noIngestionTimeTables)
+        {
+            if (noIngestionTimeTables.Any())
+            {
+                var tableNameList = string.Join(", ", noIngestionTimeTables.Select(t => $"'{t}'"));
+
+                Trace.TraceWarning(
+                    $"Tables {{{tableNameList}}} have entries with no ingestion time and "
+                    + "therefore can't be replicated");
+            }
         }
     }
 }
