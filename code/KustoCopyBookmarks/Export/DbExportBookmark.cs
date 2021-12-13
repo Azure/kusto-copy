@@ -14,6 +14,8 @@ namespace KustoCopyBookmarks.Export
         private class ExportAggregate
         {
             public string? BackfillCursor { get; set; }
+            
+            public CursorBookmark? CurrentCursors { get; set; }
 
             public TableBookmark? TableBookmark { get; set; }
         }

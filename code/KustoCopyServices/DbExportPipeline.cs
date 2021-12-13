@@ -110,24 +110,38 @@ declare query_parameters(Cursor:string);
 let fetchRange = (tableName:string) {
     table(tableName)
     | where cursor_before_or_at(Cursor)
-    | summarize Min = min(ingestion_time()), Max = max(ingestion_time())
+    | summarize by IngestionDayTime=bin(ingestion_time(), 1d)
     | extend TableName = tableName
 };
 ";
             var tableCommandlets = tableNames.Select(t => $"fetchRange('{t}')");
             var commandText = commandHeader + string.Join(" | union ", tableCommandlets);
-            var bookmarks = await kustoClient.SetParameter("Cursor", latestCursor).ExecuteQueryAsync(
+            var protoBookmarks = await kustoClient.SetParameter("Cursor", latestCursor).ExecuteQueryAsync(
                 dbName,
                 commandText,
-                r => new TableBookmark
+                r => new
                 {
                     TableName = (string)r["TableName"],
-                    IsBackfill = true,
-                    MinTime = r["Min"].To<DateTime>(),
-                    MaxTime = r["Max"].To<DateTime>(),
-                    RemainingMinTime = r["Min"].To<DateTime>(),
-                    RemainingMaxTime = r["Min"].To<DateTime>()
+                    IngestionDayTime = (DateTime)r["IngestionDayTime"]
                 });
+            var tableGroups = protoBookmarks.GroupBy(p => p.TableName);
+            var tableMap = tableGroups.ToImmutableDictionary(g => g.Key);
+            var emptyTableBookmarks = tableNames
+                .Where(t => !tableMap.ContainsKey(t))
+                .Select(t => new TableBookmark
+                {
+                    TableName = t,
+                    IsBackfill = true,
+                    IngestionDayTime = ImmutableArray<DateTime>.Empty
+                });
+            var nonEmptyTableBookmarks = tableGroups
+                .Select(g => new TableBookmark
+                {
+                    TableName = g.Key,
+                    IsBackfill = true,
+                    IngestionDayTime = g.Select(i => i.IngestionDayTime).ToImmutableArray()
+                });
+            var bookmarks = emptyTableBookmarks.Concat(nonEmptyTableBookmarks).ToImmutableArray();
 
             return bookmarks;
         }

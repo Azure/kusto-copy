@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,12 +13,7 @@ namespace KustoCopyBookmarks.Export
 
         public bool IsBackfill { get; set; } = true;
 
-        public DateTime? MinTime { get; set; }
-        
-        public DateTime? MaxTime { get; set; }
-
-        public DateTime? RemainingMinTime { get; set; }
-
-        public DateTime? RemainingMaxTime { get; set; }
+        public IImmutableList<DateTime> IngestionDayTime { get; set; }
+            = ImmutableArray<DateTime>.Empty;
     }
 }

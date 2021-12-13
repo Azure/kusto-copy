@@ -20,7 +20,6 @@ destinations:
 config:
     exportSlots:  0 #   Number of export slots to use ; zero means "take everything" ; can also be a string "%x" where x is the percentage of slots to use
     databaseDefault:
-        backfillOrder:  backward #   Options are 'forward' and 'backward' (start with present and go back)
         backfillHorizon:  null  #   Horizon back in time we replicate history (in days) ; null means infinite
         currentWithBackfill:  true    #   true:  we replicate current (following RPO) at the same time as we ingest history (backfill), false:  first backfill then current
         rpo:  60  #   In minutes
