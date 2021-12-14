@@ -14,76 +14,35 @@ namespace KustoCopyBookmarks.Export
         #region Inner Types
         private class ExportAggregate
         {
-            public IterationDefinition? Cursor { get; set; }
+            public IterationDefinition? IterationDefinition { get; set; }
 
             public TableIngestionDays? TableIngestionDays { get; set; }
         }
         #endregion
 
         private readonly BookmarkGateway _bookmarkGateway;
-        private readonly BookmarkBlockValue<IterationDefinition> _backfillIteration;
-        private readonly BookmarkBlockValue<IterationDefinition> _currentIteration;
+        private readonly BookmarkBlockValue<IterationDefinition>? _backfillIteration;
+        private readonly BookmarkBlockValue<IterationDefinition>? _forwardIteration;
         private readonly IImmutableList<BookmarkBlockValue<TableIngestionDays>> _backfillTables;
-
-        public string BackfillIteration => _backfillIteration.Value;
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential,
-            Func<Task<(string, IImmutableList<TableIngestionDays>)>> fetchDefaultContentAsync)
+            Func<Task<(IterationDefinition, IImmutableList<TableIngestionDays>)>> fetchDefaultContentAsync)
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
 
             if (aggregates.Count() == 0)
-            {   //  Fill default content:  latest cursor as backfill cursor
-                Trace.WriteLine($"Preparing {fileClient.Uri.PathAndQuery}...");
-
-                var (latestCursor, tables) = await fetchDefaultContentAsync();
-                var latestCursorBuffer = SerializationHelper.ToMemory(
-                    new ExportAggregate { BackfillCursor = latestCursor });
-                var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
-                        new ExportAggregate { TableIngestionDays = t }));
-                var transaction =
-                    new BookmarkTransaction(tableBuffers.Prepend(latestCursorBuffer), null, null);
-                var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
-                var backFillCursorvalue = new BookmarkBlockValue<string>(
-                    result.AddedBlockIds.First(),
-                    latestCursor);
-                var tableValues = result.AddedBlockIds.Skip(1).Zip(
-                    tables,
-                    (r, t) => new BookmarkBlockValue<TableIngestionDays>(r, t));
-
-                Trace.WriteLine($"{fileClient.Uri.PathAndQuery} is ready");
-
-                return new DbExportBookmark(bookmarkGateway, backFillCursorvalue, tableValues);
+            {
+                return await CreateWithDefaultContentAsync(
+                    fileClient,
+                    bookmarkGateway,
+                    fetchDefaultContentAsync);
             }
             else
             {
-                var backfillCursors = aggregates.Where(a => a.Value.BackfillCursor != null);
-                var backfillTables = aggregates.Where(a => a.Value.TableIngestionDays != null);
-
-                if (!backfillCursors.Any())
-                {
-                    throw new InvalidOperationException("Expected a backfill cursor block");
-                }
-                if (backfillCursors.Count() > 1)
-                {
-                    throw new InvalidOperationException(
-                        "Expected only one backfill cursor block "
-                        + $"(got {backfillCursors.Count()})");
-                }
-                var backfillCursor = backfillCursors.First();
-                var backfillCursorValue = new BookmarkBlockValue<string>(
-                    backfillCursor.BlockId,
-                    backfillCursor.Value.BackfillCursor!);
-                var backfillTableValues = backfillTables
-                    .Select(t => new BookmarkBlockValue<TableIngestionDays>(
-                        t.BlockId,
-                        t.Value.TableIngestionDays!));
-
-                return new DbExportBookmark(
-                    bookmarkGateway, backfillCursorValue, backfillTableValues);
+                return LoadAggregatesAsync(bookmarkGateway, aggregates);
             }
         }
 
@@ -108,12 +67,85 @@ namespace KustoCopyBookmarks.Export
 
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
-            BookmarkBlockValue<string> backfillCursor,
+            BookmarkBlockValue<IterationDefinition>? backfillIteration,
+            BookmarkBlockValue<IterationDefinition>? forwardIteration,
             IEnumerable<BookmarkBlockValue<TableIngestionDays>> backfillTables)
         {
             _bookmarkGateway = bookmarkGateway;
-            _backfillIteration = backfillCursor;
+            _backfillIteration = backfillIteration;
+            _forwardIteration = forwardIteration;
             _backfillTables = backfillTables.ToImmutableArray();
+        }
+
+        private static async Task<DbExportBookmark> CreateWithDefaultContentAsync(
+            DataLakeFileClient fileClient,
+            BookmarkGateway bookmarkGateway,
+            Func<Task<(IterationDefinition, IImmutableList<TableIngestionDays>)>> fetchDefaultContentAsync)
+        {
+            Trace.WriteLine($"Preparing {fileClient.Uri.PathAndQuery}...");
+
+            var (iterationDefinition, tables) = await fetchDefaultContentAsync();
+            var iterationDefinitionBuffer = SerializationHelper.ToMemory(
+                new ExportAggregate { IterationDefinition = iterationDefinition });
+            var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
+                    new ExportAggregate { TableIngestionDays = t }));
+            var transaction = new BookmarkTransaction(
+                tableBuffers.Prepend(iterationDefinitionBuffer),
+                null,
+                null);
+            var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
+            var backFillIteration = new BookmarkBlockValue<IterationDefinition>(
+                result.AddedBlockIds.First(),
+                iterationDefinition);
+            var tableValues = result.AddedBlockIds.Skip(1).Zip(
+                tables,
+                (r, t) => new BookmarkBlockValue<TableIngestionDays>(r, t));
+
+            Trace.WriteLine($"{fileClient.Uri.PathAndQuery} is ready");
+
+            return new DbExportBookmark(
+                bookmarkGateway,
+                backFillIteration,
+                null,
+                tableValues);
+        }
+
+        private static DbExportBookmark LoadAggregatesAsync(
+            BookmarkGateway bookmarkGateway,
+            IImmutableList<BookmarkBlockValue<ExportAggregate>> aggregates)
+        {
+            var iterations = aggregates
+                .Where(a => a.Value.IterationDefinition != null);
+            var backfillIterations = iterations
+                .Where(a => a.Value.IterationDefinition!.StartCursor == null);
+            var forwardIterations = iterations
+                .Where(a => a.Value.IterationDefinition!.StartCursor != null);
+            var tableIngestionDays = aggregates
+                .Where(a => a.Value.TableIngestionDays != null);
+
+            if (backfillIterations.Count() > 1)
+            {
+                throw new InvalidOperationException(
+                    "Expected at most one backfill iteration definition block");
+            }
+            if (forwardIterations.Count() > 1)
+            {
+                throw new InvalidOperationException(
+                    "Expected at most one forward iteration definition block");
+            }
+            if (!iterations.Any())
+            {
+                throw new InvalidOperationException(
+                    "Expected at least one iteration definition block");
+            }
+            var backfillIteration = backfillIterations.FirstOrDefault();
+            var forwardIteration = forwardIterations.FirstOrDefault();
+
+            return new DbExportBookmark(
+                bookmarkGateway,
+                backfillIteration?.Project(a => a.IterationDefinition!),
+                forwardIteration?.Project(a => a.IterationDefinition!),
+                tableIngestionDays.Select(b => b.Project(a => a.TableIngestionDays!)));
         }
     }
 }

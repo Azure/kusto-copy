@@ -68,7 +68,7 @@ namespace KustoCopyServices
 
         private Task ProcessEmptyIngestionTableAsync(bool isBackfill)
         {
-            var emptyTableNames = _exportBookmark.ProcessEmptyTableAsync(isBackfill);
+            //var emptyTableNames = _exportBookmark.ProcessEmptyTableAsync(isBackfill);
             throw new NotImplementedException();
         }
 
@@ -77,7 +77,7 @@ namespace KustoCopyServices
             await ValueTask.CompletedTask;
         }
 
-        private static async Task<(string, IImmutableList<TableIngestionDays>)> FetchDefaultBookmarks(
+        private static async Task<(IterationDefinition, IImmutableList<TableIngestionDays>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)
         {
@@ -85,20 +85,29 @@ namespace KustoCopyServices
                 dbName,
                 ".show tables | project TableName",
                 r => (string)r["TableName"]);
-            var cursors = await kustoClient.ExecuteQueryAsync(
+            var iterationInfo = await kustoClient.ExecuteQueryAsync(
                 dbName,
-                "print Cursor=cursor_current()",
-                r => (string)r["Cursor"]);
+                "print CurrentTime=now(), Cursor=cursor_current()",
+                r => new
+                {
+                    CurrentTime = (DateTime)r["CurrentTime"],
+                    Cursor = (string)r["Cursor"]
+                });
             var tableNames = await tableNamesTask;
-            var latestCursor = cursors.First();
+            var iteration = new IterationDefinition
+            {
+                IterationTime = iterationInfo.First().CurrentTime,
+                StartCursor = null,
+                EndCursor = iterationInfo.First().Cursor
+            };
             var tableBookmarks = await FetchTableBookmarksAsync(
                 dbName,
                 kustoClient,
-                latestCursor,
+                iteration.EndCursor,
                 tableNames,
                 DEFAULT_FETCH_TABLES_SIZE);
 
-            return (latestCursor, tableBookmarks);
+            return (iteration, tableBookmarks);
         }
 
         private static async Task<ImmutableArray<TableIngestionDays>> FetchTableBookmarksAsync(

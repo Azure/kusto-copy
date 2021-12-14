@@ -6,8 +6,8 @@
         public DateTime IterationTime { get; set; } = DateTime.MinValue;
 
         /// <summary>Can be null for backfill only.</summary>
-        public string? Start { get; set; } = string.Empty;
+        public string? StartCursor { get; set; } = string.Empty;
         
-        public string End { get; set; } = string.Empty;
+        public string EndCursor { get; set; } = string.Empty;
     }
 }

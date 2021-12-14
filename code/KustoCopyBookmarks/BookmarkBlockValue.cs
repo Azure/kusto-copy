@@ -17,5 +17,10 @@ namespace KustoCopyBookmarks
         public int BlockId { get; }
 
         public T Value { get; }
+
+        public BookmarkBlockValue<V> Project<V>(Func<T, V> projection)
+        {
+            return new BookmarkBlockValue<V>(BlockId, projection(Value));
+        }
     }
 }
