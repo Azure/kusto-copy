@@ -68,6 +68,7 @@ namespace KustoCopyServices
 
         private Task ProcessEmptyIngestionTableAsync(bool isBackfill)
         {
+            var emptyTableNames = _exportBookmark.ProcessEmptyTableAsync(isBackfill);
             throw new NotImplementedException();
         }
 
@@ -76,7 +77,7 @@ namespace KustoCopyServices
             await ValueTask.CompletedTask;
         }
 
-        private static async Task<(string, IImmutableList<TableBookmark>)> FetchDefaultBookmarks(
+        private static async Task<(string, IImmutableList<TableIngestionDays>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)
         {
@@ -100,7 +101,7 @@ namespace KustoCopyServices
             return (latestCursor, tableBookmarks);
         }
 
-        private static async Task<ImmutableArray<TableBookmark>> FetchTableBookmarksAsync(
+        private static async Task<ImmutableArray<TableIngestionDays>> FetchTableBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -125,7 +126,7 @@ namespace KustoCopyServices
             return bookmarks;
         }
 
-        private static async Task<ImmutableArray<TableBookmark>> FetchTableChunkBookmarksAsync(
+        private static async Task<ImmutableArray<TableIngestionDays>> FetchTableChunkBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -170,14 +171,15 @@ let fetchRange = (tableName:string) {
             var tableMap = tableGroups.ToImmutableDictionary(g => g.Key);
             var emptyTableBookmarks = tableNames
                 .Where(t => !tableMap.ContainsKey(t))
-                .Select(t => new TableBookmark
+                .Where(t => !noIngestionTimeTables.Contains(t))
+                .Select(t => new TableIngestionDays
                 {
                     TableName = t,
                     IsBackfill = true,
                     IngestionDayTime = ImmutableArray<DateTime>.Empty
                 });
             var nonEmptyTableBookmarks = tableGroups
-                .Select(g => new TableBookmark
+                .Select(g => new TableIngestionDays
                 {
                     TableName = g.Key,
                     IsBackfill = true,
