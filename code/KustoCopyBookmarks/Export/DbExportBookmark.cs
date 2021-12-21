@@ -2,6 +2,7 @@
 using Azure.Storage.Files.DataLake;
 using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.Parameters;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection.Metadata;
@@ -14,21 +15,28 @@ namespace KustoCopyBookmarks.Export
         #region Inner Types
         private class ExportAggregate
         {
-            public IterationData? Iteration { get; set; }
+            public DbIterationData? DbIteration { get; set; }
 
-            public TableIngestionData? TableIngestion { get; set; }
+            public TableIterationData? TableIteration { get; set; }
+
+            public EmptyTableExportEventData? EmptyTableExportEvent { get; set; }
+
+            public TableExportEventData? TableExportEvent { get; set; }
         }
         #endregion
 
         private readonly BookmarkGateway _bookmarkGateway;
-        private readonly BookmarkBlockValue<IterationData>? _backfillIteration;
-        private readonly BookmarkBlockValue<IterationData>? _forwardIteration;
-        private readonly IImmutableList<BookmarkBlockValue<TableIngestionData>> _backfillTables;
+        private BookmarkBlockValue<DbIterationData>? _backfillDbIteration;
+        private BookmarkBlockValue<DbIterationData>? _forwardIteration;
+        private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
+            _backfillTableIterationMap;
+        private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
+            _forwardTableIterationMap;
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential,
-            Func<Task<(IterationData, IImmutableList<TableIngestionData>)>> fetchDefaultContentAsync)
+            Func<Task<(DbIterationData, IImmutableList<TableIterationData>)>> fetchDefaultContentAsync)
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
@@ -55,51 +63,61 @@ namespace KustoCopyBookmarks.Export
                 throw new NotImplementedException();
             }
 
-            var tableNames = _backfillTables
+            var emptyTableNames = _backfillTableIterationMap
+                .Values
                 .Select(t => t.Value)
-                .Where(t => !t.IngestionDayTime.Any())
+                .Where(t => !t.RemainingDayIngestionTimes.Any())
                 .Select(t => t.TableName)
                 .ToImmutableArray();
-            var schema = await fetchSchemaAsync(tableNames);
+            var schema = await fetchSchemaAsync(emptyTableNames);
 
-            return tableNames;
+            return emptyTableNames;
         }
 
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
-            BookmarkBlockValue<IterationData>? backfillIteration,
-            BookmarkBlockValue<IterationData>? forwardIteration,
-            IEnumerable<BookmarkBlockValue<TableIngestionData>> backfillTables)
+            BookmarkBlockValue<DbIterationData>? backfillIteration,
+            BookmarkBlockValue<DbIterationData>? forwardIteration,
+            IEnumerable<BookmarkBlockValue<TableIterationData>> tableIterations)
         {
             _bookmarkGateway = bookmarkGateway;
-            _backfillIteration = backfillIteration;
+            _backfillDbIteration = backfillIteration;
             _forwardIteration = forwardIteration;
-            _backfillTables = backfillTables.ToImmutableArray();
+
+            var backfillTableIterations = tableIterations
+                .Where(t => t.Value.EndCursor == _backfillDbIteration?.Value.EndCursor)
+                .Select(t => KeyValuePair.Create(t.Value.TableName, t));
+            var forwardTableIterations = tableIterations
+                .Where(t => t.Value.EndCursor == _forwardIteration?.Value.EndCursor)
+                .Select(t => KeyValuePair.Create(t.Value.TableName, t));
+
+            _backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
+            _forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
         }
 
         private static async Task<DbExportBookmark> CreateWithDefaultContentAsync(
             DataLakeFileClient fileClient,
             BookmarkGateway bookmarkGateway,
-            Func<Task<(IterationData, IImmutableList<TableIngestionData>)>> fetchDefaultContentAsync)
+            Func<Task<(DbIterationData, IImmutableList<TableIterationData>)>> fetchDefaultContentAsync)
         {
             Trace.WriteLine($"Preparing {fileClient.Uri.PathAndQuery}...");
 
             var (iterationDefinition, tables) = await fetchDefaultContentAsync();
             var iterationDefinitionBuffer = SerializationHelper.ToMemory(
-                new ExportAggregate { Iteration = iterationDefinition });
+                new ExportAggregate { DbIteration = iterationDefinition });
             var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
-                    new ExportAggregate { TableIngestion = t }));
+                    new ExportAggregate { TableIteration = t }));
             var transaction = new BookmarkTransaction(
                 tableBuffers.Prepend(iterationDefinitionBuffer),
                 null,
                 null);
             var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
-            var backFillIteration = new BookmarkBlockValue<IterationData>(
+            var backFillIteration = new BookmarkBlockValue<DbIterationData>(
                 result.AddedBlockIds.First(),
                 iterationDefinition);
             var tableValues = result.AddedBlockIds.Skip(1).Zip(
                 tables,
-                (r, t) => new BookmarkBlockValue<TableIngestionData>(r, t));
+                (r, t) => new BookmarkBlockValue<TableIterationData>(r, t));
 
             Trace.WriteLine($"{fileClient.Uri.PathAndQuery} is ready");
 
@@ -115,13 +133,13 @@ namespace KustoCopyBookmarks.Export
             IImmutableList<BookmarkBlockValue<ExportAggregate>> aggregates)
         {
             var iterations = aggregates
-                .Where(a => a.Value.Iteration != null);
+                .Where(a => a.Value.DbIteration != null);
             var backfillIterations = iterations
-                .Where(a => a.Value.Iteration!.StartCursor == null);
+                .Where(a => a.Value.DbIteration!.StartCursor == null);
             var forwardIterations = iterations
-                .Where(a => a.Value.Iteration!.StartCursor != null);
-            var tableIngestionDays = aggregates
-                .Where(a => a.Value.TableIngestion != null);
+                .Where(a => a.Value.DbIteration!.StartCursor != null);
+            var tableIterations = aggregates
+                .Where(a => a.Value.TableIteration != null);
 
             if (backfillIterations.Count() > 1)
             {
@@ -143,9 +161,9 @@ namespace KustoCopyBookmarks.Export
 
             return new DbExportBookmark(
                 bookmarkGateway,
-                backfillIteration?.Project(a => a.Iteration!),
-                forwardIteration?.Project(a => a.Iteration!),
-                tableIngestionDays.Select(b => b.Project(a => a.TableIngestion!)));
+                backfillIteration?.Project(a => a.DbIteration!),
+                forwardIteration?.Project(a => a.DbIteration!),
+                tableIterations.Select(b => b.Project(a => a.TableIteration!)));
         }
     }
 }

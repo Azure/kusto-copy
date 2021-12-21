@@ -124,7 +124,7 @@ namespace KustoCopyServices
             await ValueTask.CompletedTask;
         }
 
-        private static async Task<(IterationData, IImmutableList<TableIngestionData>)> FetchDefaultBookmarks(
+        private static async Task<(DbIterationData, IImmutableList<TableIterationData>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)
         {
@@ -141,7 +141,7 @@ namespace KustoCopyServices
                     Cursor = (string)r["Cursor"]
                 });
             var tableNames = await tableNamesTask;
-            var iteration = new IterationData
+            var iteration = new DbIterationData
             {
                 IterationTime = iterationInfo.First().CurrentTime,
                 StartCursor = null,
@@ -157,7 +157,7 @@ namespace KustoCopyServices
             return (iteration, tableBookmarks);
         }
 
-        private static async Task<ImmutableArray<TableIngestionData>> FetchTableBookmarksAsync(
+        private static async Task<ImmutableArray<TableIterationData>> FetchTableBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -182,7 +182,7 @@ namespace KustoCopyServices
             return bookmarks;
         }
 
-        private static async Task<ImmutableArray<TableIngestionData>> FetchTableChunkBookmarksAsync(
+        private static async Task<ImmutableArray<TableIterationData>> FetchTableChunkBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -228,18 +228,18 @@ let fetchRange = (tableName:string) {
             var emptyTableBookmarks = tableNames
                 .Where(t => !tableMap.ContainsKey(t))
                 .Where(t => !noIngestionTimeTables.Contains(t))
-                .Select(t => new TableIngestionData
+                .Select(t => new TableIterationData
                 {
+                    EndCursor = latestCursor,
                     TableName = t,
-                    IsBackfill = true,
-                    IngestionDayTime = ImmutableArray<DateTime>.Empty
+                    RemainingDayIngestionTimes = ImmutableArray<DateTime>.Empty
                 });
             var nonEmptyTableBookmarks = tableGroups
-                .Select(g => new TableIngestionData
+                .Select(g => new TableIterationData
                 {
+                    EndCursor = latestCursor,
                     TableName = g.Key,
-                    IsBackfill = true,
-                    IngestionDayTime = g.Select(i => i.IngestionDayTime).ToImmutableArray()
+                    RemainingDayIngestionTimes = g.Select(i => i.IngestionDayTime).ToImmutableArray()
                 });
             var bookmarks = emptyTableBookmarks.Concat(nonEmptyTableBookmarks).ToImmutableArray();
 
