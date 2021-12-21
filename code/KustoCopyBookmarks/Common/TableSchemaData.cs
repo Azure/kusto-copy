@@ -1,20 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks.Common
 {
-    public class TableSchema
+    public class TableSchemaData
     {
-        /// <summary>
-        /// In the format col1:type1, col2:type2, etc.
-        /// </summary>
-        public string Schema { get; set; } = string.Empty;
+        public DateTime SnapshotTime { get; set; } = DateTime.MinValue;
+
+        public IImmutableList<ColumnSchemaData> Columns { get; set; } = ImmutableArray<ColumnSchemaData>.Empty;
 
         public string Folder { get; set; } = string.Empty;
-        
+
         public string DocString { get; set; } = string.Empty;
     }
 }

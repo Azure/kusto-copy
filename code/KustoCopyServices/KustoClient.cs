@@ -54,8 +54,10 @@ namespace KustoCopyServices
         {
             try
             {
-                using (var reader =
-                    await _commandProvider.ExecuteControlCommandAsync(database, command))
+                using (var reader = await _commandProvider.ExecuteControlCommandAsync(
+                    database,
+                    command,
+                    _properties))
                 {
                     var enumerableProjection = Project(reader, projection);
 

@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyBookmarks.Export
 {
-    public class IterationDefinition
+    public class IterationData
     {
         /// <summary>Used only for empty table schema updates.</summary>
         public DateTime IterationTime { get; set; } = DateTime.MinValue;

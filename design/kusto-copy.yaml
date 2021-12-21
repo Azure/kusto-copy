@@ -1,5 +1,6 @@
 source:
     clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+    state:  enabled #   Either 'enabled' or 'disabled'
     includeDatabases:   #   Optional ; by default every dbs are included
     - db1
     - db2
@@ -17,6 +18,7 @@ source:
 destinations:
     -   clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
         clusterIngestionUri:  https://ingest-inttestsyenycav4i2vma.eastus.kusto.windows.net
+        state:  enabled #   Either 'enabled' or 'disabled'
 config:
     exportSlots:  "%10" #   Number of export slots to use ; zero means "take everything" ; can also be "%x" where x is the percentage of slots to use
 databaseDefault:

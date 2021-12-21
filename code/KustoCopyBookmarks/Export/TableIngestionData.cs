@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks.Export
 {
-    public class TableIngestionDays
+    public class TableIngestionData
     {
         public string TableName { get; set; } = "<EMPTY?>";
 

@@ -1,6 +1,8 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
+using Kusto.Data.Common;
 using KustoCopyBookmarks;
+using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.Export;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -66,10 +68,55 @@ namespace KustoCopyServices
             await ValueTask.CompletedTask;
         }
 
-        private Task ProcessEmptyIngestionTableAsync(bool isBackfill)
+        private async Task ProcessEmptyIngestionTableAsync(bool isBackfill)
         {
-            //var emptyTableNames = _exportBookmark.ProcessEmptyTableAsync(isBackfill);
+            //var a = FetchTableSchemasAsync;
+            var q = await _exportBookmark.ProcessEmptyTableAsync(
+                isBackfill,
+                async (tableNames) =>
+                {
+                    var snapshot = await FetchTableSchemaAsync(tableNames.First());
+
+                    return ImmutableDictionary<string, TableSchemaData>
+                    .Empty
+                    .Add(tableNames.First(), snapshot);
+                });
             throw new NotImplementedException();
+        }
+
+        private async Task<TableSchemaData> FetchTableSchemaAsync(string tableName)
+        {
+            //  Technically we could parse the 'Schema' column but in general it would require
+            //  taking care of character escape which make it non-trivial so we use getschema
+            //  in a separate query
+            var tableSchemaTask = _kustoClient.ExecuteCommandAsync(
+                DbName,
+                $".show table ['{tableName}'] schema as csl | project Folder, DocString",
+                r => new TableSchemaData
+                {
+                    Folder = (string)r["Folder"],
+                    DocString = (string)r["DocString"]
+                });
+            var columns = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .ExecuteCommandAsync(
+                DbName,
+                $"Table(TargetTableName) | getschema | project ColumnName, ColumnType",
+                r => new ColumnSchemaData
+                {
+                    ColumnName = (string)r["ColumnName"],
+                    ColumnType = (string)r["ColumnType"]
+                });
+            var tableSchema = (await tableSchemaTask).FirstOrDefault();
+
+            if (tableSchema == null)
+            {
+                throw new CopyException($"Table '{tableName}' was dropped during export");
+            }
+
+            tableSchema.Columns = columns;
+
+            return tableSchema;
         }
 
         private async Task CurrentCopyAsync()
@@ -77,7 +124,7 @@ namespace KustoCopyServices
             await ValueTask.CompletedTask;
         }
 
-        private static async Task<(IterationDefinition, IImmutableList<TableIngestionDays>)> FetchDefaultBookmarks(
+        private static async Task<(IterationData, IImmutableList<TableIngestionData>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)
         {
@@ -94,7 +141,7 @@ namespace KustoCopyServices
                     Cursor = (string)r["Cursor"]
                 });
             var tableNames = await tableNamesTask;
-            var iteration = new IterationDefinition
+            var iteration = new IterationData
             {
                 IterationTime = iterationInfo.First().CurrentTime,
                 StartCursor = null,
@@ -110,7 +157,7 @@ namespace KustoCopyServices
             return (iteration, tableBookmarks);
         }
 
-        private static async Task<ImmutableArray<TableIngestionDays>> FetchTableBookmarksAsync(
+        private static async Task<ImmutableArray<TableIngestionData>> FetchTableBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -135,7 +182,7 @@ namespace KustoCopyServices
             return bookmarks;
         }
 
-        private static async Task<ImmutableArray<TableIngestionDays>> FetchTableChunkBookmarksAsync(
+        private static async Task<ImmutableArray<TableIngestionData>> FetchTableChunkBookmarksAsync(
             string dbName,
             KustoClient kustoClient,
             string latestCursor,
@@ -181,14 +228,14 @@ let fetchRange = (tableName:string) {
             var emptyTableBookmarks = tableNames
                 .Where(t => !tableMap.ContainsKey(t))
                 .Where(t => !noIngestionTimeTables.Contains(t))
-                .Select(t => new TableIngestionDays
+                .Select(t => new TableIngestionData
                 {
                     TableName = t,
                     IsBackfill = true,
                     IngestionDayTime = ImmutableArray<DateTime>.Empty
                 });
             var nonEmptyTableBookmarks = tableGroups
-                .Select(g => new TableIngestionDays
+                .Select(g => new TableIngestionData
                 {
                     TableName = g.Key,
                     IsBackfill = true,
