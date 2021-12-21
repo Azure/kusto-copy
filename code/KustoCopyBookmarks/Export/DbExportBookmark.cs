@@ -14,9 +14,9 @@ namespace KustoCopyBookmarks.Export
         #region Inner Types
         private class ExportAggregate
         {
-            public IterationData? IterationDefinition { get; set; }
+            public IterationData? Iteration { get; set; }
 
-            public TableIngestionData? TableIngestionDays { get; set; }
+            public TableIngestionData? TableIngestion { get; set; }
         }
         #endregion
 
@@ -86,9 +86,9 @@ namespace KustoCopyBookmarks.Export
 
             var (iterationDefinition, tables) = await fetchDefaultContentAsync();
             var iterationDefinitionBuffer = SerializationHelper.ToMemory(
-                new ExportAggregate { IterationDefinition = iterationDefinition });
+                new ExportAggregate { Iteration = iterationDefinition });
             var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
-                    new ExportAggregate { TableIngestionDays = t }));
+                    new ExportAggregate { TableIngestion = t }));
             var transaction = new BookmarkTransaction(
                 tableBuffers.Prepend(iterationDefinitionBuffer),
                 null,
@@ -115,13 +115,13 @@ namespace KustoCopyBookmarks.Export
             IImmutableList<BookmarkBlockValue<ExportAggregate>> aggregates)
         {
             var iterations = aggregates
-                .Where(a => a.Value.IterationDefinition != null);
+                .Where(a => a.Value.Iteration != null);
             var backfillIterations = iterations
-                .Where(a => a.Value.IterationDefinition!.StartCursor == null);
+                .Where(a => a.Value.Iteration!.StartCursor == null);
             var forwardIterations = iterations
-                .Where(a => a.Value.IterationDefinition!.StartCursor != null);
+                .Where(a => a.Value.Iteration!.StartCursor != null);
             var tableIngestionDays = aggregates
-                .Where(a => a.Value.TableIngestionDays != null);
+                .Where(a => a.Value.TableIngestion != null);
 
             if (backfillIterations.Count() > 1)
             {
@@ -143,9 +143,9 @@ namespace KustoCopyBookmarks.Export
 
             return new DbExportBookmark(
                 bookmarkGateway,
-                backfillIteration?.Project(a => a.IterationDefinition!),
-                forwardIteration?.Project(a => a.IterationDefinition!),
-                tableIngestionDays.Select(b => b.Project(a => a.TableIngestionDays!)));
+                backfillIteration?.Project(a => a.Iteration!),
+                forwardIteration?.Project(a => a.Iteration!),
+                tableIngestionDays.Select(b => b.Project(a => a.TableIngestion!)));
         }
     }
 }
