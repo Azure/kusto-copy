@@ -65,23 +65,24 @@ namespace KustoCopyServices
         {
             var emptyIngestionTask = ProcessEmptyIngestionTableAsync(true);
 
-            await ValueTask.CompletedTask;
+            await Task.WhenAll(emptyIngestionTask);
         }
 
         private async Task ProcessEmptyIngestionTableAsync(bool isBackfill)
         {
-            //var a = FetchTableSchemasAsync;
-            var q = await _exportBookmark.ProcessEmptyTableAsync(
+            await _exportBookmark.ProcessEmptyTableAsync(
                 isBackfill,
                 async (tableNames) =>
                 {
-                    var snapshot = await FetchTableSchemaAsync(tableNames.First());
+                    var schemaTasks = tableNames
+                    .Select(t => FetchTableSchemaAsync(t))
+                    .ToArray();
 
-                    return ImmutableDictionary<string, TableSchemaData>
-                    .Empty
-                    .Add(tableNames.First(), snapshot);
+                    await Task.WhenAll(schemaTasks);
+
+                    return schemaTasks
+                    .Select(t => t.Result);
                 });
-            throw new NotImplementedException();
         }
 
         private async Task<TableSchemaData> FetchTableSchemaAsync(string tableName)
@@ -101,7 +102,7 @@ namespace KustoCopyServices
                 .SetParameter("TargetTableName", tableName)
                 .ExecuteCommandAsync(
                 DbName,
-                $"Table(TargetTableName) | getschema | project ColumnName, ColumnType",
+                $"table(TargetTableName) | getschema | project ColumnName, ColumnType",
                 r => new ColumnSchemaData
                 {
                     ColumnName = (string)r["ColumnName"],

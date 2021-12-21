@@ -32,6 +32,7 @@ namespace KustoCopyBookmarks.Export
             _backfillTableIterationMap;
         private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
             _forwardTableIterationMap;
+        private ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>> _emptyTableExportEvents;
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
@@ -56,20 +57,53 @@ namespace KustoCopyBookmarks.Export
 
         public async Task<IImmutableList<string>> ProcessEmptyTableAsync(
             bool isBackfill,
-            Func<IImmutableList<string>, Task<IImmutableDictionary<string, TableSchemaData>>> fetchSchemaAsync)
+            Func<IEnumerable<string>, Task<IEnumerable<TableSchemaData>>> fetchSchemasAsync)
         {
-            if (!isBackfill)
-            {
-                throw new NotImplementedException();
-            }
-
-            var emptyTableNames = _backfillTableIterationMap
+            var map = isBackfill ? _backfillTableIterationMap : _forwardTableIterationMap;
+            var endCursor = isBackfill
+                ? _backfillDbIteration!.Value.EndCursor
+                : _backfillDbIteration!.Value.EndCursor;
+            var emptyTableNames = map
                 .Values
                 .Select(t => t.Value)
                 .Where(t => !t.RemainingDayIngestionTimes.Any())
                 .Select(t => t.TableName)
                 .ToImmutableArray();
-            var schema = await fetchSchemaAsync(emptyTableNames);
+            var emptyTableIds = emptyTableNames
+                .Select(n => map[n].BlockId);
+            var schemas = await fetchSchemasAsync(emptyTableNames);
+            var events = schemas
+                .Zip(emptyTableNames, (s, n) => new { Schema = s, TableName = n })
+                .Select(p => new EmptyTableExportEventData
+                {
+                    EndCursor = endCursor,
+                    TableName = p.TableName,
+                    Schema = p.Schema
+                });
+            var eventBuffers = events
+                .Select(e => SerializationHelper.ToMemory(
+                    new ExportAggregate { EmptyTableExportEvent = e }));
+            var transaction = new BookmarkTransaction(eventBuffers, null, emptyTableIds);
+            //  Persist to blob
+            var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
+            var eventValues = events
+                .Zip(
+                result.AddedBlockIds,
+                (e, id) => new BookmarkBlockValue<EmptyTableExportEventData>(id, e));
+
+            //  Persist to memory
+            foreach (var tableName in emptyTableNames)
+            {
+                if (!map.TryRemove(tableName, out _))
+                {
+                    throw new InvalidOperationException(
+                        $"Can't remove table '{tableName}' in memory with backfill={isBackfill}");
+                }
+            }
+            foreach (var eventValue in eventValues)
+            {
+                _emptyTableExportEvents.Enqueue(eventValue);
+            }
 
             return emptyTableNames;
         }
@@ -78,7 +112,8 @@ namespace KustoCopyBookmarks.Export
             BookmarkGateway bookmarkGateway,
             BookmarkBlockValue<DbIterationData>? backfillIteration,
             BookmarkBlockValue<DbIterationData>? forwardIteration,
-            IEnumerable<BookmarkBlockValue<TableIterationData>> tableIterations)
+            IEnumerable<BookmarkBlockValue<TableIterationData>> tableIterations,
+            IEnumerable<BookmarkBlockValue<EmptyTableExportEventData>> emptyTableExportEvents)
         {
             _bookmarkGateway = bookmarkGateway;
             _backfillDbIteration = backfillIteration;
@@ -93,6 +128,7 @@ namespace KustoCopyBookmarks.Export
 
             _backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
             _forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
+            _emptyTableExportEvents = new ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>>(emptyTableExportEvents);
         }
 
         private static async Task<DbExportBookmark> CreateWithDefaultContentAsync(
@@ -125,7 +161,8 @@ namespace KustoCopyBookmarks.Export
                 bookmarkGateway,
                 backFillIteration,
                 null,
-                tableValues);
+                tableValues,
+                ImmutableArray<BookmarkBlockValue<EmptyTableExportEventData>>.Empty);
         }
 
         private static DbExportBookmark LoadAggregatesAsync(
@@ -140,6 +177,8 @@ namespace KustoCopyBookmarks.Export
                 .Where(a => a.Value.DbIteration!.StartCursor != null);
             var tableIterations = aggregates
                 .Where(a => a.Value.TableIteration != null);
+            var emptyTableExportEvents = aggregates
+                .Where(a => a.Value.EmptyTableExportEvent != null);
 
             if (backfillIterations.Count() > 1)
             {
@@ -163,7 +202,8 @@ namespace KustoCopyBookmarks.Export
                 bookmarkGateway,
                 backfillIteration?.Project(a => a.DbIteration!),
                 forwardIteration?.Project(a => a.DbIteration!),
-                tableIterations.Select(b => b.Project(a => a.TableIteration!)));
+                tableIterations.Select(b => b.Project(a => a.TableIteration!)),
+                emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
         }
     }
 }
