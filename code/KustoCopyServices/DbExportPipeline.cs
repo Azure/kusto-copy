@@ -100,9 +100,10 @@ namespace KustoCopyServices
                 });
             var columns = await _kustoClient
                 .SetParameter("TargetTableName", tableName)
-                .ExecuteCommandAsync(
+                .ExecuteQueryAsync(
                 DbName,
-                $"table(TargetTableName) | getschema | project ColumnName, ColumnType",
+                "declare query_parameters(TargetTableName: string);"
+                + "table(TargetTableName) | getschema | project ColumnName, ColumnType",
                 r => new ColumnSchemaData
                 {
                     ColumnName = (string)r["ColumnName"],
@@ -189,7 +190,7 @@ namespace KustoCopyServices
             string latestCursor,
             IImmutableList<string> tableNames)
         {
-            var commandHeader = @"
+            var queryHeader = @"
 declare query_parameters(Cursor:string);
 let fetchRange = (tableName:string) {
     table(tableName)
@@ -199,10 +200,12 @@ let fetchRange = (tableName:string) {
 };
 ";
             var tableCommandlets = tableNames.Select(t => $"fetchRange('{t}')");
-            var commandText = commandHeader + string.Join(" | union ", tableCommandlets);
-            var protoBookmarks = await kustoClient.SetParameter("Cursor", latestCursor).ExecuteQueryAsync(
+            var queryText = queryHeader + string.Join(" | union ", tableCommandlets);
+            var protoBookmarks = await kustoClient
+                .SetParameter("Cursor", latestCursor)
+                .ExecuteQueryAsync(
                 dbName,
-                commandText,
+                queryText,
                 r => new
                 {
                     TableName = (string)r["TableName"],

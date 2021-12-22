@@ -60,9 +60,9 @@ namespace KustoCopyBookmarks.Export
             Func<IEnumerable<string>, Task<IEnumerable<TableSchemaData>>> fetchSchemasAsync)
         {
             var map = isBackfill ? _backfillTableIterationMap : _forwardTableIterationMap;
-            var endCursor = isBackfill
-                ? _backfillDbIteration!.Value.EndCursor
-                : _backfillDbIteration!.Value.EndCursor;
+            var dbIteration = isBackfill
+                ? _backfillDbIteration!.Value
+                : _backfillDbIteration!.Value;
             var emptyTableNames = map
                 .Values
                 .Select(t => t.Value)
@@ -76,7 +76,8 @@ namespace KustoCopyBookmarks.Export
                 .Zip(emptyTableNames, (s, n) => new { Schema = s, TableName = n })
                 .Select(p => new EmptyTableExportEventData
                 {
-                    EndCursor = endCursor,
+                    EndCursor = dbIteration.EndCursor,
+                    EventTime = dbIteration.IterationTime,
                     TableName = p.TableName,
                     Schema = p.Schema
                 });

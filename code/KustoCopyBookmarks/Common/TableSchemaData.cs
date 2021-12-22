@@ -9,8 +9,6 @@ namespace KustoCopyBookmarks.Common
 {
     public class TableSchemaData
     {
-        public DateTime SnapshotTime { get; set; } = DateTime.MinValue;
-
         public IImmutableList<ColumnSchemaData> Columns { get; set; } = ImmutableArray<ColumnSchemaData>.Empty;
 
         public string Folder { get; set; } = string.Empty;

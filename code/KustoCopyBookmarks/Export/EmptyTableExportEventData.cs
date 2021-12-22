@@ -14,8 +14,10 @@ namespace KustoCopyBookmarks.Export
         /// <summary>Identify the iteration.</summary>
         public string EndCursor { get; set; } = string.Empty;
 
+        public DateTime EventTime { get; set; } = DateTime.MinValue;
+
         public string TableName { get; set; } = "<EMPTY?>";
 
         public TableSchemaData? Schema { get; set; }
-}
+    }
 }
