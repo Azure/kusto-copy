@@ -192,15 +192,39 @@ namespace KustoCopyServices
         {
             var queryHeader = @"
 declare query_parameters(Cursor:string);
-let fetchRange = (tableName:string) {
+let fetchDays = (tableName:string) {
     table(tableName)
     | where cursor_before_or_at(Cursor) or isnull(ingestion_time())
     | summarize by IngestionDayTime=bin(ingestion_time(), 1d)
     | extend TableName = tableName
 };
+let fetchRange = (tableName:string) {
+    table(tableName)
+    | where cursor_before_or_at(Cursor)
+    | summarize Min=min(ingestion_time()), Max=max(ingestion_time())
+    | extend TableName = tableName
+};
 ";
-            var tableCommandlets = tableNames.Select(t => $"fetchRange('{t}')");
-            var queryText = queryHeader + string.Join(" | union ", tableCommandlets);
+            var tableDeclarations = Enumerable.Range(0, tableNames.Count)
+                .Select(i => $"declare query_parameters(Table{i + 1}:string);");
+            var daysCommandlets = Enumerable.Range(0, tableNames.Count)
+                .Select(i => $"fetchDays(Table{i + 1})");
+            var rangeCommandlets = Enumerable.Range(0, tableNames.Count)
+                .Select(i => $"fetchRange(Table{i + 1})");
+            var queryText = string.Join("\n", tableDeclarations)
+                + queryHeader
+                + string.Join("\n | union ", daysCommandlets)
+                + ";\n"
+                + string.Join("\n | union ", rangeCommandlets);
+
+            foreach (var p in Enumerable.Range(0, tableNames.Count).Zip(tableNames))
+            {
+                var (i, t) = p;
+
+                kustoClient = kustoClient
+                    .SetParameter($"Table{i + 1}", t);
+            }
+
             var protoBookmarks = await kustoClient
                 .SetParameter("Cursor", latestCursor)
                 .ExecuteQueryAsync(
@@ -210,8 +234,15 @@ let fetchRange = (tableName:string) {
                 {
                     TableName = (string)r["TableName"],
                     IngestionDayTime = r["IngestionDayTime"].To<DateTime>()
+                },
+                r => new
+                {
+                    TableName = (string)r["TableName"],
+                    Min = r["Min"].To<DateTime>(),
+                    Max = r["Max"].To<DateTime>()
                 });
             var noIngestionTimeTables = protoBookmarks
+                .Item1
                 .Where(p => p.IngestionDayTime == null)
                 .Select(p => p.TableName)
                 .Distinct()
@@ -219,7 +250,8 @@ let fetchRange = (tableName:string) {
 
             WarningIngestionPolicy(dbName, noIngestionTimeTables);
 
-            var validProtoBookmarks = protoBookmarks
+            var validDays = protoBookmarks
+                .Item1
                 .Where(p => !noIngestionTimeTables.Contains(p.TableName))
                 .Select(p => new
                 {
@@ -227,23 +259,33 @@ let fetchRange = (tableName:string) {
                     //  MinValue should never occur as we validate before
                     IngestionDayTime = p.IngestionDayTime ?? DateTime.MinValue
                 });
-            var tableGroups = validProtoBookmarks.GroupBy(p => p.TableName);
-            var tableMap = tableGroups.ToImmutableDictionary(g => g.Key);
+            var validRanges = protoBookmarks
+                .Item2
+                .Where(p => !noIngestionTimeTables.Contains(p.TableName));
+            var dayGroups = validDays.GroupBy(p => p.TableName);
+            var dayMap = dayGroups.ToImmutableDictionary(g => g.Key);
+            var rangeMap = protoBookmarks
+                .Item2
+                .ToDictionary(i => i.TableName);
             var emptyTableBookmarks = tableNames
-                .Where(t => !tableMap.ContainsKey(t))
+                .Where(t => !dayMap.ContainsKey(t))
                 .Where(t => !noIngestionTimeTables.Contains(t))
                 .Select(t => new TableIterationData
                 {
                     EndCursor = latestCursor,
                     TableName = t,
-                    RemainingDayIngestionTimes = ImmutableArray<DateTime>.Empty
+                    RemainingDayIngestionTimes = ImmutableArray<DateTime>.Empty,
+                    MinRemainingIngestionTime = null,
+                    MaxRemainingIngestionTime = null
                 });
-            var nonEmptyTableBookmarks = tableGroups
+            var nonEmptyTableBookmarks = dayGroups
                 .Select(g => new TableIterationData
                 {
                     EndCursor = latestCursor,
                     TableName = g.Key,
-                    RemainingDayIngestionTimes = g.Select(i => i.IngestionDayTime).ToImmutableArray()
+                    RemainingDayIngestionTimes = g.Select(i => i.IngestionDayTime).ToImmutableArray(),
+                    MinRemainingIngestionTime = rangeMap[g.Key].Min,
+                    MaxRemainingIngestionTime = rangeMap[g.Key].Max
                 });
             var bookmarks = emptyTableBookmarks.Concat(nonEmptyTableBookmarks).ToImmutableArray();
 

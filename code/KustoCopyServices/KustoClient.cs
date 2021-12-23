@@ -99,6 +99,40 @@ namespace KustoCopyServices
             }
         }
 
+        public async Task<(ImmutableArray<T>, ImmutableArray<U>)> ExecuteQueryAsync<T, U>(
+            string database,
+            string query,
+            Func<IDataRecord, T> projection1,
+            Func<IDataRecord, U> projection2)
+        {
+            try
+            {
+                using (var reader = await _queryProvider.ExecuteQueryAsync(
+                    database,
+                    query,
+                    _properties))
+                {
+                    var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
+
+                    if (!reader.NextResult())
+                    {
+                        throw new CopyException("Query result doesn't contain a second result");
+                    }
+
+                    var enumerableProjection2 = Project(reader, projection2).ToImmutableArray();
+
+                    return (enumerableProjection1.ToImmutableArray(), enumerableProjection2.ToImmutableArray());
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new CopyException(
+                    $"Issue while executing a query in cluster '{_clusterQueryUri}', "
+                    + $"database '{database}':  '{query}'",
+                    ex);
+            }
+        }
+
         public KustoClient SetParameter(string name, string value)
         {
             var newProperties = _properties.Clone();
