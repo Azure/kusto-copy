@@ -11,8 +11,6 @@ namespace KustoCopyServices
 {
     internal class DbExportPipeline
     {
-        private const int DEFAULT_FETCH_TABLES_SIZE = 10;
-
         private readonly DbExportBookmark _exportBookmark;
         private readonly KustoClient _kustoClient;
         private readonly ITempFolderService _tempFolderService;
@@ -143,166 +141,80 @@ namespace KustoCopyServices
                     Cursor = (string)r["Cursor"]
                 });
             var tableNames = await tableNamesTask;
-            var iteration = new DbIterationData
+            var dbIteration = new DbIterationData
             {
                 IterationTime = iterationInfo.First().CurrentTime,
                 StartCursor = null,
                 EndCursor = iterationInfo.First().Cursor
             };
-            var tableBookmarks = await FetchTableBookmarksAsync(
-                dbName,
-                kustoClient,
-                iteration.EndCursor,
-                tableNames,
-                DEFAULT_FETCH_TABLES_SIZE);
-
-            return (iteration, tableBookmarks);
-        }
-
-        private static async Task<ImmutableArray<TableIterationData>> FetchTableBookmarksAsync(
-            string dbName,
-            KustoClient kustoClient,
-            string latestCursor,
-            IImmutableList<string> tableNames,
-            int chunkSize)
-        {
-            var tableChunks = tableNames.Chunk(chunkSize);
-            var bookmarkTasks = tableChunks
-                .Select(c => FetchTableChunkBookmarksAsync(
-                    dbName,
+            var tableIterationTasks = tableNames
+                .Select(t => FetchTableIterationAsync(
                     kustoClient,
-                    latestCursor,
-                    c.ToImmutableArray()))
+                    dbName,
+                    t,
+                    dbIteration.EndCursor))
                 .ToImmutableArray();
 
-            await Task.WhenAll(bookmarkTasks);
+            await Task.WhenAll(tableIterationTasks);
 
-            var bookmarks = bookmarkTasks
-                .SelectMany(t => t.Result)
+            var tableIterations = tableIterationTasks
+                .Select(t => t.Result)
+                .Where(t => t != null)
+                .Cast<TableIterationData>()
                 .ToImmutableArray();
 
-            return bookmarks;
+            return (dbIteration, tableIterations);
         }
 
-        private static async Task<ImmutableArray<TableIterationData>> FetchTableChunkBookmarksAsync(
-            string dbName,
+        private static async Task<TableIterationData?> FetchTableIterationAsync(
             KustoClient kustoClient,
-            string latestCursor,
-            IImmutableList<string> tableNames)
+            string dbName,
+            string tableName,
+            string endCursor)
         {
-            var queryHeader = @"
+            var queryText = @"
+declare query_parameters(TargetTable:string);
 declare query_parameters(Cursor:string);
-let fetchDays = (tableName:string) {
-    table(tableName)
-    | where cursor_before_or_at(Cursor) or isnull(ingestion_time())
-    | summarize by IngestionDayTime=bin(ingestion_time(), 1d)
-    | extend TableName = tableName
-};
-let fetchRange = (tableName:string) {
-    table(tableName)
-    | where cursor_before_or_at(Cursor)
-    | summarize Min=min(ingestion_time()), Max=max(ingestion_time())
-    | extend TableName = tableName
-};
+table(TargetTable)
+| where cursor_before_or_at(Cursor) or isnull(ingestion_time())
+| summarize by IngestionDayTime=bin(ingestion_time(), 1d);
+table(TargetTable)
+| where cursor_before_or_at(Cursor)
+| summarize Min=min(ingestion_time()), Max=max(ingestion_time());
 ";
-            var tableDeclarations = Enumerable.Range(0, tableNames.Count)
-                .Select(i => $"declare query_parameters(Table{i + 1}:string);");
-            var daysCommandlets = Enumerable.Range(0, tableNames.Count)
-                .Select(i => $"fetchDays(Table{i + 1})");
-            var rangeCommandlets = Enumerable.Range(0, tableNames.Count)
-                .Select(i => $"fetchRange(Table{i + 1})");
-            var queryText = string.Join("\n", tableDeclarations)
-                + queryHeader
-                + string.Join("\n | union ", daysCommandlets)
-                + ";\n"
-                + string.Join("\n | union ", rangeCommandlets);
-
-            foreach (var p in Enumerable.Range(0, tableNames.Count).Zip(tableNames))
-            {
-                var (i, t) = p;
-
-                kustoClient = kustoClient
-                    .SetParameter($"Table{i + 1}", t);
-            }
-
-            var protoBookmarks = await kustoClient
-                .SetParameter("Cursor", latestCursor)
+            var queryResult = await kustoClient
+                .SetParameter("Cursor", endCursor)
+                .SetParameter("TargetTable", tableName)
                 .ExecuteQueryAsync(
                 dbName,
                 queryText,
+                r => r["IngestionDayTime"].To<DateTime>(),
                 r => new
                 {
-                    TableName = (string)r["TableName"],
-                    IngestionDayTime = r["IngestionDayTime"].To<DateTime>()
-                },
-                r => new
-                {
-                    TableName = (string)r["TableName"],
                     Min = r["Min"].To<DateTime>(),
                     Max = r["Max"].To<DateTime>()
                 });
-            var noIngestionTimeTables = protoBookmarks
-                .Item1
-                .Where(p => p.IngestionDayTime == null)
-                .Select(p => p.TableName)
-                .Distinct()
-                .ToHashSet();
+            var days = queryResult.Item1;
+            var range = queryResult.Item2.First();
 
-            WarningIngestionPolicy(dbName, noIngestionTimeTables);
-
-            var validDays = protoBookmarks
-                .Item1
-                .Where(p => !noIngestionTimeTables.Contains(p.TableName))
-                .Select(p => new
-                {
-                    TableName = p.TableName,
-                    //  MinValue should never occur as we validate before
-                    IngestionDayTime = p.IngestionDayTime ?? DateTime.MinValue
-                });
-            var validRanges = protoBookmarks
-                .Item2
-                .Where(p => !noIngestionTimeTables.Contains(p.TableName));
-            var dayGroups = validDays.GroupBy(p => p.TableName);
-            var dayMap = dayGroups.ToImmutableDictionary(g => g.Key);
-            var rangeMap = protoBookmarks
-                .Item2
-                .ToDictionary(i => i.TableName);
-            var emptyTableBookmarks = tableNames
-                .Where(t => !dayMap.ContainsKey(t))
-                .Where(t => !noIngestionTimeTables.Contains(t))
-                .Select(t => new TableIterationData
-                {
-                    EndCursor = latestCursor,
-                    TableName = t,
-                    RemainingDayIngestionTimes = ImmutableArray<DateTime>.Empty,
-                    MinRemainingIngestionTime = null,
-                    MaxRemainingIngestionTime = null
-                });
-            var nonEmptyTableBookmarks = dayGroups
-                .Select(g => new TableIterationData
-                {
-                    EndCursor = latestCursor,
-                    TableName = g.Key,
-                    RemainingDayIngestionTimes = g.Select(i => i.IngestionDayTime).ToImmutableArray(),
-                    MinRemainingIngestionTime = rangeMap[g.Key].Min,
-                    MaxRemainingIngestionTime = rangeMap[g.Key].Max
-                });
-            var bookmarks = emptyTableBookmarks.Concat(nonEmptyTableBookmarks).ToImmutableArray();
-
-            return bookmarks;
-        }
-
-        private static void WarningIngestionPolicy(
-            string dbName,
-            IEnumerable<string> noIngestionTimeTables)
-        {
-            if (noIngestionTimeTables.Any())
+            if (days.Where(d => d == null).Any())
             {
-                var tableNameList = string.Join(", ", noIngestionTimeTables.Select(t => $"'{t}'"));
-
                 Trace.TraceWarning(
-                    $"Tables {{{tableNameList}}} have entries with no ingestion time and "
+                    $"Table {tableName} has entries with no ingestion time and "
                     + "therefore can't be replicated");
+
+                return null;
+            }
+            else
+            {
+                return new TableIterationData
+                {
+                    EndCursor = endCursor,
+                    TableName = tableName,
+                    RemainingDayIngestionTimes = days.Cast<DateTime>().ToImmutableArray(),
+                    MinRemainingIngestionTime = range.Min,
+                    MaxRemainingIngestionTime = range.Max
+                };
             }
         }
     }
