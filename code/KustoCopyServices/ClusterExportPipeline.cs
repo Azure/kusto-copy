@@ -68,23 +68,22 @@ namespace KustoCopyServices
             var currentDbNames = _dbExportPipelineMap.Keys.ToImmutableArray();
             var obsoleteDbNames = currentDbNames.Except(nextDbNames);
             var newDbNames = nextDbNames.Except(currentDbNames);
-            var newDbExportPipelineTasks = newDbNames
-                .Select(db => DbExportPipeline.CreateAsync(
+
+            foreach(var db in newDbNames)
+            {
+                var dbPipeline = await DbExportPipeline.CreateAsync(
                     db,
                     _sourceFolderClient.GetSubDirectoryClient(db),
                     _credential,
                     _kustoClient,
-                    _tempFolderService))
-                .ToImmutableArray();
+                    _tempFolderService);
 
-            await Task.WhenAll(newDbExportPipelineTasks);
+                _dbExportPipelineMap.Add(dbPipeline.DbName, dbPipeline);
+            }
+
             foreach (var db in obsoleteDbNames)
             {
                 _dbExportPipelineMap.Remove(db);
-            }
-            foreach (var dbPipeline in newDbExportPipelineTasks.Select(t => t.Result))
-            {
-                _dbExportPipelineMap.Add(dbPipeline.DbName, dbPipeline);
             }
         }
     }

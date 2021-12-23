@@ -192,6 +192,8 @@ table(TargetTable)
                 });
             var range = ranges.First();
 
+            Trace.WriteLine($"Setup replication for table '{dbName}'.'{tableName}'");
+
             return new TableIterationData
             {
                 EndCursor = endCursor,

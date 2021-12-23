@@ -137,8 +137,6 @@ namespace KustoCopyBookmarks.Export
             BookmarkGateway bookmarkGateway,
             Func<Task<(DbIterationData, IImmutableList<TableIterationData>)>> fetchDefaultContentAsync)
         {
-            Trace.WriteLine($"Preparing {fileClient.Uri.PathAndQuery}...");
-
             var (iterationDefinition, tables) = await fetchDefaultContentAsync();
             var iterationDefinitionBuffer = SerializationHelper.ToMemory(
                 new ExportAggregate { DbIteration = iterationDefinition });
@@ -155,8 +153,6 @@ namespace KustoCopyBookmarks.Export
             var tableValues = result.AddedBlockIds.Skip(1).Zip(
                 tables,
                 (r, t) => new BookmarkBlockValue<TableIterationData>(r, t));
-
-            Trace.WriteLine($"{fileClient.Uri.PathAndQuery} is ready");
 
             return new DbExportBookmark(
                 bookmarkGateway,
