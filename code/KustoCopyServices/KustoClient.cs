@@ -14,36 +14,52 @@ namespace KustoCopyServices
 {
     public class KustoClient
     {
+        #region Inner Types
+        private class ClientConfig
+        {
+            public ClientConfig(string clusterQueryUrl)
+            {
+                var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
+                var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
+                    .WithAadUserPromptAuthentication();
+                var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+                var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
+
+                ClusterQueryUri = clusterQueryUri;
+                QueryQueue = new ExecutionQueue(5);
+                CommandQueue = new ExecutionQueue(5);
+                CommandProvider = commandProvider;
+                QueryProvider = queryProvider;
+            }
+
+            public Uri ClusterQueryUri { get; }
+
+            public ExecutionQueue QueryQueue { get; }
+
+            public ExecutionQueue CommandQueue { get; }
+
+            public ICslAdminProvider CommandProvider { get; }
+
+            public ICslQueryProvider QueryProvider { get; }
+        }
+        #endregion
+
         private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES = new ClientRequestProperties();
 
-        private readonly Uri _clusterQueryUri;
-        private readonly ICslAdminProvider _commandProvider;
-        private readonly ICslQueryProvider _queryProvider;
+        private readonly ClientConfig _config;
         private readonly ClientRequestProperties _properties;
 
         public KustoClient(string clusterQueryUrl)
         {
-            var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
-            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                .WithAadUserPromptAuthentication();
-            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
-            var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
-
-            _clusterQueryUri = clusterQueryUri;
-            _commandProvider = commandProvider;
-            _queryProvider = queryProvider;
+            _config = new ClientConfig(clusterQueryUrl);
             _properties = EMPTY_REQUEST_PROPERTIES;
         }
 
         private KustoClient(
-            Uri clusterQueryUri,
-            ICslAdminProvider commandProvider,
-            ICslQueryProvider queryProvider,
+            ClientConfig config,
             ClientRequestProperties properties)
         {
-            _clusterQueryUri = clusterQueryUri;
-            _commandProvider = commandProvider;
-            _queryProvider = queryProvider;
+            _config = config;
             _properties = properties;
         }
 
@@ -52,24 +68,28 @@ namespace KustoCopyServices
             string command,
             Func<IDataRecord, T> projection)
         {
-            try
+            using (await _config.QueryQueue.RequestRunAsync())
             {
-                using (var reader = await _commandProvider.ExecuteControlCommandAsync(
-                    database,
-                    command,
-                    _properties))
+                try
                 {
-                    var enumerableProjection = Project(reader, projection);
+                    using (var reader = await _config.CommandProvider.ExecuteControlCommandAsync(
+                        database,
+                        command,
+                        _properties))
+                    {
+                        var enumerableProjection = Project(reader, projection);
 
-                    return enumerableProjection.ToImmutableArray();
+                        return enumerableProjection.ToImmutableArray();
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                throw new CopyException(
-                    $"Issue while executing a command in cluster '{_clusterQueryUri}', "
-                    + $"database '{database}':  '{command}'",
-                    ex);
+                catch (Exception ex)
+                {
+                    throw new CopyException(
+                        "Issue while executing a command in cluster "
+                        + $"'{_config.ClusterQueryUri}', database '{database}' "
+                        + $"for command '{command}'",
+                        ex);
+                }
             }
         }
 
@@ -78,24 +98,27 @@ namespace KustoCopyServices
             string query,
             Func<IDataRecord, T> projection)
         {
-            try
+            using (await _config.QueryQueue.RequestRunAsync())
             {
-                using (var reader = await _queryProvider.ExecuteQueryAsync(
-                    database,
-                    query,
-                    _properties))
+                try
                 {
-                    var enumerableProjection = Project(reader, projection);
+                    using (var reader = await _config.QueryProvider.ExecuteQueryAsync(
+                        database,
+                        query,
+                        _properties))
+                    {
+                        var enumerableProjection = Project(reader, projection);
 
-                    return enumerableProjection.ToImmutableArray();
+                        return enumerableProjection.ToImmutableArray();
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                throw new CopyException(
-                    $"Issue while executing a query in cluster '{_clusterQueryUri}', "
-                    + $"database '{database}':  '{query}'",
-                    ex);
+                catch (Exception ex)
+                {
+                    throw new CopyException(
+                        $"Issue while executing a query in cluster '{_config.ClusterQueryUri}', "
+                        + $"database '{database}':  '{query}'",
+                        ex);
+                }
             }
         }
 
@@ -105,31 +128,36 @@ namespace KustoCopyServices
             Func<IDataRecord, T> projection1,
             Func<IDataRecord, U> projection2)
         {
-            try
+            using (await _config.QueryQueue.RequestRunAsync())
             {
-                using (var reader = await _queryProvider.ExecuteQueryAsync(
-                    database,
-                    query,
-                    _properties))
+                try
                 {
-                    var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
-
-                    if (!reader.NextResult())
+                    using (var reader = await _config.QueryProvider.ExecuteQueryAsync(
+                        database,
+                        query,
+                        _properties))
                     {
-                        throw new CopyException("Query result doesn't contain a second result");
+                        var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
+
+                        if (!reader.NextResult())
+                        {
+                            throw new CopyException("Query result doesn't contain a second result");
+                        }
+
+                        var enumerableProjection2 = Project(reader, projection2).ToImmutableArray();
+
+                        return (
+                            enumerableProjection1.ToImmutableArray(),
+                            enumerableProjection2.ToImmutableArray());
                     }
-
-                    var enumerableProjection2 = Project(reader, projection2).ToImmutableArray();
-
-                    return (enumerableProjection1.ToImmutableArray(), enumerableProjection2.ToImmutableArray());
                 }
-            }
-            catch (Exception ex)
-            {
-                throw new CopyException(
-                    $"Issue while executing a query in cluster '{_clusterQueryUri}', "
-                    + $"database '{database}':  '{query}'",
-                    ex);
+                catch (Exception ex)
+                {
+                    throw new CopyException(
+                        $"Issue while executing a query in cluster '{_config.ClusterQueryUri}', "
+                        + $"database '{database}':  '{query}'",
+                        ex);
+                }
             }
         }
 
@@ -153,11 +181,7 @@ namespace KustoCopyServices
 
         private KustoClient WithNewProperties(ClientRequestProperties newProperties)
         {
-            return new KustoClient(
-                _clusterQueryUri,
-                _commandProvider,
-                _queryProvider,
-                newProperties);
+            return new KustoClient(_config, newProperties);
         }
 
         private static IEnumerable<T> Project<T>(

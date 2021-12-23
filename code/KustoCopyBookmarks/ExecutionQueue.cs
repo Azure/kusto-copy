@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks
 {
-    internal class ExecutionQueue
+    public class ExecutionQueue
     {
         #region Inner Types
         private class Request
@@ -60,7 +60,7 @@ namespace KustoCopyBookmarks
 
                     if (_requestQueue.TryDequeue(out request))
                     {
-                        request.Source.SetResult(new ActionBasedDisposable(() => PumpRequestOut()));
+                        request.Source.SetResult(new ActionBasedDisposable(() => DisposeRequest()));
                         //  Keep pumping
                     }
                     else
@@ -80,6 +80,13 @@ namespace KustoCopyBookmarks
                     }
                 }
             }
+        }
+
+        private void DisposeRequest()
+        {
+            //  Returning the slot as the request is over
+            Interlocked.Increment(ref _availableRunningSlots);
+            PumpRequestOut();
         }
     }
 }
