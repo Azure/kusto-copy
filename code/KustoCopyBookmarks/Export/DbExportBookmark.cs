@@ -66,7 +66,7 @@ namespace KustoCopyBookmarks.Export
             var emptyTableNames = map
                 .Values
                 .Select(t => t.Value)
-                .Where(t => !t.RemainingDayIngestionTimes.Any())
+                .Where(t => t.MinRemainingIngestionTime == null)
                 .Select(t => t.TableName)
                 .ToImmutableArray();
             var emptyTableIds = emptyTableNames

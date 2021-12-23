@@ -1,11 +1,15 @@
 ﻿using Kusto.Data;
 using Kusto.Data.Common;
+using Kusto.Data.Exceptions;
 using Kusto.Data.Net.Client;
 using KustoCopyBookmarks;
+using Polly;
+using Polly.Retry;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -26,8 +30,8 @@ namespace KustoCopyServices
                 var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
                 ClusterQueryUri = clusterQueryUri;
-                QueryQueue = new ExecutionQueue(5);
-                CommandQueue = new ExecutionQueue(5);
+                QueryQueue = new ExecutionQueue(10);
+                CommandQueue = new ExecutionQueue(2);
                 CommandProvider = commandProvider;
                 QueryProvider = queryProvider;
             }
@@ -44,6 +48,10 @@ namespace KustoCopyServices
         }
         #endregion
 
+        private static readonly AsyncRetryPolicy _retryPolicyThrottled =
+            Policy.Handle<KustoRequestThrottledException>().WaitAndRetryAsync(
+                5,
+                attempt => TimeSpan.FromSeconds(attempt));
         private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES = new ClientRequestProperties();
 
         private readonly ClientConfig _config;
@@ -72,10 +80,7 @@ namespace KustoCopyServices
             {
                 try
                 {
-                    using (var reader = await _config.CommandProvider.ExecuteControlCommandAsync(
-                        database,
-                        command,
-                        _properties))
+                    using (var reader = await ExecuteCommandWithPoliciesAsync(database, command))
                     {
                         var enumerableProjection = Project(reader, projection);
 
@@ -102,10 +107,7 @@ namespace KustoCopyServices
             {
                 try
                 {
-                    using (var reader = await _config.QueryProvider.ExecuteQueryAsync(
-                        database,
-                        query,
-                        _properties))
+                    using (var reader = await ExecuteQueryWithPoliciesAsync(database, query))
                     {
                         var enumerableProjection = Project(reader, projection);
 
@@ -132,10 +134,7 @@ namespace KustoCopyServices
             {
                 try
                 {
-                    using (var reader = await _config.QueryProvider.ExecuteQueryAsync(
-                        database,
-                        query,
-                        _properties))
+                    using (var reader = await ExecuteQueryWithPoliciesAsync(database, query))
                     {
                         var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
 
@@ -182,6 +181,60 @@ namespace KustoCopyServices
         private KustoClient WithNewProperties(ClientRequestProperties newProperties)
         {
             return new KustoClient(_config, newProperties);
+        }
+
+        private async Task<IDataReader> ExecuteCommandWithPoliciesAsync(
+            string database,
+            string command)
+        {
+            return await _retryPolicyThrottled.ExecuteAsync(async () =>
+            {
+                try
+                {
+                    return await _config.CommandProvider.ExecuteControlCommandAsync(
+                        database,
+                        command,
+                        _properties);
+                }
+                catch (KustoRequestThrottledException)
+                {
+                    var parameters = _properties
+                    .Parameters
+                    .Select(p => $"'{p.Key}' : '{p.Value}'");
+                    var paramList = string.Join(", ", parameters);
+
+                    Trace.TraceWarning($"Kusto command throttled on db '{database}' "
+                        + $"{{{paramList}}}:  '{command}'");
+
+                    throw;
+                }
+            });
+        }
+
+        private async Task<IDataReader> ExecuteQueryWithPoliciesAsync(string database, string query)
+        {
+            return await _retryPolicyThrottled.ExecuteAsync(async () =>
+            {
+                try
+                {
+                    return await _config.QueryProvider.ExecuteQueryAsync(
+                        database,
+                        query,
+                        _properties);
+                }
+                catch (KustoRequestThrottledException)
+                {
+                    var parameters = _properties
+                    .Parameters
+                    .Select(p => $"'{p.Key}' : '{p.Value}'");
+                    var paramList = string.Join(", ", parameters);
+
+                    Trace.TraceWarning($"Kusto query throttled on db '{database}' "
+                        + $"{{{paramList}}}:  '{query}'");
+
+                    throw;
+                }
+            });
         }
 
         private static IEnumerable<T> Project<T>(

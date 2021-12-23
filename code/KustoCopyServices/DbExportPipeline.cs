@@ -176,46 +176,29 @@ namespace KustoCopyServices
 declare query_parameters(TargetTable:string);
 declare query_parameters(Cursor:string);
 table(TargetTable)
-| where cursor_before_or_at(Cursor) or isnull(ingestion_time())
-| summarize by IngestionDayTime=bin(ingestion_time(), 1d);
-table(TargetTable)
 | where cursor_before_or_at(Cursor)
 | summarize Min=min(ingestion_time()), Max=max(ingestion_time());
 ";
-            var queryResult = await kustoClient
+            var ranges = await kustoClient
                 .SetParameter("Cursor", endCursor)
                 .SetParameter("TargetTable", tableName)
                 .ExecuteQueryAsync(
                 dbName,
                 queryText,
-                r => r["IngestionDayTime"].To<DateTime>(),
                 r => new
                 {
                     Min = r["Min"].To<DateTime>(),
                     Max = r["Max"].To<DateTime>()
                 });
-            var days = queryResult.Item1;
-            var range = queryResult.Item2.First();
+            var range = ranges.First();
 
-            if (days.Where(d => d == null).Any())
+            return new TableIterationData
             {
-                Trace.TraceWarning(
-                    $"Table {tableName} has entries with no ingestion time and "
-                    + "therefore can't be replicated");
-
-                return null;
-            }
-            else
-            {
-                return new TableIterationData
-                {
-                    EndCursor = endCursor,
-                    TableName = tableName,
-                    RemainingDayIngestionTimes = days.Cast<DateTime>().ToImmutableArray(),
-                    MinRemainingIngestionTime = range.Min,
-                    MaxRemainingIngestionTime = range.Max
-                };
-            }
+                EndCursor = endCursor,
+                TableName = tableName,
+                MinRemainingIngestionTime = range.Min,
+                MaxRemainingIngestionTime = range.Max
+            };
         }
     }
 }
