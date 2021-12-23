@@ -26,31 +26,23 @@ namespace KustoCopyBookmarks
 
         private class CommitItem
         {
-            private readonly TaskCompletionSource _taskCompletionSource = new TaskCompletionSource();
-
             public CommitItem(
                 IEnumerable<int> blockIdsToAdd,
                 IEnumerable<int> blockIdsToRemove)
             {
                 BlockIdsToAdd = blockIdsToAdd.ToImmutableArray();
                 BlockIdsToRemove = blockIdsToRemove.ToImmutableArray();
-                Task = _taskCompletionSource.Task;
             }
 
             public IImmutableList<int> BlockIdsToAdd { get; }
 
             public IImmutableList<int> BlockIdsToRemove { get; }
 
-            public Task Task { get; }
-
-            public void CompleteItem()
-            {
-                _taskCompletionSource.SetResult();
-            }
+            public bool HasCommitted { get; set; } = false;
         }
         #endregion
 
-        private readonly object _alterBlockIdsLock = new object();
+        private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
         private readonly DataLakeFileClient _fileClient;
         private readonly BlockBlobClient _blobClient;
         private readonly bool _shouldExist;
@@ -58,9 +50,7 @@ namespace KustoCopyBookmarks
             new ConcurrentStack<CommitItem>();
         private bool _hasExistBeenTested = false;
         private IImmutableList<int>? _blockIds;
-        private volatile int _lightweightLock = 0;
         private volatile int _nextBlockId = 0;
-        private volatile Task _commitingTask = Task.CompletedTask;
 
         public BookmarkGateway(DataLakeFileClient fileClient, TokenCredential credential, bool shouldExist)
         {
@@ -190,49 +180,26 @@ namespace KustoCopyBookmarks
             //  Stack the item
             _commitItems.Push(newItem);
 
-            //  Wait for the 'last' commiting task to be over
-            await _commitingTask;
-
-            //  Loop until somebody commit the item
-            while (true)
+            using (await _executionQueue.RequestRunAsync())
             {
-                if (newItem.Task.IsCompleted)
-                {   //  Our item has been commited:  we're out
-                    return;
-                }
-                //  Compete to be the next commiting task
-                if (TryAcquireLightweightLock())
-                {   //  This thread won and since it just queued the current item, it will process it
-                    try
-                    {   //  First let's try to grab as many items as we can
-                        var items = new List<CommitItem>();
+                if (!newItem.HasCommitted)
+                {   //  First let's try to grab as many items as we can
+                    var items = new List<CommitItem>();
 
-                        while (_commitItems.Any())
-                        {
-                            CommitItem? item;
-
-                            if (_commitItems.TryPop(out item))
-                            {
-                                items.Add(item);
-                            }
-                        }
-                        //  Did we actually pick any item or they all got stolen by another thread?
-                        if (items.Any())
-                        {
-                            _commitingTask = CommitItemsAsync(items);
-                            await _commitingTask;
-                        }
-                    }
-                    finally
+                    while (_commitItems.Any())
                     {
-                        ReleaseLightweightLock();
+                        CommitItem? item;
+
+                        if (_commitItems.TryPop(out item))
+                        {
+                            items.Add(item);
+                        }
                     }
-                }
-                else
-                {   //  Some other thread won, let's wait for it to be over and then restart the loop
-                    await Task.WhenAny(_commitingTask, newItem.Task);
-                    //  It is possible at this point that the new _commitingTask hasn't been
-                    //  assigned, so we might loop a few times before it does
+                    //  Did we actually pick any item or they all got stolen by another thread?
+                    if (items.Any())
+                    {
+                        await CommitItemsAsync(items);
+                    }
                 }
             }
         }
@@ -276,18 +243,8 @@ namespace KustoCopyBookmarks
             //  Release all threads waiting for the items
             foreach (var item in items)
             {
-                item.CompleteItem();
+                item.HasCommitted = true;
             }
-        }
-
-        private bool TryAcquireLightweightLock()
-        {
-            return Interlocked.CompareExchange(ref _lightweightLock, 1, 0) == 0;
-        }
-
-        private void ReleaseLightweightLock()
-        {
-            Interlocked.Decrement(ref _lightweightLock);
         }
 
         private static MemoryStream GetBookmarkHeaderStream()
