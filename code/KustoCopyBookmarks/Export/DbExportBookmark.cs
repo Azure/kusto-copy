@@ -27,7 +27,7 @@ namespace KustoCopyBookmarks.Export
 
         private readonly BookmarkGateway _bookmarkGateway;
         private BookmarkBlockValue<DbIterationData>? _backfillDbIteration;
-        private BookmarkBlockValue<DbIterationData>? _forwardIteration;
+        private BookmarkBlockValue<DbIterationData>? _forwardDbIteration;
         private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
             _backfillTableIterationMap;
         private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
@@ -150,6 +150,13 @@ namespace KustoCopyBookmarks.Export
                 : _forwardTableIterationMap[tableName].Value;
         }
 
+        public (string? startCursor, string endCursor) GetCursorInterval(bool isBackfill)
+        {
+            return isBackfill
+                ? (_backfillDbIteration!.Value.StartCursor, _backfillDbIteration!.Value.EndCursor)
+                : (_forwardDbIteration!.Value.StartCursor, _forwardDbIteration!.Value.EndCursor);
+        }
+
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
             BookmarkBlockValue<DbIterationData>? backfillIteration,
@@ -159,13 +166,13 @@ namespace KustoCopyBookmarks.Export
         {
             _bookmarkGateway = bookmarkGateway;
             _backfillDbIteration = backfillIteration;
-            _forwardIteration = forwardIteration;
+            _forwardDbIteration = forwardIteration;
 
             var backfillTableIterations = tableIterations
                 .Where(t => t.Value.EndCursor == _backfillDbIteration?.Value.EndCursor)
                 .Select(t => KeyValuePair.Create(t.Value.TableName, t));
             var forwardTableIterations = tableIterations
-                .Where(t => t.Value.EndCursor == _forwardIteration?.Value.EndCursor)
+                .Where(t => t.Value.EndCursor == _forwardDbIteration?.Value.EndCursor)
                 .Select(t => KeyValuePair.Create(t.Value.TableName, t));
 
             _backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);

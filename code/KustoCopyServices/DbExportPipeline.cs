@@ -15,8 +15,22 @@ namespace KustoCopyServices
         private class ExportPlan
         {
             public DateTime IngestionTime { get; set; } = DateTime.MinValue;
-            
+
             public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
+        }
+
+        private class IngestionSchedule
+        {
+            public DateTime IngestionTime { get; set; } = DateTime.MinValue;
+
+            public Guid ExtentId { get; set; } = Guid.Empty;
+        }
+
+        private class ExtentConfiguration
+        {
+            public Guid ExtentId { get; set; } = Guid.Empty;
+
+            public DateTime MinCreatedOn { get; set; } = DateTime.MinValue;
         }
         #endregion
 
@@ -72,6 +86,7 @@ namespace KustoCopyServices
         {
             await ProcessEmptyIngestionTableAsync(isBackfill);
 
+            var cursorInterval = _dbExportBookmark.GetCursorInterval(isBackfill);
             var nextDayTables = _dbExportBookmark.GetNextDayTables(isBackfill);
 
             if (!nextDayTables.Any())
@@ -81,52 +96,127 @@ namespace KustoCopyServices
             else
             {
                 var copyTableTasks = nextDayTables
-                    .Select(t => CopyDayTableAsync(isBackfill, t))
+                    .Select(t => CopyDayTableAsync(isBackfill, cursorInterval, t))
                     .ToImmutableArray();
 
                 await Task.WhenAll(copyTableTasks);
             }
         }
 
-        private async Task CopyDayTableAsync(bool isBackfill, string tableName)
+        private async Task CopyDayTableAsync(
+            bool isBackfill,
+            (string? startCursor, string endCursor) cursorInterval,
+            string tableName)
         {
             var tableIteration = _dbExportBookmark.GetTableIterationData(tableName, isBackfill);
             var dayInterval = tableIteration.GetNextDayInterval(isBackfill);
-            var exportPlan = ConstructExportPlanAsync(tableName, dayInterval, isBackfill);
+            var exportPlan = await ConstructExportPlanAsync(
+                tableName,
+                cursorInterval,
+                dayInterval,
+                isBackfill);
 
             await ValueTask.CompletedTask;
         }
 
-        private async Task ConstructExportPlanAsync(
+        private async Task<IImmutableList<ExportPlan>> ConstructExportPlanAsync(
             string tableName,
+            (string? startCursor, string endCursor) cursorInterval,
             (DateTime Min, DateTime Max) dayInterval,
             bool isBackfill)
         {
-            var maxInequality = isBackfill ? "<" : "<=";
-            var ingestionTimes = await _kustoClient
+            var ingestionTimes = await FetchIngestionScheduleAsync(
+                tableName,
+                cursorInterval,
+                dayInterval,
+                isBackfill);
+            var extentIds = ingestionTimes.Select(i => i.ExtentId).Distinct().ToImmutableArray();
+            var extents = await FetchExtentsAsync(tableName, extentIds);
+
+            if (extentIds.Count() != extentIds.Count())
+            {   //  Possible if extents got dropped or merged between query & show-command
+                //  Fix is simply to re-fetch
+                return await ConstructExportPlanAsync(
+                    tableName,
+                    cursorInterval,
+                    dayInterval,
+                    isBackfill);
+            }
+            else
+            {
+                var extentMap = extents.ToDictionary(e => e.ExtentId, e => e.MinCreatedOn);
+                var plans = ingestionTimes
+                    .Select(i => new ExportPlan
+                    {
+                        IngestionTime = i.IngestionTime,
+                        OverrideIngestionTime = extentMap[i.ExtentId]
+                    })
+                    .ToImmutableArray();
+
+                return plans;
+            }
+        }
+
+        private async Task<IImmutableList<ExtentConfiguration>> FetchExtentsAsync(
+            string tableName,
+            IEnumerable<Guid> extentIds)
+        {
+            var extentIdList = string.Join(", ", extentIds);
+            var queryText = @$"
+.show table ['{tableName}'] extents ({extentIdList})
+| project ExtentId, MinCreatedOn
+";
+            var extents = await _kustoClient
                 .SetParameter("TargetTableName", tableName)
-                .SetParameter("DayIntervalMin", dayInterval.Min)
-                .SetParameter("DayIntervalMax", dayInterval.Max)
-                .ExecuteQueryAsync(
+                .ExecuteCommandAsync(
                 DbName,
-                @$"
+                queryText,
+                r => new ExtentConfiguration
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    MinCreatedOn = (DateTime)r["MinCreatedOn"]
+                });
+
+            return extents;
+        }
+
+        private async Task<ImmutableArray<IngestionSchedule>> FetchIngestionScheduleAsync(
+            string tableName,
+            (string? startCursor, string endCursor) cursorInterval,
+            (DateTime Min, DateTime Max) dayInterval,
+            bool isBackfill)
+        {
+            var maxInequality = isBackfill ? "<=" : "<";
+            var queryText = @$"
 declare query_parameters(TargetTableName: string);
 declare query_parameters(DayIntervalMin: datetime);
 declare query_parameters(DayIntervalMax: datetime);
+declare query_parameters(StartCursor: string);
+declare query_parameters(EndCursor: string);
 table(TargetTableName)
+| where cursor_before_or_at(EndCursor)
+| where cursor_after(StartCursor)
 | where ingestion_time() >= DayIntervalMin
 | where ingestion_time() {maxInequality} DayIntervalMax
 | summarize by IngestionTime=ingestion_time(), ExtentId=extent_id()
 | order by IngestionTime asc
-| limit 1000
-",
-                r => new
+| limit 1000";
+            var ingestionTimes = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .SetParameter("DayIntervalMin", dayInterval.Min)
+                .SetParameter("DayIntervalMax", dayInterval.Max)
+                .SetParameter("StartCursor", cursorInterval.startCursor ?? string.Empty)
+                .SetParameter("EndCursor", cursorInterval.endCursor)
+                .ExecuteQueryAsync(
+                DbName,
+                queryText,
+                r => new IngestionSchedule
                 {
                     IngestionTime = (DateTime)r["IngestionTime"],
-                    ExtentId = (string)r["ExtentId"]
+                    ExtentId = (Guid)r["ExtentId"]
                 });
 
-            throw new NotImplementedException();
+            return ingestionTimes;
         }
 
         private async Task ProcessEmptyIngestionTableAsync(bool isBackfill)
