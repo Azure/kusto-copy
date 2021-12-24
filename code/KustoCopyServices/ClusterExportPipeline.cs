@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyServices
 {
-    public class ClusterExportPipeline : IExportPipeline
+    public class ClusterExportPipeline
     {
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;

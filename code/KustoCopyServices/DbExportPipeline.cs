@@ -11,6 +11,15 @@ namespace KustoCopyServices
 {
     internal class DbExportPipeline
     {
+        #region Inner Types
+        private class ExportPlan
+        {
+            public DateTime IngestionTime { get; set; } = DateTime.MinValue;
+            
+            public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
+        }
+        #endregion
+
         private readonly DbExportBookmark _dbExportBookmark;
         private readonly KustoClient _kustoClient;
         private readonly ITempFolderService _tempFolderService;
@@ -72,7 +81,8 @@ namespace KustoCopyServices
             else
             {
                 var copyTableTasks = nextDayTables
-                    .Select(t => CopyDayTableAsync(isBackfill, t));
+                    .Select(t => CopyDayTableAsync(isBackfill, t))
+                    .ToImmutableArray();
 
                 await Task.WhenAll(copyTableTasks);
             }
@@ -82,8 +92,41 @@ namespace KustoCopyServices
         {
             var tableIteration = _dbExportBookmark.GetTableIterationData(tableName, isBackfill);
             var dayInterval = tableIteration.GetNextDayInterval(isBackfill);
+            var exportPlan = ConstructExportPlanAsync(tableName, dayInterval, isBackfill);
 
             await ValueTask.CompletedTask;
+        }
+
+        private async Task ConstructExportPlanAsync(
+            string tableName,
+            (DateTime Min, DateTime Max) dayInterval,
+            bool isBackfill)
+        {
+            var maxInequality = isBackfill ? "<" : "<=";
+            var ingestionTimes = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .SetParameter("DayIntervalMin", dayInterval.Min)
+                .SetParameter("DayIntervalMax", dayInterval.Max)
+                .ExecuteQueryAsync(
+                DbName,
+                @$"
+declare query_parameters(TargetTableName: string);
+declare query_parameters(DayIntervalMin: datetime);
+declare query_parameters(DayIntervalMax: datetime);
+table(TargetTableName)
+| where ingestion_time() >= DayIntervalMin
+| where ingestion_time() {maxInequality} DayIntervalMax
+| summarize by IngestionTime=ingestion_time(), ExtentId=extent_id()
+| order by IngestionTime asc
+| limit 1000
+",
+                r => new
+                {
+                    IngestionTime = (DateTime)r["IngestionTime"],
+                    ExtentId = (string)r["ExtentId"]
+                });
+
+            throw new NotImplementedException();
         }
 
         private async Task ProcessEmptyIngestionTableAsync(bool isBackfill)
