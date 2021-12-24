@@ -118,6 +118,11 @@ namespace kusto_copy
             {
                 parameterization.Configuration.ExportSlots = options.ExportSlots;
             }
+            if (options.ConcurrentQueries != null)
+            {
+                parameterization.Configuration.ConcurrentQueryCount =
+                    options.ConcurrentQueries.Value;
+            }
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
                 options.Lake,

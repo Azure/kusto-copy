@@ -135,8 +135,9 @@ namespace kusto_copy
 
                 Trace.WriteLine("Connecting to source cluster...");
 
-                var sourceKustoClient =
-                    new KustoClient(parameterization.Source!.ClusterQueryUri!);
+                var sourceKustoClient = new KustoClient(
+                    parameterization.Source!.ClusterQueryUri!,
+                    parameterization.Configuration.ConcurrentQueryCount);
                 var exportPipeline = await ClusterExportPipeline.CreateAsync(
                     folderClient,
                     credential,

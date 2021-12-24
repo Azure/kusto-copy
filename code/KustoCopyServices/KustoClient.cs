@@ -21,7 +21,7 @@ namespace KustoCopyServices
         #region Inner Types
         private class ClientConfig
         {
-            public ClientConfig(string clusterQueryUrl)
+            public ClientConfig(string clusterQueryUrl, int concurrentQueryCount)
             {
                 var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
                 var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
@@ -30,8 +30,7 @@ namespace KustoCopyServices
                 var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
                 ClusterQueryUri = clusterQueryUri;
-                QueryQueue = new ExecutionQueue(10);
-                CommandQueue = new ExecutionQueue(2);
+                QueryQueue = new ExecutionQueue(concurrentQueryCount);
                 CommandProvider = commandProvider;
                 QueryProvider = queryProvider;
             }
@@ -39,8 +38,6 @@ namespace KustoCopyServices
             public Uri ClusterQueryUri { get; }
 
             public ExecutionQueue QueryQueue { get; }
-
-            public ExecutionQueue CommandQueue { get; }
 
             public ICslAdminProvider CommandProvider { get; }
 
@@ -57,9 +54,9 @@ namespace KustoCopyServices
         private readonly ClientConfig _config;
         private readonly ClientRequestProperties _properties;
 
-        public KustoClient(string clusterQueryUrl)
+        public KustoClient(string clusterQueryUrl, int concurrentQueryCount)
         {
-            _config = new ClientConfig(clusterQueryUrl);
+            _config = new ClientConfig(clusterQueryUrl, concurrentQueryCount);
             _properties = EMPTY_REQUEST_PROPERTIES;
         }
 

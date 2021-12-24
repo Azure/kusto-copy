@@ -16,6 +16,9 @@ namespace kusto_copy
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
         public string? ParameterFilePath { get; set; }
 
+        [Option('q', "concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands per cluster")]
+        public int? ConcurrentQueries { get; set; } = null;
+
         [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
 
