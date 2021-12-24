@@ -11,18 +11,18 @@ namespace KustoCopyServices
 {
     internal class DbExportPipeline
     {
-        private readonly DbExportBookmark _exportBookmark;
+        private readonly DbExportBookmark _dbExportBookmark;
         private readonly KustoClient _kustoClient;
         private readonly ITempFolderService _tempFolderService;
 
         private DbExportPipeline(
             string dbName,
-            DbExportBookmark exportBookmark,
+            DbExportBookmark dbExportBookmark,
             KustoClient kustoClient,
             ITempFolderService tempFolderService)
         {
             DbName = dbName;
-            _exportBookmark = exportBookmark;
+            _dbExportBookmark = dbExportBookmark;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
         }
@@ -34,7 +34,7 @@ namespace KustoCopyServices
             KustoClient kustoClient,
             ITempFolderService tempFolderService)
         {
-            var exportBookmark = await DbExportBookmark.RetrieveAsync(
+            var dbExportBookmark = await DbExportBookmark.RetrieveAsync(
                 sourceFolderClient.GetFileClient("source-db.bookmark"),
                 credential,
                 async () =>
@@ -44,7 +44,7 @@ namespace KustoCopyServices
 
             return new DbExportPipeline(
                 dbName,
-                exportBookmark,
+                dbExportBookmark,
                 kustoClient,
                 tempFolderService);
         }
@@ -53,22 +53,42 @@ namespace KustoCopyServices
 
         public async Task RunAsync()
         {
-            var backfillTask = BackfillCopyAsync();
-            var currentTask = CurrentCopyAsync();
+            var backfillTask = CopyAsync(true);
+            var currentTask = OrchestrateForwardCopyAsync();
 
             await Task.WhenAll(backfillTask, currentTask);
         }
 
-        private async Task BackfillCopyAsync()
+        private async Task CopyAsync(bool isBackfill)
         {
-            var emptyIngestionTask = ProcessEmptyIngestionTableAsync(true);
+            await ProcessEmptyIngestionTableAsync(isBackfill);
 
-            await Task.WhenAll(emptyIngestionTask);
+            var nextDayTables = _dbExportBookmark.GetNextDayTables(isBackfill);
+
+            if (!nextDayTables.Any())
+            {
+                throw new NotImplementedException("Copy is done");
+            }
+            else
+            {
+                var copyTableTasks = nextDayTables
+                    .Select(t => CopyDayTableAsync(isBackfill, t));
+
+                await Task.WhenAll(copyTableTasks);
+            }
+        }
+
+        private async Task CopyDayTableAsync(bool isBackfill, string tableName)
+        {
+            var tableIteration = _dbExportBookmark.GetTableIterationData(tableName, isBackfill);
+            var dayInterval = tableIteration.GetNextDayInterval(isBackfill);
+
+            await ValueTask.CompletedTask;
         }
 
         private async Task ProcessEmptyIngestionTableAsync(bool isBackfill)
         {
-            await _exportBookmark.ProcessEmptyTableAsync(
+            await _dbExportBookmark.ProcessEmptyTableAsync(
                 isBackfill,
                 async (tableNames) =>
                 {
@@ -119,7 +139,7 @@ namespace KustoCopyServices
             return tableSchema;
         }
 
-        private async Task CurrentCopyAsync()
+        private async Task OrchestrateForwardCopyAsync()
         {
             await ValueTask.CompletedTask;
         }

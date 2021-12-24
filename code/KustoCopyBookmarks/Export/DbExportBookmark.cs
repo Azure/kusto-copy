@@ -109,6 +109,47 @@ namespace KustoCopyBookmarks.Export
             return emptyTableNames;
         }
 
+        public IImmutableList<string> GetNextDayTables(bool isBackfill)
+        {
+            if (isBackfill)
+            {
+                var nextDay = _backfillTableIterationMap.Values
+                    .Select(i => i.Value.MaxRemainingIngestionTime)
+                    .Where(d => d != null)
+                    .Cast<DateTime>()
+                    .Aggregate(
+                    (DateTime?)null,
+                    (dMax, d) => dMax == null ? d : (d > dMax ? d : dMax));
+
+                if (nextDay == null)
+                {
+                    return ImmutableArray<string>.Empty;
+                }
+                else
+                {
+                    var nextDayDate = nextDay.Value.Date;
+                    var tableNames = _backfillTableIterationMap.Values
+                        .Select(b => b.Value)
+                        .Where(i => i.MaxRemainingIngestionTime != null
+                        && i.MaxRemainingIngestionTime.Value.Date == nextDayDate)
+                        .Select(i => i.TableName);
+
+                    return tableNames.ToImmutableArray();
+                }
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public TableIterationData GetTableIterationData(string tableName, bool isBackfill)
+        {
+            return isBackfill
+                ? _backfillTableIterationMap[tableName].Value
+                : _forwardTableIterationMap[tableName].Value;
+        }
+
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
             BookmarkBlockValue<DbIterationData>? backfillIteration,
