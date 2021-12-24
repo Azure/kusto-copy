@@ -16,6 +16,8 @@ namespace KustoCopyServices
         {
             public DateTime IngestionTime { get; set; } = DateTime.MinValue;
 
+            public Guid ExtentId { get; set; } = Guid.Empty;
+
             public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
         }
 
@@ -115,8 +117,44 @@ namespace KustoCopyServices
                 cursorInterval,
                 dayInterval,
                 isBackfill);
+            var groups = exportPlan.GroupBy(e => e.ExtentId);
+            var exportPlanTasks = groups
+                .Select(g => ExecuteExportPlansAsync(g))
+                .ToImmutableArray();
 
-            await ValueTask.CompletedTask;
+            await Task.WhenAll(exportPlanTasks);
+        }
+
+        private async Task ExecuteExportPlansAsync(IEnumerable<ExportPlan> plans)
+        {
+            var lease = _tempFolderService.LeaseTempFolder();
+
+            try
+            {
+//                var commandText = @$"
+//.show table ['{tableName}'] extents ({extentIdList})
+//| project ExtentId, MinCreatedOn
+//";
+//                var extents = await _kustoClient
+//                    .SetParameter("TargetTableName", tableName)
+//                    .ExecuteCommandAsync(
+//                    DbName,
+//                    commandText,
+//                    r => new ExtentConfiguration
+//                    {
+//                        ExtentId = (Guid)r["ExtentId"],
+//                        MinCreatedOn = (DateTime)r["MinCreatedOn"]
+//                    });
+
+                //lease.Client.ur
+                await ValueTask.CompletedTask;
+
+                throw new NotImplementedException();
+            }
+            catch
+            {
+                lease.Dispose();
+            }
         }
 
         private async Task<IImmutableList<ExportPlan>> ConstructExportPlanAsync(
@@ -149,6 +187,7 @@ namespace KustoCopyServices
                     .Select(i => new ExportPlan
                     {
                         IngestionTime = i.IngestionTime,
+                        ExtentId = i.ExtentId,
                         OverrideIngestionTime = extentMap[i.ExtentId]
                     })
                     .ToImmutableArray();
@@ -162,7 +201,7 @@ namespace KustoCopyServices
             IEnumerable<Guid> extentIds)
         {
             var extentIdList = string.Join(", ", extentIds);
-            var queryText = @$"
+            var commandText = @$"
 .show table ['{tableName}'] extents ({extentIdList})
 | project ExtentId, MinCreatedOn
 ";
@@ -170,7 +209,7 @@ namespace KustoCopyServices
                 .SetParameter("TargetTableName", tableName)
                 .ExecuteCommandAsync(
                 DbName,
-                queryText,
+                commandText,
                 r => new ExtentConfiguration
                 {
                     ExtentId = (Guid)r["ExtentId"],
