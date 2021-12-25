@@ -34,7 +34,8 @@ namespace KustoCopyServices
             _credential = credential;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
-            _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
+            _exportQueue =
+                new KustoExportQueue(_kustoClient, _tempFolderService, exportSlotsRatio);
         }
 
         public static async Task<ClusterExportPipeline> CreateAsync(
