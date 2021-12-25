@@ -98,7 +98,7 @@ namespace KustoCopyServices
 
             if (!nextDayTables.Any())
             {
-                throw new NotImplementedException("Copy is done");
+                throw new NotSupportedException("Copy is done");
             }
             else
             {
@@ -124,42 +124,23 @@ namespace KustoCopyServices
                 isBackfill);
             var groups = exportPlan.GroupBy(e => e.ExtentId);
             var exportPlanTasks = groups
-                .Select(g => ExecuteExportPlansAsync(g))
+                .Select(g => ExecuteExportPlansAsync(tableName, cursorInterval, g))
                 .ToImmutableArray();
 
             await Task.WhenAll(exportPlanTasks);
         }
 
-        private async Task ExecuteExportPlansAsync(IEnumerable<ExportPlan> plans)
+        private async Task ExecuteExportPlansAsync(
+            string tableName,
+            (string? startCursor, string endCursor) cursorInterval,
+            IEnumerable<ExportPlan> plans)
         {
-            var lease = _tempFolderService.LeaseTempFolder();
-
-            try
-            {
-//                var commandText = @$"
-//.show table ['{tableName}'] extents ({extentIdList})
-//| project ExtentId, MinCreatedOn
-//";
-//                var extents = await _kustoClient
-//                    .SetParameter("TargetTableName", tableName)
-//                    .ExecuteCommandAsync(
-//                    DbName,
-//                    commandText,
-//                    r => new ExtentConfiguration
-//                    {
-//                        ExtentId = (Guid)r["ExtentId"],
-//                        MinCreatedOn = (DateTime)r["MinCreatedOn"]
-//                    });
-
-                //lease.Client.ur
-                await ValueTask.CompletedTask;
-
-                throw new NotImplementedException();
-            }
-            catch
-            {
-                lease.Dispose();
-            }
+            await _exportQueue.ExportDataAsync(
+                DbName,
+                tableName,
+                cursorInterval.startCursor,
+                cursorInterval.endCursor,
+                plans.Select(p => p.IngestionTime));
         }
 
         private async Task<IImmutableList<ExportPlan>> ConstructExportPlanAsync(
