@@ -22,8 +22,8 @@ namespace kusto_copy
         [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
 
-        [Option('e', "export-slots", Required = false, HelpText = "# or % of export slots")]
-        public string? ExportSlots { get; set; }
+        [Option('e', "export-slots", Required = false, HelpText = "% (1 to 100) of export slots to use")]
+        public int? ExportSlotsRatio { get; set; }
 
         [Option('t', "tenant", Required = false, HelpText = "AAD Tenant ID")]
         public string? Tenant { get; set; }
