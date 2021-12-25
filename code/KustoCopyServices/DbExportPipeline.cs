@@ -38,18 +38,21 @@ namespace KustoCopyServices
 
         private readonly DbExportBookmark _dbExportBookmark;
         private readonly KustoClient _kustoClient;
-        private readonly ITempFolderService _tempFolderService;
+        private readonly TempFolderService _tempFolderService;
+        private readonly KustoExportQueue _exportQueue;
 
         private DbExportPipeline(
             string dbName,
             DbExportBookmark dbExportBookmark,
             KustoClient kustoClient,
-            ITempFolderService tempFolderService)
+            TempFolderService tempFolderService,
+            KustoExportQueue exportQueue)
         {
             DbName = dbName;
             _dbExportBookmark = dbExportBookmark;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
+            _exportQueue = exportQueue;
         }
 
         public static async Task<DbExportPipeline> CreateAsync(
@@ -57,7 +60,8 @@ namespace KustoCopyServices
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoClient kustoClient,
-            ITempFolderService tempFolderService)
+            TempFolderService tempFolderService,
+            KustoExportQueue exportQueue)
         {
             var dbExportBookmark = await DbExportBookmark.RetrieveAsync(
                 sourceFolderClient.GetFileClient("source-db.bookmark"),
@@ -71,7 +75,8 @@ namespace KustoCopyServices
                 dbName,
                 dbExportBookmark,
                 kustoClient,
-                tempFolderService);
+                tempFolderService,
+                exportQueue);
         }
 
         public string DbName { get; }

@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 
 namespace KustoCopyServices
 {
-    public class TempFolderService : ITempFolderService
+    public class TempFolderService
     {
         #region Inner Types
         public class TempFolderLease : ITempFolderLease
@@ -69,10 +69,9 @@ namespace KustoCopyServices
             await Task.CompletedTask;
         }
 
-        #region ITempFolderService
-        TokenCredential ITempFolderService.Credential => _tokenCredential;
+        public TokenCredential Credential => _tokenCredential;
 
-        ITempFolderLease ITempFolderService.LeaseTempFolder()
+        public ITempFolderLease LeaseTempFolder()
         {
             var tempFolderClient = _tempFolderClient
                 .GetSubDirectoryClient(_currentMainFolder.ToString())
@@ -81,7 +80,6 @@ namespace KustoCopyServices
 
             return tempFolderLease;
         }
-        #endregion
 
         private static int ParseFolderName(string name)
         {

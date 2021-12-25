@@ -18,7 +18,8 @@ namespace KustoCopyServices
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
         private readonly KustoClient _kustoClient;
-        private readonly ITempFolderService _tempFolderService;
+        private readonly TempFolderService _tempFolderService;
+        private readonly KustoExportQueue _exportQueue;
         private readonly IDictionary<string, DbExportPipeline> _dbExportPipelineMap =
             new Dictionary<string, DbExportPipeline>();
 
@@ -26,19 +27,22 @@ namespace KustoCopyServices
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoClient kustoClient,
-            ITempFolderService tempFolderService)
+            TempFolderService tempFolderService,
+            int exportSlotsRatio)
         {
             _sourceFolderClient = sourceFolderClient;
             _credential = credential;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
+            _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
         }
 
         public static async Task<ClusterExportPipeline> CreateAsync(
             DataLakeDirectoryClient folderClient,
             TokenCredential credential,
             KustoClient kustoClient,
-            TempFolderService tempFolderService)
+            TempFolderService tempFolderService,
+            int exportSlotsRatio)
         {
             var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
 
@@ -48,7 +52,8 @@ namespace KustoCopyServices
                 sourceFolderClient,
                 credential,
                 kustoClient,
-                tempFolderService);
+                tempFolderService,
+                exportSlotsRatio);
         }
 
         public async Task RunAsync()
@@ -76,7 +81,8 @@ namespace KustoCopyServices
                     _sourceFolderClient.GetSubDirectoryClient(db),
                     _credential,
                     _kustoClient,
-                    _tempFolderService);
+                    _tempFolderService,
+                    _exportQueue);
 
                 _dbExportPipelineMap.Add(dbPipeline.DbName, dbPipeline);
             }
