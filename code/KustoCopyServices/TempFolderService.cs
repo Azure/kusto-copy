@@ -81,13 +81,14 @@ namespace KustoCopyServices
             return tempFolderLease;
         }
 
-        private static int ParseFolderName(string name)
+        private static int ParseFolderName(string path)
         {
+            var folderName = Path.GetFileName(path);
             int result;
 
-            if (!int.TryParse(name, out result))
+            if (!int.TryParse(folderName, out result))
             {
-                throw new InvalidOperationException($"Folder '{name}' in temp folder");
+                throw new InvalidOperationException($"Folder '{folderName}' in temp folder");
             }
 
             return result;

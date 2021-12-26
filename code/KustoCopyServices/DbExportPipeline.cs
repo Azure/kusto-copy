@@ -34,12 +34,20 @@ namespace KustoCopyServices
 
             public DateTime MinCreatedOn { get; set; } = DateTime.MinValue;
         }
+
+        private class ExportResult
+        {
+            public string Path { get; set; } = string.Empty;
+
+            public long NumRecords { get; set; } = 0;
+        }
         #endregion
 
         private readonly DbExportBookmark _dbExportBookmark;
         private readonly KustoClient _kustoClient;
         private readonly TempFolderService _tempFolderService;
         private readonly KustoExportQueue _exportQueue;
+        private readonly KustoOperationAwaiter _operationAwaiter;
 
         private DbExportPipeline(
             string dbName,
@@ -53,6 +61,7 @@ namespace KustoCopyServices
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
             _exportQueue = exportQueue;
+            _operationAwaiter = new KustoOperationAwaiter(_kustoClient, dbName);
         }
 
         public static async Task<DbExportPipeline> CreateAsync(
@@ -135,12 +144,76 @@ namespace KustoCopyServices
             (string? startCursor, string endCursor) cursorInterval,
             IEnumerable<ExportPlan> plans)
         {
-            await _exportQueue.ExportDataAsync(
+            var ingestionTimes = plans.Select(p => p.IngestionTime);
+
+            await _exportQueue.RequestRunAsync(
                 DbName,
                 tableName,
                 cursorInterval.startCursor,
                 cursorInterval.endCursor,
-                plans.Select(p => p.IngestionTime));
+                ingestionTimes.First());
+
+            var tempFolderLease = _tempFolderService.LeaseTempFolder();
+
+            try
+            {
+                var operationId =
+                    await ExportAsync(tableName, cursorInterval, ingestionTimes, tempFolderLease);
+
+                await _operationAwaiter.WaitForOperationCompletionAsync(operationId);
+
+                var results = await FetchExportResultsAsync(operationId);
+                var names = await tempFolderLease.Client.GetPathsAsync().ToListAsync(p => p.Name);
+
+                throw new NotImplementedException();
+            }
+            catch
+            {
+                tempFolderLease.Dispose();
+            }
+        }
+
+        private async Task<IImmutableList<ExportResult>> FetchExportResultsAsync(Guid operationId)
+        {
+            var results = await _kustoClient
+                .ExecuteCommandAsync(
+                DbName,
+                $".show operation {operationId} details",
+                r => new ExportResult
+                {
+                    Path = (string)r["Path"],
+                    NumRecords = (long)r["NumRecords"]
+                });
+
+            return results;
+        }
+
+        private async Task<Guid> ExportAsync(
+            string tableName,
+            (string? startCursor, string endCursor) cursorInterval,
+            IEnumerable<DateTime> ingestionTimes,
+            ITempFolderLease tempFolderLease)
+        {
+            var ingestionTimeList = string.Join(
+                ", ",
+                ingestionTimes.Select(t => CslDateTimeLiteral.AsCslString(t)));
+            var commandText = @$"
+.export async compressed
+to csv (h@'{tempFolderLease.Client.Uri};impersonate')
+with(namePrefix = 'export', includeHeaders = all, encoding = UTF8NoBOM) <|
+['{tableName}']
+| where cursor_before_or_at('{cursorInterval.endCursor}')
+| where cursor_after('{cursorInterval.startCursor}')
+| where ingestion_time() in ({ingestionTimeList})
+";
+            var operationIds = await _kustoClient
+                .ExecuteCommandAsync(
+                DbName,
+                commandText,
+                r => (Guid)r["OperationId"]);
+            var operationId = operationIds.First();
+
+            return operationId;
         }
 
         private async Task<IImmutableList<ExportPlan>> ConstructExportPlanAsync(
