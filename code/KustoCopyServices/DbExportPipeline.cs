@@ -163,13 +163,24 @@ namespace KustoCopyServices
                 await _operationAwaiter.WaitForOperationCompletionAsync(operationId);
 
                 var results = await FetchExportResultsAsync(operationId);
-                var names = await tempFolderLease.Client.GetPathsAsync().ToListAsync(p => p.Name);
+
+                await CleanupFolderAsync(tempFolderLease.Client, results);
 
                 throw new NotImplementedException();
             }
             catch
             {
                 tempFolderLease.Dispose();
+            }
+        }
+
+        private static async Task CleanupFolderAsync(DataLakeDirectoryClient client, IEnumerable<ExportResult> results)
+        {
+            var blobNames = await client.GetPathsAsync().ToListAsync(p => p.Name);
+
+            if (blobNames.Count() != results.Count())
+            {
+                throw new NotImplementedException();
             }
         }
 
