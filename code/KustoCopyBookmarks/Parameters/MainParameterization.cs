@@ -15,6 +15,9 @@ namespace KustoCopyBookmarks.Parameters
         public ConfigurationParameterization Configuration { get; set; }
             = new ConfigurationParameterization();
 
+        public DatabaseDefaultParameterization DatabaseDefault { get; set; } =
+            new DatabaseDefaultParameterization();
+
         #region Object methods
         public override bool Equals(object? obj)
         {
@@ -23,7 +26,8 @@ namespace KustoCopyBookmarks.Parameters
             return other != null
                 && object.Equals(Source, other.Source)
                 && SequenceEqual(Destinations, other.Destinations)
-                && object.Equals(Configuration, other.Configuration);
+                && object.Equals(Configuration, other.Configuration)
+                && object.Equals(DatabaseDefault, other.DatabaseDefault);
         }
 
         public override int GetHashCode()

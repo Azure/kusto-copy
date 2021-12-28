@@ -1,6 +1,5 @@
 source:
     clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
-    isEnabled:  true #   Indicates if data will be exported from the source
     includeDatabases:   #   Optional ; by default every dbs are included
     - db1
     - db2
@@ -23,10 +22,11 @@ config:
     exportSlotsRatio:  10 #   Percentage of export slots to use
     concurrentQueryCount:  5    #   Number of queries / commands sent in parallel to a given cluster
 databaseDefault:
+    isEnabled:  true #   Indicates if data will be exported from the source
+    subIterationRowCount:  10000000 #   Max number of rows per sub iteration
+    copyUntil:  now #   Options are 'now' and 'forever'
     backfillHorizon:  null  #   Horizon back in time we replicate history (in days) ; null means infinite
-    currentWithBackfill:  true    #   true:  we replicate current (following RPO) at the same time as we ingest history (backfill), false:  first backfill then current
     rpo:  60  #   In minutes
-    copyUntil:  now #   Options are 'now' (default) and 'forever'
     derivedTables:  afterBackfill  #   Options are 'copy' (treat them like other tables), 'useUpdatePolicy' (do not copy them, use update policy instead), 'afterBackfill' (default, like copy in backfill, like useUpdatePolicy after)
     stagingTables:  true    #   Staging the data in staging table for each day / cursor
 
