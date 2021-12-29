@@ -15,8 +15,8 @@ namespace KustoCopyBookmarks.Parameters
         public ConfigurationParameterization Configuration { get; set; }
             = new ConfigurationParameterization();
 
-        public DatabaseDefaultParameterization DatabaseDefault { get; set; } =
-            new DatabaseDefaultParameterization();
+        public DatabaseConfigParameterization DatabaseDefault { get; set; } =
+            new DatabaseConfigParameterization();
 
         #region Object methods
         public override bool Equals(object? obj)

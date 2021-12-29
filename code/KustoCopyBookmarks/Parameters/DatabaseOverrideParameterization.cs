@@ -6,18 +6,24 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks.Parameters
 {
-    public class DatabaseDefaultParameterization
+    public class DatabaseOverrideParameterization
     {
-        public bool IsEnabled { get; set; } = true;
+        public string Name { get; set; } = string.Empty;
 
-        public int SubIterationRowCount { get; set; } = 10000000;
+        public string? DestinationName { get; set; } = null;
+
+        public bool? IsEnabled { get; set; } = null;
+
+        public int? SubIterationRowCount { get; set; } = null;
 
         #region Object methods
         public override bool Equals(object? obj)
         {
-            var other = obj as DatabaseDefaultParameterization;
+            var other = obj as DatabaseOverrideParameterization;
 
             return other != null
+                && object.Equals(Name, other.Name)
+                && object.Equals(DestinationName, other.DestinationName)
                 && object.Equals(IsEnabled, other.IsEnabled)
                 && object.Equals(SubIterationRowCount, other.SubIterationRowCount);
         }

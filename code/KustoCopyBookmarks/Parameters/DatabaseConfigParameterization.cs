@@ -8,13 +8,9 @@ namespace KustoCopyBookmarks.Parameters
 {
     public class DatabaseConfigParameterization
     {
-        public string Name { get; set; } = string.Empty;
+        public bool IsEnabled { get; set; } = true;
 
-        public string? DestinationName { get; set; } = null;
-
-        public bool? IsEnabled { get; set; } = null;
-
-        public int? SubIterationRowCount { get; set; } = null;
+        public int SubIterationRowCount { get; set; } = 10000000;
 
         #region Object methods
         public override bool Equals(object? obj)
@@ -22,8 +18,6 @@ namespace KustoCopyBookmarks.Parameters
             var other = obj as DatabaseConfigParameterization;
 
             return other != null
-                && object.Equals(Name, other.Name)
-                && object.Equals(DestinationName, other.DestinationName)
                 && object.Equals(IsEnabled, other.IsEnabled)
                 && object.Equals(SubIterationRowCount, other.SubIterationRowCount);
         }

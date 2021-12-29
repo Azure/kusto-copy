@@ -5,7 +5,7 @@ source:
     - db2
     excludeDatabases:   #   Optional ; by default no db is excluded ; can't be used 
     - db3
-    databaseConfig:
+    databaseOverride:
     -   name:  github
         destinationName:  githubCopy
         includeTables:
