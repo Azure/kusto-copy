@@ -73,7 +73,7 @@ namespace KustoCopyServices
             string command,
             Func<IDataRecord, T> projection)
         {
-            using (await _config.QueryQueue.RequestRunAsync())
+            return await _config.QueryQueue.RequestRunAsync(async () =>
             {
                 try
                 {
@@ -92,7 +92,7 @@ namespace KustoCopyServices
                         + $"for command '{command}'",
                         ex);
                 }
-            }
+            });
         }
 
         public async Task<ImmutableArray<T>> ExecuteQueryAsync<T>(
@@ -100,7 +100,7 @@ namespace KustoCopyServices
             string query,
             Func<IDataRecord, T> projection)
         {
-            using (await _config.QueryQueue.RequestRunAsync())
+            return await _config.QueryQueue.RequestRunAsync(async () =>
             {
                 try
                 {
@@ -118,7 +118,7 @@ namespace KustoCopyServices
                         + $"database '{database}':  '{query}'",
                         ex);
                 }
-            }
+            });
         }
 
         public async Task<(ImmutableArray<T>, ImmutableArray<U>)> ExecuteQueryAsync<T, U>(
@@ -127,7 +127,7 @@ namespace KustoCopyServices
             Func<IDataRecord, T> projection1,
             Func<IDataRecord, U> projection2)
         {
-            using (await _config.QueryQueue.RequestRunAsync())
+            return await _config.QueryQueue.RequestRunAsync(async () =>
             {
                 try
                 {
@@ -154,7 +154,7 @@ namespace KustoCopyServices
                         + $"database '{database}':  '{query}'",
                         ex);
                 }
-            }
+            });
         }
 
         public KustoClient SetParameter(string name, string value)

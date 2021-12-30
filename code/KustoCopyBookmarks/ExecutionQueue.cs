@@ -16,7 +16,7 @@ namespace KustoCopyBookmarks
 
         }
         #endregion
-        
+
         private readonly int _parallelRunCount;
         private readonly ConcurrentQueue<Request> _requestQueue = new ConcurrentQueue<Request>();
         private volatile int _availableRunningSlots;
@@ -38,6 +38,16 @@ namespace KustoCopyBookmarks
 
         public async Task RequestRunAsync(Func<Task> actionAsync)
         {
+            await RequestRunAsync(async () =>
+            {
+                await actionAsync();
+
+                return 0;
+            });
+        }
+
+        public async Task<T> RequestRunAsync<T>(Func<Task<T>> actionAsync)
+        {
             var request = new Request();
 
             _requestQueue.Enqueue(request);
@@ -47,7 +57,7 @@ namespace KustoCopyBookmarks
 
             try
             {
-                await actionAsync();
+                return await actionAsync();
             }
             finally
             {
