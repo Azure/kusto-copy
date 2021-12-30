@@ -387,7 +387,7 @@ table(TargetTableName)
             await ValueTask.CompletedTask;
         }
 
-        private static async Task<(DbIterationData, IImmutableList<TableIterationData>)> FetchDefaultBookmarks(
+        private static async Task<(DbEpochData, IImmutableList<TableIterationData>)> FetchDefaultBookmarks(
             string dbName,
             KustoClient kustoClient)
         {
@@ -404,9 +404,9 @@ table(TargetTableName)
                     Cursor = (string)r["Cursor"]
                 });
             var tableNames = await tableNamesTask;
-            var dbIteration = new DbIterationData
+            var dbIteration = new DbEpochData
             {
-                IterationTime = iterationInfo.First().CurrentTime,
+                EpochStartTime = iterationInfo.First().CurrentTime,
                 StartCursor = null,
                 EndCursor = iterationInfo.First().Cursor
             };
@@ -459,7 +459,7 @@ table(TargetTable)
 
             return new TableIterationData
             {
-                EndCursor = endCursor,
+                EpochEndCursor = endCursor,
                 TableName = tableName,
                 MinRemainingIngestionTime = range.Min,
                 MaxRemainingIngestionTime = range.Max
