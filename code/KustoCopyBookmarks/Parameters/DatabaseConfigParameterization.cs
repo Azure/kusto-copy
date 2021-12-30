@@ -26,6 +26,21 @@ namespace KustoCopyBookmarks.Parameters
         {
             return base.GetHashCode();
         }
+
+        public DatabaseOverrideParameterization Override(
+            DatabaseOverrideParameterization databaseOverride)
+        {
+            var combination = new DatabaseOverrideParameterization
+            {
+                Name = databaseOverride.Name,
+                DestinationName = databaseOverride.DestinationName,
+                IsEnabled = databaseOverride.IsEnabled ?? this.IsEnabled,
+                SubIterationRowCount = databaseOverride.SubIterationRowCount
+                ?? this.SubIterationRowCount
+            };
+
+            return combination;
+        }
         #endregion
     }
 }

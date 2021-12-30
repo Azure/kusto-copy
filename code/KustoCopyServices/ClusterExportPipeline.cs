@@ -3,6 +3,7 @@ using Azure.Storage.Files.DataLake;
 using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Export;
+using KustoCopyBookmarks.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -22,19 +23,23 @@ namespace KustoCopyServices
         private readonly KustoExportQueue _exportQueue;
         private readonly IDictionary<string, DbExportPipeline> _dbExportPipelineMap =
             new Dictionary<string, DbExportPipeline>();
+        private readonly MainParameterization _mainParameterization;
 
         private ClusterExportPipeline(
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoClient kustoClient,
             TempFolderService tempFolderService,
-            int exportSlotsRatio)
+            MainParameterization mainParameterization)
         {
             _sourceFolderClient = sourceFolderClient;
             _credential = credential;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
-            _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
+            _exportQueue = new KustoExportQueue(
+                _kustoClient,
+                mainParameterization.Configuration.ExportSlotsRatio);
+            _mainParameterization = mainParameterization;
         }
 
         public static async Task<ClusterExportPipeline> CreateAsync(
@@ -42,7 +47,7 @@ namespace KustoCopyServices
             TokenCredential credential,
             KustoClient kustoClient,
             TempFolderService tempFolderService,
-            int exportSlotsRatio)
+            MainParameterization mainParameterization)
         {
             var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
 
@@ -53,7 +58,7 @@ namespace KustoCopyServices
                 credential,
                 kustoClient,
                 tempFolderService,
-                exportSlotsRatio);
+                mainParameterization);
         }
 
         public async Task RunAsync()
@@ -73,11 +78,17 @@ namespace KustoCopyServices
             var currentDbNames = _dbExportPipelineMap.Keys.ToImmutableArray();
             var obsoleteDbNames = currentDbNames.Except(nextDbNames);
             var newDbNames = nextDbNames.Except(currentDbNames);
+            var configMap = _mainParameterization.Source!.DatabaseOverrides.ToImmutableDictionary(
+                o => o.Name);
 
             foreach (var db in newDbNames)
             {
+                var dbConfig = _mainParameterization.DatabaseDefault.Override(
+                    configMap.ContainsKey(db)
+                    ? configMap[db]
+                    : new DatabaseOverrideParameterization { Name = db });
                 var dbPipeline = await DbExportPipeline.CreateAsync(
-                    db,
+                    dbConfig,
                     _sourceFolderClient.GetSubDirectoryClient(db),
                     _credential,
                     _kustoClient,

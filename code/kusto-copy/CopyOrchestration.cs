@@ -143,7 +143,7 @@ namespace kusto_copy
                     credential,
                     sourceKustoClient,
                     tempFolderService,
-                    parameterization.Configuration.ExportSlotsRatio);
+                    parameterization);
 
                 return new CopyOrchestration(
                     blobLock,

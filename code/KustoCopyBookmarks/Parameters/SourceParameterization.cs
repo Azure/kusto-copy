@@ -1,11 +1,13 @@
-﻿namespace KustoCopyBookmarks.Parameters
+﻿using System.Collections.Immutable;
+
+namespace KustoCopyBookmarks.Parameters
 {
     public class SourceParameterization
     {
         public string? ClusterQueryUri { get; set; }
 
-        public DatabaseOverrideParameterization DatabaseOverride { get; set; } =
-            new DatabaseOverrideParameterization();
+        public IImmutableList<DatabaseOverrideParameterization> DatabaseOverrides { get; set; } =
+            ImmutableArray<DatabaseOverrideParameterization>.Empty;
 
         #region Object methods
         public override bool Equals(object? obj)
@@ -14,7 +16,7 @@
 
             return other != null
                 && object.Equals(ClusterQueryUri, other.ClusterQueryUri)
-                && object.Equals(DatabaseOverride, other.DatabaseOverride);
+                && object.Equals(DatabaseOverrides, other.DatabaseOverrides);
         }
 
         public override int GetHashCode()

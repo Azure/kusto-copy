@@ -4,6 +4,7 @@ using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.Export;
+using KustoCopyBookmarks.Parameters;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
@@ -65,7 +66,7 @@ namespace KustoCopyServices
         }
 
         public static async Task<DbExportPipeline> CreateAsync(
-            string dbName,
+            DatabaseOverrideParameterization databaseConfig,
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoClient kustoClient,
@@ -77,11 +78,11 @@ namespace KustoCopyServices
                 credential,
                 async () =>
                 {
-                    return await FetchDefaultBookmarks(dbName, kustoClient);
+                    return await FetchDefaultBookmarks(databaseConfig.Name!, kustoClient);
                 });
 
             return new DbExportPipeline(
-                dbName,
+                databaseConfig.Name!,
                 dbExportBookmark,
                 kustoClient,
                 tempFolderService,
