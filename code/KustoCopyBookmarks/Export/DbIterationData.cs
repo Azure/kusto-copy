@@ -10,6 +10,8 @@ namespace KustoCopyBookmarks.Export
     {
         /// <summary>Identify the epoch.</summary>
         public string EpochEndCursor { get; set; } = string.Empty;
+        
+        public int Iteration { get; set; } = 0;
 
         public DateTime? MinIngestionTime { get; set; }
 
