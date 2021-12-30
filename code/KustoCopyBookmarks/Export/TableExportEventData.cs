@@ -12,6 +12,8 @@ namespace KustoCopyBookmarks.Export
     {
         public string TempFolderUrl { get; set; } = "<EMPTY?>";
 
-        public DateTime MaxIngestionTime { get; set; } = DateTime.MinValue;
+        public IImmutableList<DateTime> IngestionTimes { get; set; } = ImmutableArray<DateTime>.Empty;
+
+        public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
     }
 }

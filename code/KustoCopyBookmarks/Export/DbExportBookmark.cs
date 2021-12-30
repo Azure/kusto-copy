@@ -76,8 +76,7 @@ namespace KustoCopyBookmarks.Export
                 .Zip(emptyTableNames, (s, n) => new { Schema = s, TableName = n })
                 .Select(p => new EmptyTableExportEventData
                 {
-                    EndCursor = dbIteration.EndCursor,
-                    EventTime = dbIteration.EpochStartTime,
+                    EpochEndCursor = dbIteration.EndCursor,
                     TableName = p.TableName,
                     Schema = p.Schema
                 });
