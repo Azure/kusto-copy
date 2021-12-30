@@ -180,7 +180,7 @@ namespace KustoCopyBookmarks
             //  Stack the item
             _commitItems.Push(newItem);
 
-            using (await _executionQueue.RequestRunAsync())
+            await _executionQueue.RequestRunAsync(async () =>
             {
                 if (!newItem.HasCommitted)
                 {   //  First let's try to grab as many items as we can
@@ -201,7 +201,7 @@ namespace KustoCopyBookmarks
                         await CommitItemsAsync(items);
                     }
                 }
-            }
+            });
         }
 
         private async Task CommitItemsAsync(IEnumerable<CommitItem> items)

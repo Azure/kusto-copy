@@ -12,12 +12,11 @@ namespace KustoCopyBookmarks
         #region Inner Types
         private class Request
         {
-            public TaskCompletionSource<IDisposable> Source { get; } =
-                new TaskCompletionSource<IDisposable>();
+            public TaskCompletionSource Source { get; } = new TaskCompletionSource();
 
         }
         #endregion
-
+        
         private readonly int _parallelRunCount;
         private readonly ConcurrentQueue<Request> _requestQueue = new ConcurrentQueue<Request>();
         private volatile int _availableRunningSlots;
@@ -37,14 +36,25 @@ namespace KustoCopyBookmarks
             }
         }
 
-        public Task<IDisposable> RequestRunAsync()
+        public async Task RequestRunAsync(Func<Task> actionAsync)
         {
             var request = new Request();
 
             _requestQueue.Enqueue(request);
             PumpRequestOut();
 
-            return request.Source.Task;
+            await request.Source.Task;
+
+            try
+            {
+                await actionAsync();
+            }
+            finally
+            {
+                //  Returning the slot as the request is over
+                Interlocked.Increment(ref _availableRunningSlots);
+                PumpRequestOut();
+            }
         }
 
         private void PumpRequestOut()
@@ -60,7 +70,7 @@ namespace KustoCopyBookmarks
 
                     if (_requestQueue.TryDequeue(out request))
                     {
-                        request.Source.SetResult(new ActionBasedDisposable(() => DisposeRequest()));
+                        request.Source.SetResult();
                         //  Keep pumping
                     }
                     else
@@ -80,13 +90,6 @@ namespace KustoCopyBookmarks
                     }
                 }
             }
-        }
-
-        private void DisposeRequest()
-        {
-            //  Returning the slot as the request is over
-            Interlocked.Increment(ref _availableRunningSlots);
-            PumpRequestOut();
         }
     }
 }
