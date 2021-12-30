@@ -14,7 +14,7 @@ namespace KustoCopyBookmarks.Parameters
 
         public bool? IsEnabled { get; set; } = null;
 
-        public int? SubIterationRowCount { get; set; } = null;
+        public int? MaxRowsPerTablePerIteration { get; set; } = null;
 
         #region Object methods
         public override bool Equals(object? obj)
@@ -25,7 +25,7 @@ namespace KustoCopyBookmarks.Parameters
                 && object.Equals(Name, other.Name)
                 && object.Equals(DestinationName, other.DestinationName)
                 && object.Equals(IsEnabled, other.IsEnabled)
-                && object.Equals(SubIterationRowCount, other.SubIterationRowCount);
+                && object.Equals(MaxRowsPerTablePerIteration, other.MaxRowsPerTablePerIteration);
         }
 
         public override int GetHashCode()

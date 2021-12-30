@@ -23,7 +23,7 @@ config:
     concurrentQueryCount:  5    #   Number of queries / commands sent in parallel to a given cluster
 databaseDefault:
     isEnabled:  true #   Indicates if data will be exported from the source
-    subIterationRowCount:  10000000 #   Max number of rows per sub iteration
+    maxRowsPerTablePerIteration:  10000000
     copyUntil:  now #   Options are 'now' and 'forever'
     backfillHorizon:  null  #   Horizon back in time we replicate history (in days) ; null means infinite
     rpo:  60  #   In minutes
