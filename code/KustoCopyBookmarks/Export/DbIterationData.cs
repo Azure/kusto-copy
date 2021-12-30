@@ -11,8 +11,8 @@ namespace KustoCopyBookmarks.Export
         /// <summary>Identify the epoch.</summary>
         public string EpochEndCursor { get; set; } = string.Empty;
 
-        public DateTime? MinRemainingIngestionTime { get; set; }
+        public DateTime? MinIngestionTime { get; set; }
 
-        public DateTime? MaxRemainingIngestionTime { get; set; }
+        public DateTime? MaxIngestionTime { get; set; }
     }
 }
