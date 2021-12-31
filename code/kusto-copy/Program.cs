@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
+using Kusto.Cloud.Platform.Utils;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
 using System;
@@ -120,8 +121,10 @@ namespace kusto_copy
             }
             if (options.ConcurrentQueries != null)
             {
-                parameterization.Configuration.ConcurrentQueryCount =
+                parameterization.Source.ConcurrentQueryCount =
                     options.ConcurrentQueries.Value;
+                parameterization.Destinations.ForEach(
+                    d => d.ConcurrentQueryCount = options.ConcurrentQueries.Value);
             }
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(

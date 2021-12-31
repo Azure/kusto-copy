@@ -21,10 +21,10 @@ namespace KustoCopyBookmarks
         private readonly PriorityQueue<Request, TPriority> _requestQueue;
         private volatile int _availableRunningSlots;
 
-        public PriorityExecutionQueue(int parallelRunCount, IComparer<TPriority> priorityComparer)
+        public PriorityExecutionQueue(int parallelRunCount)
         {
             _parallelRunCount = parallelRunCount;
-            _requestQueue = new PriorityQueue<Request, TPriority>(priorityComparer);
+            _requestQueue = new PriorityQueue<Request, TPriority>();
             _availableRunningSlots = _parallelRunCount;
         }
 
@@ -37,7 +37,7 @@ namespace KustoCopyBookmarks
             }
         }
 
-        public async Task RequestRunAsync(TPriority priority, Func<Task> actionAsync)
+        public async Task<T> RequestRunAsync<T>(TPriority priority, Func<Task<T>> actionAsync)
         {
             var request = new Request();
 
@@ -48,7 +48,7 @@ namespace KustoCopyBookmarks
 
             try
             {
-                await actionAsync();
+                return await actionAsync();
             }
             finally
             {
@@ -59,6 +59,16 @@ namespace KustoCopyBookmarks
                     PumpRequestOut();
                 }
             }
+        }
+
+        public async Task RequestRunAsync(TPriority priority, Func<Task> actionAsync)
+        {
+            await RequestRunAsync(priority, async () =>
+            {
+                await actionAsync();
+
+                return 0;
+            });
         }
 
         private void PumpRequestOut()

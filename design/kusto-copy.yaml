@@ -1,5 +1,6 @@
 source:
     clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+    concurrentQueryCount:  2    #   Number of queries / commands sent in parallel to a given cluster
     includeDatabases:   #   Optional ; by default every dbs are included
     - db1
     - db2
@@ -17,10 +18,10 @@ source:
 destinations:
     -   clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
         clusterIngestionUri:  https://ingest-inttestsyenycav4i2vma.eastus.kusto.windows.net
+        concurrentQueryCount:  2    #   Number of queries / commands sent in parallel to a given cluster
         isEnabled:  true #   Indicates if data will be sent to the destination
 config:
     exportSlotsRatio:  10 #   Percentage of export slots to use
-    concurrentQueryCount:  5    #   Number of queries / commands sent in parallel to a given cluster
 databaseDefault:
     isEnabled:  true #   Indicates if data will be exported from the source
     maxRowsPerTablePerIteration:  10000000

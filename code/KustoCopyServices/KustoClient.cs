@@ -18,54 +18,26 @@ namespace KustoCopyServices
 {
     public class KustoClient
     {
-        #region Inner Types
-        private class ClientConfig
-        {
-            public ClientConfig(string clusterQueryUrl, int concurrentQueryCount)
-            {
-                var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
-                var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                    .WithAadUserPromptAuthentication();
-                var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
-                var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
-
-                ClusterQueryUri = clusterQueryUri;
-                QueryQueue = new ExecutionQueue(concurrentQueryCount);
-                CommandProvider = commandProvider;
-                QueryProvider = queryProvider;
-            }
-
-            public Uri ClusterQueryUri { get; }
-
-            public ExecutionQueue QueryQueue { get; }
-
-            public ICslAdminProvider CommandProvider { get; }
-
-            public ICslQueryProvider QueryProvider { get; }
-        }
-        #endregion
-
         private static readonly AsyncRetryPolicy _retryPolicyThrottled =
             Policy.Handle<KustoRequestThrottledException>().WaitAndRetryAsync(
                 5,
                 attempt => TimeSpan.FromSeconds(attempt));
-        private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES = new ClientRequestProperties();
 
-        private readonly ClientConfig _config;
-        private readonly ClientRequestProperties _properties;
+        private readonly Uri _clusterQueryUri;
+        private readonly ICslAdminProvider _commandProvider;
+        private readonly ICslQueryProvider _queryProvider;
 
-        public KustoClient(string clusterQueryUrl, int concurrentQueryCount)
+        public KustoClient(string clusterQueryUrl)
         {
-            _config = new ClientConfig(clusterQueryUrl, concurrentQueryCount);
-            _properties = EMPTY_REQUEST_PROPERTIES;
-        }
+            var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
+            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
+                .WithAadUserPromptAuthentication();
+            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+            var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
-        private KustoClient(
-            ClientConfig config,
-            ClientRequestProperties properties)
-        {
-            _config = config;
-            _properties = properties;
+            _clusterQueryUri = clusterQueryUri;
+            _commandProvider = commandProvider;
+            _queryProvider = queryProvider;
         }
 
         public async Task<ImmutableArray<T>> ExecuteCommandAsync<T>(
@@ -73,111 +45,61 @@ namespace KustoCopyServices
             string command,
             Func<IDataRecord, T> projection)
         {
-            return await _config.QueryQueue.RequestRunAsync(async () =>
+            try
             {
-                try
+                using (var reader = await ExecuteCommandWithPoliciesAsync(database, command))
                 {
-                    using (var reader = await ExecuteCommandWithPoliciesAsync(database, command))
-                    {
-                        var enumerableProjection = Project(reader, projection);
+                    var enumerableProjection = Project(reader, projection);
 
-                        return enumerableProjection.ToImmutableArray();
-                    }
+                    return enumerableProjection.ToImmutableArray();
                 }
-                catch (Exception ex)
-                {
-                    throw new CopyException(
-                        "Issue while executing a command in cluster "
-                        + $"'{_config.ClusterQueryUri}', database '{database}' "
-                        + $"for command '{command}'",
-                        ex);
-                }
-            });
+            }
+            catch (Exception ex)
+            {
+                throw new CopyException(
+                    "Issue while executing a command in cluster "
+                    + $"'{_clusterQueryUri}', database '{database}' "
+                    + $"for command '{command}'",
+                    ex);
+            }
         }
 
         public async Task<ImmutableArray<T>> ExecuteQueryAsync<T>(
             string database,
             string query,
-            Func<IDataRecord, T> projection)
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties properties)
         {
-            return await _config.QueryQueue.RequestRunAsync(async () =>
+            using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
             {
-                try
-                {
-                    using (var reader = await ExecuteQueryWithPoliciesAsync(database, query))
-                    {
-                        var enumerableProjection = Project(reader, projection);
+                var enumerableProjection = Project(reader, projection);
 
-                        return enumerableProjection.ToImmutableArray();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    throw new CopyException(
-                        $"Issue while executing a query in cluster '{_config.ClusterQueryUri}', "
-                        + $"database '{database}':  '{query}'",
-                        ex);
-                }
-            });
+                return enumerableProjection.ToImmutableArray();
+            }
         }
 
         public async Task<(ImmutableArray<T>, ImmutableArray<U>)> ExecuteQueryAsync<T, U>(
             string database,
             string query,
             Func<IDataRecord, T> projection1,
-            Func<IDataRecord, U> projection2)
+            Func<IDataRecord, U> projection2,
+            ClientRequestProperties properties)
         {
-            return await _config.QueryQueue.RequestRunAsync(async () =>
+            using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
             {
-                try
+                var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
+
+                if (!reader.NextResult())
                 {
-                    using (var reader = await ExecuteQueryWithPoliciesAsync(database, query))
-                    {
-                        var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
-
-                        if (!reader.NextResult())
-                        {
-                            throw new CopyException("Query result doesn't contain a second result");
-                        }
-
-                        var enumerableProjection2 = Project(reader, projection2).ToImmutableArray();
-
-                        return (
-                            enumerableProjection1.ToImmutableArray(),
-                            enumerableProjection2.ToImmutableArray());
-                    }
+                    throw new CopyException("Query result doesn't contain a second result");
                 }
-                catch (Exception ex)
-                {
-                    throw new CopyException(
-                        $"Issue while executing a query in cluster '{_config.ClusterQueryUri}', "
-                        + $"database '{database}':  '{query}'",
-                        ex);
-                }
-            });
-        }
 
-        public KustoClient SetParameter(string name, string value)
-        {
-            var newProperties = _properties.Clone();
+                var enumerableProjection2 = Project(reader, projection2).ToImmutableArray();
 
-            newProperties.SetParameter(name, value);
-
-            return WithNewProperties(newProperties);
-        }
-
-        public KustoClient SetParameter(string name, DateTime value)
-        {
-            var newProperties = _properties.Clone();
-
-            newProperties.SetParameter(name, value);
-
-            return WithNewProperties(newProperties);
-        }
-
-        private KustoClient WithNewProperties(ClientRequestProperties newProperties)
-        {
-            return new KustoClient(_config, newProperties);
+                return (
+                    enumerableProjection1.ToImmutableArray(),
+                    enumerableProjection2.ToImmutableArray());
+            }
         }
 
         private async Task<IDataReader> ExecuteCommandWithPoliciesAsync(
@@ -188,40 +110,37 @@ namespace KustoCopyServices
             {
                 try
                 {
-                    return await _config.CommandProvider.ExecuteControlCommandAsync(
+                    return await _commandProvider.ExecuteControlCommandAsync(
                         database,
-                        command,
-                        _properties);
+                        command);
                 }
                 catch (KustoRequestThrottledException)
                 {
-                    var parameters = _properties
-                    .Parameters
-                    .Select(p => $"'{p.Key}' : '{p.Value}'");
-                    var paramList = string.Join(", ", parameters);
-
-                    Trace.TraceWarning($"Kusto command throttled on db '{database}' "
-                        + $"{{{paramList}}}:  '{command}'");
+                    Trace.TraceWarning(
+                        $"Kusto command throttled on db '{database}':  '{command}'");
 
                     throw;
                 }
             });
         }
 
-        private async Task<IDataReader> ExecuteQueryWithPoliciesAsync(string database, string query)
+        private async Task<IDataReader> ExecuteQueryWithPoliciesAsync(
+            string database,
+            string query,
+            ClientRequestProperties properties)
         {
             return await _retryPolicyThrottled.ExecuteAsync(async () =>
             {
                 try
                 {
-                    return await _config.QueryProvider.ExecuteQueryAsync(
+                    return await _queryProvider.ExecuteQueryAsync(
                         database,
                         query,
-                        _properties);
+                        properties);
                 }
                 catch (KustoRequestThrottledException)
                 {
-                    var parameters = _properties
+                    var parameters = properties
                     .Parameters
                     .Select(p => $"'{p.Key}' : '{p.Value}'");
                     var paramList = string.Join(", ", parameters);
@@ -230,6 +149,13 @@ namespace KustoCopyServices
                         + $"{{{paramList}}}:  '{query}'");
 
                     throw;
+                }
+                catch (Exception ex)
+                {
+                    throw new CopyException(
+                        $"Issue while executing a query in cluster '{_clusterQueryUri}', "
+                        + $"database '{database}':  '{query}'",
+                        ex);
                 }
             });
         }

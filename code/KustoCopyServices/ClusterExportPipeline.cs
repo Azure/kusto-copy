@@ -18,7 +18,7 @@ namespace KustoCopyServices
     {
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
-        private readonly KustoClient _kustoClient;
+        private readonly KustoQueuedClient _kustoClient;
         private readonly TempFolderService _tempFolderService;
         private readonly KustoExportQueue _exportQueue;
         private readonly IDictionary<string, DbExportPipeline> _dbExportPipelineMap =
@@ -28,7 +28,7 @@ namespace KustoCopyServices
         private ClusterExportPipeline(
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
-            KustoClient kustoClient,
+            KustoQueuedClient kustoClient,
             TempFolderService tempFolderService,
             MainParameterization mainParameterization)
         {
@@ -45,7 +45,7 @@ namespace KustoCopyServices
         public static async Task<ClusterExportPipeline> CreateAsync(
             DataLakeDirectoryClient folderClient,
             TokenCredential credential,
-            KustoClient kustoClient,
+            KustoQueuedClient kustoClient,
             TempFolderService tempFolderService,
             MainParameterization mainParameterization)
         {
