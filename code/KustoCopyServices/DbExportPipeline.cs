@@ -45,7 +45,7 @@ namespace KustoCopyServices
         #endregion
 
         private readonly DbExportBookmark _dbExportBookmark;
-        private readonly KustoClient _kustoClient;
+        private readonly KustoQueuedClient _kustoClient;
         private readonly TempFolderService _tempFolderService;
         private readonly KustoExportQueue _exportQueue;
         private readonly KustoOperationAwaiter _operationAwaiter;
@@ -53,7 +53,7 @@ namespace KustoCopyServices
         private DbExportPipeline(
             string dbName,
             DbExportBookmark dbExportBookmark,
-            KustoClient kustoClient,
+            KustoQueuedClient kustoClient,
             TempFolderService tempFolderService,
             KustoExportQueue exportQueue)
         {
@@ -69,7 +69,7 @@ namespace KustoCopyServices
             DatabaseOverrideParameterization databaseConfig,
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
-            KustoClient kustoClient,
+            KustoQueuedClient kustoClient,
             TempFolderService tempFolderService,
             KustoExportQueue exportQueue)
         {
@@ -389,7 +389,7 @@ table(TargetTableName)
 
         private static async Task<(DbEpochData, IImmutableList<TableIterationData>)> FetchDefaultBookmarks(
             string dbName,
-            KustoClient kustoClient)
+            KustoQueuedClient kustoClient)
         {
             var tableNamesTask = kustoClient.ExecuteCommandAsync(
                 dbName,
@@ -430,7 +430,7 @@ table(TargetTableName)
         }
 
         private static async Task<TableIterationData?> FetchTableIterationAsync(
-            KustoClient kustoClient,
+            KustoQueuedClient kustoClient,
             string dbName,
             string tableName,
             string endCursor)

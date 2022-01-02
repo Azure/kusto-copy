@@ -36,23 +36,45 @@ namespace KustoCopyBookmarks.Export
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
-            TokenCredential credential,
-            Func<Task<(DbEpochData, IImmutableList<TableIterationData>)>> fetchDefaultContentAsync)
+            TokenCredential credential)
         {
             var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
+            var iterations = aggregates
+                .Where(a => a.Value.DbEpoch != null);
+            var backfillIterations = iterations
+                .Where(a => a.Value.DbEpoch!.StartCursor == null);
+            var forwardIterations = iterations
+                .Where(a => a.Value.DbEpoch!.StartCursor != null);
+            var tableIterations = aggregates
+                .Where(a => a.Value.TableIteration != null);
+            var emptyTableExportEvents = aggregates
+                .Where(a => a.Value.EmptyTableExportEvent != null);
 
-            if (aggregates.Count() == 0)
+            if (backfillIterations.Count() > 1)
             {
-                return await CreateWithDefaultContentAsync(
-                    fileClient,
-                    bookmarkGateway,
-                    fetchDefaultContentAsync);
+                throw new InvalidOperationException(
+                    "Expected at most one backfill iteration definition block");
             }
-            else
+            if (forwardIterations.Count() > 1)
             {
-                return LoadAggregatesAsync(bookmarkGateway, aggregates);
+                throw new InvalidOperationException(
+                    "Expected at most one forward iteration definition block");
             }
+            if (!iterations.Any())
+            {
+                throw new InvalidOperationException(
+                    "Expected at least one iteration definition block");
+            }
+            var backfillIteration = backfillIterations.FirstOrDefault();
+            var forwardIteration = forwardIterations.FirstOrDefault();
+
+            return new DbExportBookmark(
+                bookmarkGateway,
+                backfillIteration?.Project(a => a.DbEpoch!),
+                forwardIteration?.Project(a => a.DbEpoch!),
+                tableIterations.Select(b => b.Project(a => a.TableIteration!)),
+                emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
         }
 
         public async Task<IImmutableList<string>> ProcessEmptyTableAsync(
@@ -177,77 +199,6 @@ namespace KustoCopyBookmarks.Export
             _backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
             _forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
             _emptyTableExportEvents = new ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>>(emptyTableExportEvents);
-        }
-
-        private static async Task<DbExportBookmark> CreateWithDefaultContentAsync(
-            DataLakeFileClient fileClient,
-            BookmarkGateway bookmarkGateway,
-            Func<Task<(DbEpochData, IImmutableList<TableIterationData>)>> fetchDefaultContentAsync)
-        {
-            var (iterationDefinition, tables) = await fetchDefaultContentAsync();
-            var iterationDefinitionBuffer = SerializationHelper.ToMemory(
-                new ExportAggregate { DbEpoch = iterationDefinition });
-            var tableBuffers = tables.Select(t => SerializationHelper.ToMemory(
-                    new ExportAggregate { TableIteration = t }));
-            var transaction = new BookmarkTransaction(
-                tableBuffers.Prepend(iterationDefinitionBuffer),
-                null,
-                null);
-            var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
-            var backFillIteration = new BookmarkBlockValue<DbEpochData>(
-                result.AddedBlockIds.First(),
-                iterationDefinition);
-            var tableValues = result.AddedBlockIds.Skip(1).Zip(
-                tables,
-                (r, t) => new BookmarkBlockValue<TableIterationData>(r, t));
-
-            return new DbExportBookmark(
-                bookmarkGateway,
-                backFillIteration,
-                null,
-                tableValues,
-                ImmutableArray<BookmarkBlockValue<EmptyTableExportEventData>>.Empty);
-        }
-
-        private static DbExportBookmark LoadAggregatesAsync(
-            BookmarkGateway bookmarkGateway,
-            IImmutableList<BookmarkBlockValue<ExportAggregate>> aggregates)
-        {
-            var iterations = aggregates
-                .Where(a => a.Value.DbEpoch != null);
-            var backfillIterations = iterations
-                .Where(a => a.Value.DbEpoch!.StartCursor == null);
-            var forwardIterations = iterations
-                .Where(a => a.Value.DbEpoch!.StartCursor != null);
-            var tableIterations = aggregates
-                .Where(a => a.Value.TableIteration != null);
-            var emptyTableExportEvents = aggregates
-                .Where(a => a.Value.EmptyTableExportEvent != null);
-
-            if (backfillIterations.Count() > 1)
-            {
-                throw new InvalidOperationException(
-                    "Expected at most one backfill iteration definition block");
-            }
-            if (forwardIterations.Count() > 1)
-            {
-                throw new InvalidOperationException(
-                    "Expected at most one forward iteration definition block");
-            }
-            if (!iterations.Any())
-            {
-                throw new InvalidOperationException(
-                    "Expected at least one iteration definition block");
-            }
-            var backfillIteration = backfillIterations.FirstOrDefault();
-            var forwardIteration = forwardIterations.FirstOrDefault();
-
-            return new DbExportBookmark(
-                bookmarkGateway,
-                backfillIteration?.Project(a => a.DbEpoch!),
-                forwardIteration?.Project(a => a.DbEpoch!),
-                tableIterations.Select(b => b.Project(a => a.TableIteration!)),
-                emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
         }
     }
 }

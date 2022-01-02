@@ -16,13 +16,24 @@ namespace KustoCopyServices
 {
     public class ClusterExportPipeline
     {
+        #region MyRegion
+        private class DbPipelines
+        {
+            public DbPipelines(DbExportPlanPipeline dbExportPlanPipeline)
+            {
+                DbExportPlan = dbExportPlanPipeline;
+            }
+
+            public DbExportPlanPipeline DbExportPlan { get; }
+        }
+        #endregion
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
         private readonly KustoQueuedClient _kustoClient;
         private readonly TempFolderService _tempFolderService;
-        private readonly KustoExportQueue _exportQueue;
-        private readonly IDictionary<string, DbExportPipeline> _dbExportPipelineMap =
-            new Dictionary<string, DbExportPipeline>();
+        //private readonly KustoExportQueue _exportQueue;
+        private readonly IDictionary<string, DbPipelines> _dbPipelinesMap =
+            new Dictionary<string, DbPipelines>();
         private readonly MainParameterization _mainParameterization;
 
         private ClusterExportPipeline(
@@ -36,9 +47,9 @@ namespace KustoCopyServices
             _credential = credential;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
-            _exportQueue = new KustoExportQueue(
-                _kustoClient,
-                mainParameterization.Configuration.ExportSlotsRatio);
+            //_exportQueue = new KustoExportQueue(
+            //    _kustoClient,
+            //    mainParameterization.Configuration.ExportSlotsRatio);
             _mainParameterization = mainParameterization;
         }
 
@@ -63,44 +74,46 @@ namespace KustoCopyServices
 
         public async Task RunAsync()
         {
-            Trace.WriteLine("Synchronizing source cluster...");
             await SyncDbListAsync();
-            await Task.WhenAll(_dbExportPipelineMap.Values.Select(d => d.RunAsync()));
+            await Task.WhenAll(_dbPipelinesMap.Values.Select(d => d.RunAsync()));
         }
 
         private async Task SyncDbListAsync()
         {
             //  Fetch the database list from the cluster
             var nextDbNames = await _kustoClient.ExecuteCommandAsync(
+                KustoPriority.WildcardPriority,
                 string.Empty,
                 ".show databases | project DatabaseName",
                 r => (string)r["DatabaseName"]);
-            var currentDbNames = _dbExportPipelineMap.Keys.ToImmutableArray();
+            var currentDbNames = _dbPipelinesMap.Keys.ToImmutableArray();
             var obsoleteDbNames = currentDbNames.Except(nextDbNames);
             var newDbNames = nextDbNames.Except(currentDbNames);
             var configMap = _mainParameterization.Source!.DatabaseOverrides.ToImmutableDictionary(
                 o => o.Name);
 
+            if (newDbNames.Concat(obsoleteDbNames).Any())
+            {
+                Trace.WriteLine("Synchronizing source cluster...");
+            }
             foreach (var db in newDbNames)
             {
                 var dbConfig = _mainParameterization.DatabaseDefault.Override(
                     configMap.ContainsKey(db)
                     ? configMap[db]
                     : new DatabaseOverrideParameterization { Name = db });
-                var dbPipeline = await DbExportPipeline.CreateAsync(
+                var dbPipeline = await DbExportPlanPipeline.CreateAsync(
                     dbConfig,
                     _sourceFolderClient.GetSubDirectoryClient(db),
                     _credential,
-                    _kustoClient,
-                    _tempFolderService,
-                    _exportQueue);
+                    _kustoClient);
 
-                _dbExportPipelineMap.Add(dbPipeline.DbName, dbPipeline);
+                _dbPipelinesMap.Add(dbPipeline.DbName, dbPipeline);
             }
 
             foreach (var db in obsoleteDbNames)
             {
-                _dbExportPipelineMap.Remove(db);
+                _dbPipelinesMap.Remove(db);
             }
         }
     }

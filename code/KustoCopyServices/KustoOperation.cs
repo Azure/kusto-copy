@@ -2,8 +2,8 @@
 {
     public enum KustoOperation
     {
-        QueryOrCommand = 2,
-        Export = 0,
-        CheckExport = 1
+        TerminateExport = 0,
+        Export = 1,
+        QueryOrCommand = 2
     }
 }

@@ -24,13 +24,13 @@ namespace KustoCopyServices
 
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
-        private readonly KustoClient _kustoClient;
+        private readonly KustoQueuedClient _kustoClient;
         private readonly string _databaseName;
         private readonly SingletonExecution _singletonExecution = new SingletonExecution();
         private readonly ConcurrentDictionary<Guid, OperationState> _operations =
             new ConcurrentDictionary<Guid, OperationState>();
 
-        public KustoOperationAwaiter(KustoClient kustoClient, string databaseName)
+        public KustoOperationAwaiter(KustoQueuedClient kustoClient, string databaseName)
         {
             _kustoClient = kustoClient;
             _databaseName = databaseName;
@@ -58,6 +58,7 @@ namespace KustoCopyServices
 | where State != '{IN_PROGRESS_STATE}'";
                     var operationDetails = await _kustoClient
                         .ExecuteCommandAsync(
+                        KustoPriority.TerminateExportPriority,
                         _databaseName,
                         commandText,
                         r => new

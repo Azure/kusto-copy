@@ -17,6 +17,16 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="DbExportPipeline.cs" />
+	  <Compile Remove="KustoExportQueue.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="DbExportPipeline.cs" />
+	  <None Include="KustoExportQueue.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <PackageReference Include="Microsoft.Azure.Kusto.Data" Version="9.4.1" />
 	  <PackageReference Include="Polly" Version="7.2.2" />
 	</ItemGroup>

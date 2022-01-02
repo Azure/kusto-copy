@@ -10,20 +10,20 @@ namespace KustoCopyServices
     public class KustoPriority : IComparable<KustoPriority>
     {
         private readonly bool _isWildcard;
+        private readonly KustoOperation _operation;
         private readonly bool _isBackfill;
         private readonly DateTime _ingestionTime;
-        private readonly KustoOperation _operation;
 
-        public KustoPriority(bool isBackfill, DateTime ingestionTime, KustoOperation operation)
-            : this(false, isBackfill, ingestionTime, operation)
+        public KustoPriority(KustoOperation operation, bool isBackfill, DateTime ingestionTime)
+            : this(false, operation, isBackfill, ingestionTime)
         {
         }
 
         private KustoPriority(
             bool isWildCard,
+            KustoOperation operation,
             bool isBackfill,
-            DateTime ingestionTime,
-            KustoOperation operation)
+            DateTime ingestionTime)
         {
             _isWildcard = isWildCard;
             _isBackfill = isBackfill;
@@ -31,10 +31,11 @@ namespace KustoCopyServices
             _operation = operation;
         }
 
-        public static KustoPriority CreateNonPriority()
-        {
-            return new KustoPriority(true, false, DateTime.MinValue, KustoOperation.QueryOrCommand);
-        }
+        public static KustoPriority WildcardPriority { get; } =
+            new KustoPriority(true, KustoOperation.QueryOrCommand, false, DateTime.MinValue);
+
+        public static KustoPriority TerminateExportPriority { get; } =
+            new KustoPriority(true, KustoOperation.TerminateExport, false, DateTime.MinValue);
 
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
         {
@@ -59,7 +60,7 @@ namespace KustoCopyServices
             {
                 var operationCompare = _operation.CompareTo(other._operation);
 
-                if (operationCompare != 0)
+                if (operationCompare != 0 || _operation == KustoOperation.TerminateExport)
                 {
                     return operationCompare;
                 }
