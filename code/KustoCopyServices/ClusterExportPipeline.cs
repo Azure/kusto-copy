@@ -19,9 +19,9 @@ namespace KustoCopyServices
         #region MyRegion
         private class DbPipelines
         {
-            public DbPipelines(DbExportPlanPipeline dbExportPlanPipeline)
+            public DbPipelines(DbExportPlanPipeline dbExportPlan)
             {
-                DbExportPlan = dbExportPlanPipeline;
+                DbExportPlan = dbExportPlan;
             }
 
             public DbExportPlanPipeline DbExportPlan { get; }
@@ -75,7 +75,7 @@ namespace KustoCopyServices
         public async Task RunAsync()
         {
             await SyncDbListAsync();
-            await Task.WhenAll(_dbPipelinesMap.Values.Select(d => d.RunAsync()));
+            await Task.WhenAll(_dbPipelinesMap.Values.Select(d => d.DbExportPlan.RunAsync()));
         }
 
         private async Task SyncDbListAsync()
@@ -102,13 +102,15 @@ namespace KustoCopyServices
                     configMap.ContainsKey(db)
                     ? configMap[db]
                     : new DatabaseOverrideParameterization { Name = db });
-                var dbPipeline = await DbExportPlanPipeline.CreateAsync(
+                var dbExportPlan = await DbExportPlanPipeline.CreateAsync(
                     dbConfig,
                     _sourceFolderClient.GetSubDirectoryClient(db),
                     _credential,
                     _kustoClient);
 
-                _dbPipelinesMap.Add(dbPipeline.DbName, dbPipeline);
+                _dbPipelinesMap.Add(
+                    dbExportPlan.DbName,
+                    new DbPipelines(dbExportPlan));
             }
 
             foreach (var db in obsoleteDbNames)
