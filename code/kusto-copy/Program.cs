@@ -123,8 +123,11 @@ namespace kusto_copy
             {
                 parameterization.Source.ConcurrentQueryCount =
                     options.ConcurrentQueries.Value;
-                parameterization.Destinations.ForEach(
-                    d => d.ConcurrentQueryCount = options.ConcurrentQueries.Value);
+                if (parameterization.Destinations != null)
+                {
+                    parameterization.Destinations.ForEach(
+                        d => d.ConcurrentQueryCount = options.ConcurrentQueries.Value);
+                }
             }
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(

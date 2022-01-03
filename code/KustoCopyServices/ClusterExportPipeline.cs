@@ -27,6 +27,7 @@ namespace KustoCopyServices
             public DbExportPlanPipeline DbExportPlan { get; }
         }
         #endregion
+
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
         private readonly KustoQueuedClient _kustoClient;
@@ -102,15 +103,15 @@ namespace KustoCopyServices
                     configMap.ContainsKey(db)
                     ? configMap[db]
                     : new DatabaseOverrideParameterization { Name = db });
-                var dbExportPlan = await DbExportPlanPipeline.CreateAsync(
-                    dbConfig,
-                    _sourceFolderClient.GetSubDirectoryClient(db),
-                    _credential,
-                    _kustoClient);
+                var sourceFileClient = _sourceFolderClient
+                    .GetSubDirectoryClient(db)
+                    .GetFileClient("source-db.bookmark");
+                var dbExportBookmark = await DbExportBookmark.RetrieveAsync(
+                    sourceFileClient,
+                    _credential);
+                var dbExportPlan = new DbExportPlanPipeline(db, dbExportBookmark, _kustoClient);
 
-                _dbPipelinesMap.Add(
-                    dbExportPlan.DbName,
-                    new DbPipelines(dbExportPlan));
+                _dbPipelinesMap.Add(dbExportPlan.DbName, new DbPipelines(dbExportPlan));
             }
 
             foreach (var db in obsoleteDbNames)

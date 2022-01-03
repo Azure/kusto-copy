@@ -18,7 +18,7 @@ namespace KustoCopyBookmarks.Parameters
 
             return other != null
                 && object.Equals(ClusterQueryUri, other.ClusterQueryUri)
-                && object.Equals(DatabaseOverrides, other.DatabaseOverrides);
+                && DatabaseOverrides.SequenceEqual(other.DatabaseOverrides);
         }
 
         public override int GetHashCode()
