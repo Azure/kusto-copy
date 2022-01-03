@@ -26,8 +26,7 @@ namespace KustoCopyBookmarks.Export
         #endregion
 
         private readonly BookmarkGateway _bookmarkGateway;
-        private readonly ConcurrentDictionary<string, BookmarkBlockValue<DbEpochData>>
-            _endCursorToEpoch;
+        private readonly List<BookmarkBlockValue<DbEpochData>> _dbEpochs;
         //private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
         //    _backfillTableIterationMap;
         //private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
@@ -154,8 +153,7 @@ namespace KustoCopyBookmarks.Export
             IEnumerable<BookmarkBlockValue<EmptyTableExportEventData>> emptyTableExportEvents)
         {
             _bookmarkGateway = bookmarkGateway;
-            _endCursorToEpoch = new ConcurrentDictionary<string, BookmarkBlockValue<DbEpochData>>(
-                dbEpochs.Select(e => KeyValuePair.Create(e.Value.EndCursor, e)));
+            _dbEpochs = new List<BookmarkBlockValue<DbEpochData>>(dbEpochs);
 
             //var backfillTableIterations = tableIterations
             //    .Where(t => t.Value.EpochEndCursor == _backfillDbEpoch?.Value.EndCursor)
@@ -167,6 +165,81 @@ namespace KustoCopyBookmarks.Export
             //_backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
             //_forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
             //_emptyTableExportEvents = new ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>>(emptyTableExportEvents);
+        }
+
+        public DbEpochData? GetDbEpoch(bool isBackfill)
+        {
+            var value = GetDbEpochValue(isBackfill);
+
+            return value == null
+                ? null
+                : value.Value;
+        }
+
+        public async Task<DbEpochData> CreateNewEpochAsync(
+            bool isBackfill,
+            DateTime currentTime,
+            string cursor)
+        {
+            var existingEpoch = GetDbEpochValue(isBackfill);
+            var newEpoch = new DbEpochData
+            {
+                EndCursor = cursor,
+                EpochStartTime = currentTime
+            };
+
+            if (existingEpoch != null && !existingEpoch.Value.AllIterationsExported)
+            {
+                throw new InvalidOperationException("There already is an existing epoch");
+            }
+            if (existingEpoch != null && isBackfill)
+            {
+                throw new InvalidOperationException("There can be only one backfill epoch");
+            }
+            if (existingEpoch == null && !isBackfill)
+            {
+                var existingBackfillEpoch = GetDbEpochValue(true);
+
+                if (existingBackfillEpoch == null)
+                {
+                    throw new InvalidOperationException(
+                        "We can't have a forward epoch before a backfill epoch has been initiated");
+                }
+                else
+                {
+                    newEpoch.StartCursor = existingBackfillEpoch.Value.EndCursor;
+                }
+            }
+            var eventBuffer =
+                SerializationHelper.ToMemory(new ExportAggregate { DbEpoch = newEpoch });
+            var transaction = new BookmarkTransaction(
+                new[] { eventBuffer },
+                null,
+                existingEpoch != null ? new[] { existingEpoch.BlockId } : ImmutableArray<int>.Empty);
+            var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
+
+            lock (_dbEpochs)
+            {
+                if (existingEpoch != null)
+                {
+                    _dbEpochs.Remove(existingEpoch);
+                }
+                _dbEpochs.Add(new BookmarkBlockValue<DbEpochData>(
+                    result.AddedBlockIds.First(),
+                    newEpoch));
+
+                return newEpoch;
+            }
+        }
+
+        private BookmarkBlockValue<DbEpochData>? GetDbEpochValue(bool isBackfill)
+        {
+            lock (_dbEpochs)
+            {
+                return _dbEpochs
+                    .Where(e => e.Value.IsBackfill == isBackfill)
+                    .FirstOrDefault();
+            }
         }
     }
 }

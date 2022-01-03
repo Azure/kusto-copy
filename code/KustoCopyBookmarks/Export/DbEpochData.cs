@@ -17,5 +17,7 @@ namespace KustoCopyBookmarks.Export
         public string EndCursor { get; set; } = string.Empty;
 
         public bool AllIterationsPlanned { get; set; } = false;
+        
+        public bool AllIterationsExported { get; set; } = false;
     }
 }

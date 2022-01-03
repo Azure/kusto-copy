@@ -61,11 +61,42 @@ namespace KustoCopyServices
 
         public async Task RunAsync()
         {
-            await ValueTask.CompletedTask;
-            //var backfillTask = CopyAsync(true);
+            var backfillTask = PlanAsync(true);
             //var currentTask = OrchestrateForwardCopyAsync();
 
             //await Task.WhenAll(backfillTask, currentTask);
+            await backfillTask;
+        }
+
+        private async Task PlanAsync(bool isBackfill)
+        {
+            var dbEpoch = await GetOrCreateDbEpochAsync(isBackfill);
+        }
+
+        private async Task<DbEpochData> GetOrCreateDbEpochAsync(bool isBackfill)
+        {
+            var dbEpoch = _dbExportBookmark.GetDbEpoch(isBackfill);
+
+            if (dbEpoch == null)
+            {   //  Create epoch
+                var epochInfos = await _kustoClient.ExecuteQueryAsync(
+                    KustoPriority.WildcardPriority,
+                    DbName,
+                    "print CurrentTime=now(), Cursor=cursor_current()",
+                    r => new
+                    {
+                        CurrentTime = (DateTime)r["CurrentTime"],
+                        Cursor = (string)r["Cursor"]
+                    });
+                var epochInfo = epochInfos.First();
+
+                dbEpoch = await _dbExportBookmark.CreateNewEpochAsync(
+                    isBackfill,
+                    epochInfo.CurrentTime,
+                    epochInfo.Cursor);
+            }
+
+            return dbEpoch;
         }
     }
 }
