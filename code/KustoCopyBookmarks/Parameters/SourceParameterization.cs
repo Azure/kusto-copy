@@ -6,7 +6,9 @@ namespace KustoCopyBookmarks.Parameters
     {
         public string? ClusterQueryUri { get; set; }
 
-        public int ConcurrentQueryCount { get; set; } = 2;
+        public int ConcurrentQueryCount { get; set; } = 1;
+        
+        public int ConcurrentControlCommandCount { get; set; } = 1;
 
         public IImmutableList<DatabaseOverrideParameterization> DatabaseOverrides { get; set; } =
             ImmutableArray<DatabaseOverrideParameterization>.Empty;

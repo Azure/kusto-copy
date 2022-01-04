@@ -9,11 +9,6 @@ namespace KustoCopyServices
 {
     public class KustoPriority : IComparable<KustoPriority>
     {
-        private readonly bool _isWildcard;
-        private readonly KustoOperation _operation;
-        private readonly bool _isBackfill;
-        private readonly DateTime _ingestionTime;
-
         public KustoPriority(KustoOperation operation, bool isBackfill, DateTime ingestionTime)
             : this(false, operation, isBackfill, ingestionTime)
         {
@@ -25,10 +20,10 @@ namespace KustoCopyServices
             bool isBackfill,
             DateTime ingestionTime)
         {
-            _isWildcard = isWildCard;
-            _isBackfill = isBackfill;
-            _ingestionTime = ingestionTime;
-            _operation = operation;
+            IsWildcard = isWildCard;
+            IsBackfill = isBackfill;
+            IngestionTime = ingestionTime;
+            Operation = operation;
         }
 
         public static KustoPriority WildcardPriority { get; } =
@@ -37,6 +32,14 @@ namespace KustoCopyServices
         public static KustoPriority TerminateExportPriority { get; } =
             new KustoPriority(true, KustoOperation.TerminateExport, false, DateTime.MinValue);
 
+        public bool IsWildcard { get; }
+        
+        public KustoOperation Operation { get; }
+        
+        public bool IsBackfill { get; }
+        
+        public DateTime IngestionTime { get; }
+
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
         {
             if (other == null)
@@ -44,37 +47,37 @@ namespace KustoCopyServices
                 throw new ArgumentNullException(nameof(other));
             }
 
-            if (_isWildcard && other._isWildcard)
+            if (IsWildcard && other.IsWildcard)
             {
                 return 0;
             }
-            else if (_isWildcard && !other._isWildcard)
+            else if (IsWildcard && !other.IsWildcard)
             {
                 return -1;
             }
-            else if (!_isWildcard && other._isWildcard)
+            else if (!IsWildcard && other.IsWildcard)
             {
                 return 1;
             }
             else
             {
-                var operationCompare = _operation.CompareTo(other._operation);
+                var operationCompare = Operation.CompareTo(other.Operation);
 
-                if (operationCompare != 0 || _operation == KustoOperation.TerminateExport)
+                if (operationCompare != 0 || Operation == KustoOperation.TerminateExport)
                 {
                     return operationCompare;
                 }
-                else if (_isBackfill && !other._isBackfill)
+                else if (IsBackfill && !other.IsBackfill)
                 {
                     return 1;
                 }
-                else if (!_isBackfill && other._isBackfill)
+                else if (!IsBackfill && other.IsBackfill)
                 {
                     return -1;
                 }
                 else
                 {
-                    return -_ingestionTime.CompareTo(other._ingestionTime);
+                    return -IngestionTime.CompareTo(other.IngestionTime);
                 }
             }
         }

@@ -137,7 +137,8 @@ namespace kusto_copy
 
                 var sourceKustoClient = new KustoQueuedClient(
                     parameterization.Source!.ClusterQueryUri!,
-                    parameterization.Source!.ConcurrentQueryCount);
+                    parameterization.Source!.ConcurrentQueryCount,
+                    parameterization.Source!.ConcurrentControlCommandCount);
                 var exportPipeline = await ClusterExportPipeline.CreateAsync(
                     folderClient,
                     credential,

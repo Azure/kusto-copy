@@ -16,15 +16,22 @@ namespace KustoCopyServices
         #region Inner types
         private class InnerConfiguration
         {
-            public InnerConfiguration(string clusterQueryUrl, int concurrentQueryCount)
+            public InnerConfiguration(
+                string clusterQueryUrl,
+                int concurrentQueryCount,
+                int concurrentControlCommandCount)
             {
                 Client = new KustoClient(clusterQueryUrl);
-                ExecutionQueue = new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
+                QueryExecutionQueue =
+                    new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
+                ControlCommandExecutionQueue = new ExecutionQueue(concurrentControlCommandCount);
             }
 
             public KustoClient Client { get; }
 
-            public PriorityExecutionQueue<KustoPriority> ExecutionQueue { get; }
+            public PriorityExecutionQueue<KustoPriority> QueryExecutionQueue { get; }
+
+            public ExecutionQueue ControlCommandExecutionQueue { get; }
         }
         #endregion
 
@@ -33,9 +40,15 @@ namespace KustoCopyServices
         private readonly InnerConfiguration _config;
         private readonly ClientRequestProperties _properties;
 
-        public KustoQueuedClient(string clusterQueryUrl, int concurrentQueryCount)
+        public KustoQueuedClient(
+            string clusterQueryUrl,
+            int concurrentQueryCount,
+            int concurrentControlCommandCount)
         {
-            _config = new InnerConfiguration(clusterQueryUrl, concurrentQueryCount);
+            _config = new InnerConfiguration(
+                clusterQueryUrl,
+                concurrentQueryCount,
+                concurrentControlCommandCount);
             _properties = new ClientRequestProperties();
         }
 
@@ -74,12 +87,24 @@ namespace KustoCopyServices
             string command,
             Func<IDataRecord, T> projection)
         {
-            return await _config.ExecutionQueue.RequestRunAsync(priority, async () =>
+            if (priority.Operation == KustoOperation.QueryOrCommand)
             {
-                return await _config
-                .Client
-                .ExecuteCommandAsync(database, command, projection);
-            });
+                return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+                {
+                    return await _config
+                    .Client
+                    .ExecuteCommandAsync(database, command, projection);
+                });
+            }
+            else
+            {
+                return await _config.ControlCommandExecutionQueue.RequestRunAsync(async () =>
+                {
+                    return await _config
+                    .Client
+                    .ExecuteCommandAsync(database, command, projection);
+                });
+            }
         }
 
         public async Task<ImmutableArray<T>> ExecuteQueryAsync<T>(
@@ -88,7 +113,7 @@ namespace KustoCopyServices
             string query,
             Func<IDataRecord, T> projection)
         {
-            return await _config.ExecutionQueue.RequestRunAsync(priority, async () =>
+            return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
             {
                 return await _config
                 .Client
@@ -103,7 +128,7 @@ namespace KustoCopyServices
             Func<IDataRecord, T> projection1,
             Func<IDataRecord, U> projection2)
         {
-            return await _config.ExecutionQueue.RequestRunAsync(priority, async () =>
+            return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
             {
                 return await _config
                 .Client
