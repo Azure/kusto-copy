@@ -71,7 +71,7 @@ namespace KustoCopyServices
         private async Task PlanAsync(bool isBackfill)
         {
             var dbEpoch = await GetOrCreateDbEpochAsync(isBackfill);
-            var iterations = _dbExportBookmark.GetIterations(dbEpoch.EndCursor);
+            var dbIterations = _dbExportBookmark.GetDbIterations(dbEpoch.EndCursor);
 
             while (!dbEpoch.AllIterationsPlanned)
             {

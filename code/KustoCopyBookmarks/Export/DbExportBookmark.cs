@@ -238,7 +238,7 @@ namespace KustoCopyBookmarks.Export
             }
         }
 
-        public IImmutableList<DbIterationData> GetIterations(string endCursor)
+        public IImmutableList<DbIterationData> GetDbIterations(string endCursor)
         {
             var iterations = _dbIterations
                 .Select(i => i.Value)
