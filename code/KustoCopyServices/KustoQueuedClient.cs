@@ -19,19 +19,19 @@ namespace KustoCopyServices
             public InnerConfiguration(
                 string clusterQueryUrl,
                 int concurrentQueryCount,
-                int concurrentControlCommandCount)
+                int concurrentExportCommandCount)
             {
                 Client = new KustoClient(clusterQueryUrl);
                 QueryExecutionQueue =
                     new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
-                ControlCommandExecutionQueue = new ExecutionQueue(concurrentControlCommandCount);
+                ExportCommandExecutionQueue = new ExecutionQueue(concurrentExportCommandCount);
             }
 
             public KustoClient Client { get; }
 
             public PriorityExecutionQueue<KustoPriority> QueryExecutionQueue { get; }
 
-            public ExecutionQueue ControlCommandExecutionQueue { get; }
+            public ExecutionQueue ExportCommandExecutionQueue { get; }
         }
         #endregion
 
@@ -43,12 +43,12 @@ namespace KustoCopyServices
         public KustoQueuedClient(
             string clusterQueryUrl,
             int concurrentQueryCount,
-            int concurrentControlCommandCount)
+            int concurrentExportCommandCount)
         {
             _config = new InnerConfiguration(
                 clusterQueryUrl,
                 concurrentQueryCount,
-                concurrentControlCommandCount);
+                concurrentExportCommandCount);
             _properties = new ClientRequestProperties();
         }
 
@@ -98,7 +98,7 @@ namespace KustoCopyServices
             }
             else
             {
-                return await _config.ControlCommandExecutionQueue.RequestRunAsync(async () =>
+                return await _config.ExportCommandExecutionQueue.RequestRunAsync(async () =>
                 {
                     return await _config
                     .Client

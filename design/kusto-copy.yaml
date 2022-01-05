@@ -1,6 +1,7 @@
 source:
     clusterQueryUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
-    concurrentQueryCount:  2    #   Number of queries / commands sent in parallel to a given cluster
+    concurrentQueryCount:  1    #   Number of queries / commands sent in parallel to a given cluster
+    concurrentExportCommandCount:  2    #   Number of export commands sent in parallel to a given cluster
     includeDatabases:   #   Optional ; by default every dbs are included
     - db1
     - db2

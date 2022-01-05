@@ -91,6 +91,13 @@ namespace KustoCopyServices
             var tableIntervals = tableIntervalTasks
                 .Select(t => t.Result)
                 .ToImmutableArray();
+            var dbIteration = new DbIterationData
+            {
+                EpochEndCursor = dbEpoch.EndCursor,
+                Iteration = lastDbIteration != null ? lastDbIteration.Iteration + 1 : 0,
+                MinIngestionTime = tableIntervals.Select(i => i.MinIngestionTime).Min(),
+                MaxIngestionTime = tableIntervals.Select(i => i.MaxIngestionTime).Max()
+            };
 
             throw new NotImplementedException();
         }

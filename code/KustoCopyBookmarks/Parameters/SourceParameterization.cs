@@ -8,7 +8,7 @@ namespace KustoCopyBookmarks.Parameters
 
         public int ConcurrentQueryCount { get; set; } = 1;
         
-        public int ConcurrentControlCommandCount { get; set; } = 1;
+        public int ConcurrentExportCommandCount { get; set; } = 2;
 
         public IImmutableList<DatabaseOverrideParameterization> DatabaseOverrides { get; set; } =
             ImmutableArray<DatabaseOverrideParameterization>.Empty;
