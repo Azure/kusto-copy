@@ -36,7 +36,7 @@ namespace KustoCopyBookmarks.Export
             DataLakeFileClient fileClient,
             TokenCredential credential)
         {
-            var bookmarkGateway = new BookmarkGateway(fileClient, credential, false);
+            var bookmarkGateway = await BookmarkGateway.CreateAsync(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
             var epochs = aggregates
                 .Where(a => a.Value.DbEpoch != null);
