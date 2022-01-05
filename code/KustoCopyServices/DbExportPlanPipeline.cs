@@ -7,6 +7,7 @@ using KustoCopyBookmarks.Export;
 using KustoCopyBookmarks.Parameters;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Runtime.Intrinsics.Arm;
 
 namespace KustoCopyServices
 {
@@ -20,6 +21,20 @@ namespace KustoCopyServices
             public DateTime? MinIngestionTime { get; set; } = null;
 
             public DateTime? MaxIngestionTime { get; set; } = null;
+        }
+
+        private class IngestionSchedule
+        {
+            public DateTime IngestionTime { get; set; } = DateTime.MinValue;
+
+            public Guid ExtentId { get; set; } = Guid.Empty;
+        }
+
+        private class ExtentConfiguration
+        {
+            public Guid ExtentId { get; set; } = Guid.Empty;
+
+            public DateTime MinCreatedOn { get; set; } = DateTime.MinValue;
         }
         #endregion
 
@@ -55,12 +70,14 @@ namespace KustoCopyServices
         private async Task PlanAsync(bool isBackfill)
         {
             var dbEpoch = await GetOrCreateDbEpochAsync(isBackfill);
-            var dbIterations = _dbExportBookmark.GetDbIterations(dbEpoch.EndCursor);
+            var lastDbIteration =
+                _dbExportBookmark.GetDbIterations(dbEpoch.EndCursor).LastOrDefault();
             var tableNames = await FetchTableNamesAsync(isBackfill, dbEpoch.EpochStartTime);
 
             while (!dbEpoch.AllIterationsPlanned)
             {
-                await PlanDbIterationAsync(dbEpoch, dbIterations.LastOrDefault(), tableNames);
+                lastDbIteration =
+                    await PlanDbIterationAsync(dbEpoch, lastDbIteration, tableNames);
             }
         }
 
@@ -99,7 +116,7 @@ namespace KustoCopyServices
                 MaxIngestionTime = tableIntervals.Select(i => i.MaxIngestionTime).Max()
             };
             var tableExportPlanTasks = tableNames
-                .Select(t => ComputeExportPlanAsync(dbIteration, t))
+                .Select(t => ConstructExportPlanAsync(dbEpoch, dbIteration, t))
                 .ToImmutableList();
 
             await Task.WhenAll(tableExportPlanTasks);
@@ -108,18 +125,128 @@ namespace KustoCopyServices
                 .Select(t => t.Result)
                 .ToImmutableArray();
 
-            throw new NotImplementedException();
+            await _dbExportBookmark.CreateNewDbIterationAsync(dbEpoch, dbIteration, tableExportPlans);
 
-            //return dbIteration;
+            return dbIteration;
         }
 
-        private async Task<TableExportPlanData> ComputeExportPlanAsync(
+        private async Task<TableExportPlanData> ConstructExportPlanAsync(
+            DbEpochData dbEpoch,
             DbIterationData dbIteration,
             string tableName)
         {
-            await ValueTask.CompletedTask;
+            var priority = new KustoPriority(
+                KustoOperation.QueryOrCommand,
+                dbEpoch.IsBackfill,
+                dbIteration.MinIngestionTime
+                ?? (dbIteration.MaxIngestionTime ?? dbEpoch.EpochStartTime));
+            var ingestionTimes =
+                await FetchIngestionSchedulesAsync(dbEpoch, dbIteration, priority, tableName);
 
-            throw new NotImplementedException();
+            if (ingestionTimes.Any())
+            {
+                var extentIds = ingestionTimes.Select(i => i.ExtentId).Distinct().ToImmutableArray();
+                var extents = await FetchExtentsAsync(tableName, extentIds, priority);
+
+                if (extentIds.Count() != extentIds.Count())
+                {   //  Possible if extents got dropped or merged between query & show-command
+                    //  Fix is simply to re-fetch
+                    return await ConstructExportPlanAsync(
+                        dbEpoch,
+                        dbIteration,
+                        tableName);
+                }
+                else
+                {
+                    var extentMap = extents.ToDictionary(e => e.ExtentId, e => e.MinCreatedOn);
+                    var steps = ingestionTimes
+                        .GroupBy(i => i.ExtentId)
+                        .Select(g => new TableExportStepData
+                        {
+                            IngestionTimes = g.Select(i => i.IngestionTime).ToImmutableArray(),
+                            OverrideIngestionTime = extentMap[g.Key]
+                        })
+                        .ToImmutableArray();
+                    var plan = new TableExportPlanData
+                    {
+                        EpochEndCursor = dbIteration.EpochEndCursor,
+                        TableName = tableName,
+                        Steps = steps
+                    };
+
+                    return plan;
+                }
+            }
+            else
+            {   //  Empty iteration for this table
+                return new TableExportPlanData
+                {
+                    EpochEndCursor = dbIteration.EpochEndCursor,
+                    TableName = tableName
+                };
+            }
+        }
+
+        private async Task<IImmutableList<ExtentConfiguration>> FetchExtentsAsync(
+            string tableName,
+            IEnumerable<Guid> extentIds,
+            KustoPriority priority)
+        {
+            var extentIdList = string.Join(", ", extentIds);
+            var commandText = @$"
+.show table ['{tableName}'] extents ({extentIdList})
+| project ExtentId, MinCreatedOn
+";
+            var extents = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .ExecuteCommandAsync(
+                priority,
+                DbName,
+                commandText,
+                r => new ExtentConfiguration
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    MinCreatedOn = (DateTime)r["MinCreatedOn"]
+                });
+
+            return extents;
+        }
+
+        private async Task<ImmutableArray<IngestionSchedule>> FetchIngestionSchedulesAsync(
+            DbEpochData dbEpoch,
+            DbIterationData dbIteration,
+            KustoPriority priority,
+            string tableName)
+        {
+            var schedules = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .SetParameter("MinIngestionTime", dbIteration.MinIngestionTime ?? DateTime.MinValue)
+                .SetParameter("MaxIngestionTime", dbIteration.MaxIngestionTime ?? DateTime.MaxValue)
+                .SetParameter("StartCursor", dbEpoch.StartCursor ?? string.Empty)
+                .SetParameter("EndCursor", dbEpoch.EndCursor)
+                .ExecuteQueryAsync(
+                priority,
+                DbName,
+                @"
+declare query_parameters(TargetTableName: string);
+declare query_parameters(MinIngestionTime: datetime);
+declare query_parameters(MaxIngestionTime: datetime);
+declare query_parameters(StartCursor: string);
+declare query_parameters(EndCursor: string);
+table(TargetTableName)
+| where cursor_before_or_at(EndCursor)
+| where cursor_after(StartCursor)
+| where ingestion_time() >= MinIngestionTime
+| where ingestion_time() <= MaxIngestionTime
+| summarize by IngestionTime=ingestion_time(), ExtentId=extent_id()
+| order by IngestionTime asc",
+                r => new IngestionSchedule
+                {
+                    IngestionTime = (DateTime)r["IngestionTime"],
+                    ExtentId = (Guid)r["ExtentId"]
+                });
+
+            return schedules;
         }
 
         private async Task<TableInterval> FetchTableIntervalAsync(
@@ -132,7 +259,10 @@ namespace KustoCopyServices
                 .SetParameter("StartCursor", dbEpoch.StartCursor ?? string.Empty)
                 .SetParameter("EndCursor", dbEpoch.EndCursor)
                 .ExecuteQueryAsync(
-                KustoPriority.WildcardPriority,
+                new KustoPriority(
+                    KustoOperation.QueryOrCommand,
+                    dbEpoch.IsBackfill,
+                    dbEpoch.EpochStartTime),
                 DbName,
                 @"
 declare query_parameters(TargetTable: string);
