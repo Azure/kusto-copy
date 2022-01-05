@@ -14,7 +14,7 @@ namespace KustoCopyBookmarks.Parameters
 
         public bool? IsEnabled { get; set; } = null;
 
-        public int? MaxRowsPerTablePerIteration { get; set; } = null;
+        public long? MaxRowsPerTablePerIteration { get; set; } = null;
 
         #region Object methods
         public override bool Equals(object? obj)
