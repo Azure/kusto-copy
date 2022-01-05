@@ -17,10 +17,7 @@ namespace KustoCopyBookmarks.Export
 
         public string TableName { get; set; } = string.Empty;
 
-        /// <summary>If this collection is empty, this means the table was empty for this iteration.</summary>
-        public IImmutableList<DateTime> IngestionTimes { get; set; } = ImmutableArray<DateTime>.Empty;
-
-        /// <summary>Meaningful only if <see cref="IngestionTimes"/> is non-empty.</summary>
-        public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
+        public IImmutableList<TableExportStepData> Steps { get; set; } =
+            ImmutableArray<TableExportStepData>.Empty;
     }
 }

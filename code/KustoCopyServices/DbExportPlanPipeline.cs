@@ -98,6 +98,26 @@ namespace KustoCopyServices
                 MinIngestionTime = tableIntervals.Select(i => i.MinIngestionTime).Min(),
                 MaxIngestionTime = tableIntervals.Select(i => i.MaxIngestionTime).Max()
             };
+            var tableExportPlanTasks = tableNames
+                .Select(t => ComputeExportPlanAsync(dbIteration, t))
+                .ToImmutableList();
+
+            await Task.WhenAll(tableExportPlanTasks);
+
+            var tableExportPlans = tableExportPlanTasks
+                .Select(t => t.Result)
+                .ToImmutableArray();
+
+            throw new NotImplementedException();
+
+            //return dbIteration;
+        }
+
+        private async Task<TableExportPlanData> ComputeExportPlanAsync(
+            DbIterationData dbIteration,
+            string tableName)
+        {
+            await ValueTask.CompletedTask;
 
             throw new NotImplementedException();
         }
