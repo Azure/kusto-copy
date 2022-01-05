@@ -17,6 +17,8 @@ namespace KustoCopyBookmarks.Export
         {
             public DbEpochData? DbEpoch { get; set; }
 
+            public DbIterationData? DbIteration { get; set; }
+
             public TableIterationData? TableIteration { get; set; }
 
             public EmptyTableExportEventData? EmptyTableExportEvent { get; set; }
@@ -27,6 +29,7 @@ namespace KustoCopyBookmarks.Export
 
         private readonly BookmarkGateway _bookmarkGateway;
         private readonly List<BookmarkBlockValue<DbEpochData>> _dbEpochs;
+        private readonly List<BookmarkBlockValue<DbIterationData>> _dbIterations;
         //private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
         //    _backfillTableIterationMap;
         //private ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>
@@ -41,6 +44,8 @@ namespace KustoCopyBookmarks.Export
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
             var epochs = aggregates
                 .Where(a => a.Value.DbEpoch != null);
+            var dbIterations = aggregates
+                .Where(a => a.Value.DbIteration != null);
             var tableIterations = aggregates
                 .Where(a => a.Value.TableIteration != null);
             var emptyTableExportEvents = aggregates
@@ -55,7 +60,7 @@ namespace KustoCopyBookmarks.Export
             return new DbExportBookmark(
                 bookmarkGateway,
                 epochs.Select(b => b.Project(a => a.DbEpoch!)),
-                tableIterations.Select(b => b.Project(a => a.TableIteration!)),
+                dbIterations.Select(b => b.Project(a => a.DbIteration!)),
                 emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
         }
 
@@ -149,11 +154,12 @@ namespace KustoCopyBookmarks.Export
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
             IEnumerable<BookmarkBlockValue<DbEpochData>> dbEpochs,
-            IEnumerable<BookmarkBlockValue<TableIterationData>> tableIterations,
+            IEnumerable<BookmarkBlockValue<DbIterationData>> dbIterations,
             IEnumerable<BookmarkBlockValue<EmptyTableExportEventData>> emptyTableExportEvents)
         {
             _bookmarkGateway = bookmarkGateway;
             _dbEpochs = new List<BookmarkBlockValue<DbEpochData>>(dbEpochs);
+            _dbIterations = new List<BookmarkBlockValue<DbIterationData>>(dbIterations);
 
             //var backfillTableIterations = tableIterations
             //    .Where(t => t.Value.EpochEndCursor == _backfillDbEpoch?.Value.EndCursor)
@@ -230,6 +236,16 @@ namespace KustoCopyBookmarks.Export
 
                 return newEpoch;
             }
+        }
+
+        public IImmutableList<DbIterationData> GetIterations(string endCursor)
+        {
+            var iterations = _dbIterations
+                .Select(i => i.Value)
+                .Where(i => i.EpochEndCursor == endCursor)
+                .ToImmutableArray();
+
+            return iterations;
         }
 
         private BookmarkBlockValue<DbEpochData>? GetDbEpochValue(bool isBackfill)
