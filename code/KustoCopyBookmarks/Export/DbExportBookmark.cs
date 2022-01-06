@@ -13,6 +13,25 @@ namespace KustoCopyBookmarks.Export
     public class DbExportBookmark
     {
         #region Inner Types
+        public class DbIterationEventArgs : EventArgs
+        {
+            public DbIterationEventArgs(
+                DbEpochData dbEpoch,
+                DbIterationData dbIteration,
+                IEnumerable<TableExportPlanData> tablePlans)
+            {
+                DbEpoch = dbEpoch;
+                DbIteration = dbIteration;
+                TablePlans = tablePlans.ToImmutableArray();
+            }
+
+            public DbEpochData DbEpoch { get; }
+            
+            public DbIterationData DbIteration { get; }
+            
+            public IImmutableList<TableExportPlanData> TablePlans { get; }
+        }
+
         private class ExportAggregate
         {
             public DbEpochData? DbEpoch { get; set; }
@@ -31,6 +50,8 @@ namespace KustoCopyBookmarks.Export
         private readonly List<BookmarkBlockValue<DbEpochData>> _dbEpochs;
         private readonly List<BookmarkBlockValue<DbIterationData>> _dbIterations;
         private readonly List<BookmarkBlockValue<TableExportPlanData>> _tableExportPlan;
+
+        public event EventHandler<DbIterationEventArgs>? NewDbIteration;
 
         public static async Task<DbExportBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
@@ -61,93 +82,6 @@ namespace KustoCopyBookmarks.Export
                 emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
         }
 
-        //public async Task<IImmutableList<string>> ProcessEmptyTableAsync(
-        //    bool isBackfill,
-        //    Func<IEnumerable<string>, Task<IEnumerable<TableSchemaData>>> fetchSchemasAsync)
-        //{
-        //    var map = isBackfill ? _backfillTableIterationMap : _forwardTableIterationMap;
-        //    var dbIteration = isBackfill
-        //        ? _backfillDbEpoch!.Value
-        //        : _backfillDbEpoch!.Value;
-        //    var emptyTableNames = map
-        //        .Values
-        //        .Select(t => t.Value)
-        //        .Where(t => t.MinRemainingIngestionTime == null)
-        //        .Select(t => t.TableName)
-        //        .ToImmutableArray();
-        //    var emptyTableIds = emptyTableNames
-        //        .Select(n => map[n].BlockId);
-        //    var schemas = await fetchSchemasAsync(emptyTableNames);
-        //    var events = schemas
-        //        .Zip(emptyTableNames, (s, n) => new { Schema = s, TableName = n })
-        //        .Select(p => new EmptyTableExportEventData
-        //        {
-        //            EpochEndCursor = dbIteration.EndCursor,
-        //            TableName = p.TableName,
-        //            Schema = p.Schema
-        //        });
-        //    var eventBuffers = events
-        //        .Select(e => SerializationHelper.ToMemory(
-        //            new ExportAggregate { EmptyTableExportEvent = e }));
-        //    var transaction = new BookmarkTransaction(eventBuffers, null, emptyTableIds);
-        //    //  Persist to blob
-        //    var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
-        //    var eventValues = events
-        //        .Zip(
-        //        result.AddedBlockIds,
-        //        (e, id) => new BookmarkBlockValue<EmptyTableExportEventData>(id, e));
-
-        //    //  Persist to memory
-        //    foreach (var tableName in emptyTableNames)
-        //    {
-        //        if (!map.TryRemove(tableName, out _))
-        //        {
-        //            throw new InvalidOperationException(
-        //                $"Can't remove table '{tableName}' in memory with backfill={isBackfill}");
-        //        }
-        //    }
-        //    foreach (var eventValue in eventValues)
-        //    {
-        //        _emptyTableExportEvents.Enqueue(eventValue);
-        //    }
-
-        //    return emptyTableNames;
-        //}
-
-        //public IImmutableList<string> GetNextDayTables(bool isBackfill)
-        //{
-        //    if (isBackfill)
-        //    {
-        //        var nextDay = _backfillTableIterationMap.Values
-        //            .Select(i => i.Value.MaxRemainingIngestionTime)
-        //            .Where(d => d != null)
-        //            .Cast<DateTime>()
-        //            .Aggregate(
-        //            (DateTime?)null,
-        //            (dMax, d) => dMax == null ? d : (d > dMax ? d : dMax));
-
-        //        if (nextDay == null)
-        //        {
-        //            return ImmutableArray<string>.Empty;
-        //        }
-        //        else
-        //        {
-        //            var nextDayDate = nextDay.Value.Date;
-        //            var tableNames = _backfillTableIterationMap.Values
-        //                .Select(b => b.Value)
-        //                .Where(i => i.MaxRemainingIngestionTime != null
-        //                && i.MaxRemainingIngestionTime.Value.Date == nextDayDate)
-        //                .Select(i => i.TableName);
-
-        //            return tableNames.ToImmutableArray();
-        //        }
-        //    }
-        //    else
-        //    {
-        //        throw new NotImplementedException();
-        //    }
-        //}
-
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
             IEnumerable<BookmarkBlockValue<DbEpochData>> dbEpochs,
@@ -170,6 +104,17 @@ namespace KustoCopyBookmarks.Export
             //_backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
             //_forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
             //_emptyTableExportEvents = new ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>>(emptyTableExportEvents);
+        }
+
+        public IImmutableList<DbEpochData> GetAllDbEpochs()
+        {
+            lock (_dbEpochs)
+            {
+                return _dbEpochs
+                    .Select(e => e.Value)
+                    .Where(e => !e.AllIterationsExported)
+                    .ToImmutableArray();
+            }
         }
 
         public DbEpochData? GetDbEpoch(bool isBackfill)
@@ -237,6 +182,33 @@ namespace KustoCopyBookmarks.Export
             }
         }
 
+        public IImmutableList<DbIterationData> GetDbIterations(string endCursor)
+        {
+            lock (_dbIterations)
+            {
+                var iterations = _dbIterations
+                    .Select(i => i.Value)
+                    .Where(i => i.EpochEndCursor == endCursor)
+                    .ToImmutableArray();
+
+                return iterations;
+            }
+        }
+
+        public IImmutableList<TableExportPlanData> GetTableExportPlans(
+            string endCursor,
+            int iteration)
+        {
+            lock (_tableExportPlan)
+            {
+                return _tableExportPlan
+                    .Select(p => p.Value)
+                    .Where(p => p.EpochEndCursor == endCursor)
+                    .Where(p => p.Iteration == iteration)
+                    .ToImmutableArray();
+            }
+        }
+
         public async Task CreateNewDbIterationAsync(
             DbEpochData dbEpoch,
             DbIterationData dbIteration,
@@ -294,19 +266,7 @@ namespace KustoCopyBookmarks.Export
             {
                 _tableExportPlan.AddRange(tableExportPlanValues);
             }
-        }
-
-        public IImmutableList<DbIterationData> GetDbIterations(string endCursor)
-        {
-            lock (_dbIterations)
-            {
-                var iterations = _dbIterations
-                    .Select(i => i.Value)
-                    .Where(i => i.EpochEndCursor == endCursor)
-                    .ToImmutableArray();
-
-                return iterations;
-            }
+            OnNewDbIteration(new DbIterationEventArgs(dbEpoch, dbIteration, tableExportPlans));
         }
 
         private BookmarkBlockValue<DbEpochData>? GetDbEpochValue(bool isBackfill)
@@ -316,6 +276,14 @@ namespace KustoCopyBookmarks.Export
                 return _dbEpochs
                     .Where(e => e.Value.IsBackfill == isBackfill)
                     .FirstOrDefault();
+            }
+        }
+
+        private void OnNewDbIteration(DbIterationEventArgs eventArgs)
+        {
+            if (NewDbIteration != null)
+            {
+                NewDbIteration(this, eventArgs);
             }
         }
     }

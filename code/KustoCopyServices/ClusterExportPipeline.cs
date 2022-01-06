@@ -19,12 +19,17 @@ namespace KustoCopyServices
         #region MyRegion
         private class DbPipelines
         {
-            public DbPipelines(DbExportPlanPipeline dbExportPlan)
+            public DbPipelines(
+                DbExportPlanPipeline dbExportPlan,
+                DbExportExecutionPipeline dbExportExecution)
             {
                 DbExportPlan = dbExportPlan;
+                DbExportExecution = dbExportExecution;
             }
 
             public DbExportPlanPipeline DbExportPlan { get; }
+            
+            public DbExportExecutionPipeline DbExportExecution { get; }
         }
         #endregion
 
@@ -32,7 +37,6 @@ namespace KustoCopyServices
         private readonly TokenCredential _credential;
         private readonly KustoQueuedClient _kustoClient;
         private readonly TempFolderService _tempFolderService;
-        //private readonly KustoExportQueue _exportQueue;
         private readonly IDictionary<string, DbPipelines> _dbPipelinesMap =
             new Dictionary<string, DbPipelines>();
         private readonly MainParameterization _mainParameterization;
@@ -48,9 +52,6 @@ namespace KustoCopyServices
             _credential = credential;
             _kustoClient = kustoClient;
             _tempFolderService = tempFolderService;
-            //_exportQueue = new KustoExportQueue(
-            //    _kustoClient,
-            //    mainParameterization.Configuration.ExportSlotsRatio);
             _mainParameterization = mainParameterization;
         }
 
@@ -76,7 +77,12 @@ namespace KustoCopyServices
         public async Task RunAsync()
         {
             await SyncDbListAsync();
-            await Task.WhenAll(_dbPipelinesMap.Values.Select(d => d.DbExportPlan.RunAsync()));
+
+            var planTasks = _dbPipelinesMap.Values.Select(d => d.DbExportPlan.RunAsync());
+            var executionTasks =
+                _dbPipelinesMap.Values.Select(d => d.DbExportExecution.RunAsync());
+
+            await Task.WhenAll(planTasks.Concat(executionTasks));
         }
 
         private async Task SyncDbListAsync()
@@ -105,7 +111,7 @@ namespace KustoCopyServices
                     : new DatabaseOverrideParameterization { Name = db });
                 var sourceFileClient = _sourceFolderClient
                     .GetSubDirectoryClient(db)
-                    .GetFileClient("source-db.bookmark");
+                    .GetFileClient("plan-db.bookmark");
                 var dbExportBookmark = await DbExportBookmark.RetrieveAsync(
                     sourceFileClient,
                     _credential);
@@ -114,8 +120,13 @@ namespace KustoCopyServices
                     dbExportBookmark,
                     _kustoClient,
                     dbConfig.MaxRowsPerTablePerIteration!.Value);
+                var dbExportExecution = new DbExportExecutionPipeline(
+                    db,
+                    dbExportBookmark,
+                    _kustoClient);
+                var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
 
-                _dbPipelinesMap.Add(dbExportPlan.DbName, new DbPipelines(dbExportPlan));
+                _dbPipelinesMap.Add(dbExportPlan.DbName, pipelines);
             }
 
             foreach (var db in obsoleteDbNames)
