@@ -32,7 +32,7 @@ namespace KustoCopyBookmarks.ExportPlan
             public IImmutableList<TableExportPlanData> TablePlans { get; }
         }
 
-        private class ExportAggregate
+        private class ExportPlanAggregate
         {
             public DbEpochData? DbEpoch { get; set; }
 
@@ -54,7 +54,7 @@ namespace KustoCopyBookmarks.ExportPlan
             TokenCredential credential)
         {
             var bookmarkGateway = await BookmarkGateway.CreateAsync(fileClient, credential, false);
-            var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportAggregate>();
+            var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<ExportPlanAggregate>();
             var epochs = aggregates
                 .Where(a => a.Value.DbEpoch != null);
             var dbIterations = aggregates
@@ -142,7 +142,7 @@ namespace KustoCopyBookmarks.ExportPlan
                 }
             }
             var epochBuffer =
-                SerializationHelper.ToMemory(new ExportAggregate { DbEpoch = newEpoch });
+                SerializationHelper.ToMemory(new ExportPlanAggregate { DbEpoch = newEpoch });
             var transaction = new BookmarkTransaction(
                 new[] { epochBuffer },
                 null,
@@ -210,13 +210,13 @@ namespace KustoCopyBookmarks.ExportPlan
                 dbEpoch.AllIterationsPlanned = true;
                 updatingBlocks.Add(new BookmarkBlock(
                     dbEpochValue.BlockId,
-                    SerializationHelper.ToMemory(new ExportAggregate { DbEpoch = dbEpoch })));
+                    SerializationHelper.ToMemory(new ExportPlanAggregate { DbEpoch = dbEpoch })));
             }
 
             var iterationBuffer =
-                SerializationHelper.ToMemory(new ExportAggregate { DbIteration = dbIteration });
+                SerializationHelper.ToMemory(new ExportPlanAggregate { DbIteration = dbIteration });
             var planBuffers = tableExportPlans
-                .Select(p => SerializationHelper.ToMemory(new ExportAggregate { TableExportPlan = p }));
+                .Select(p => SerializationHelper.ToMemory(new ExportPlanAggregate { TableExportPlan = p }));
             var transaction = new BookmarkTransaction(
                 planBuffers.Prepend(iterationBuffer),
                 updatingBlocks,
