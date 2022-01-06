@@ -87,7 +87,7 @@ namespace KustoCopyServices
             string command,
             Func<IDataRecord, T> projection)
         {
-            if (priority.Operation == KustoOperation.QueryOrCommand)
+            if (!priority.IsExportRelated)
             {
                 return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
                 {

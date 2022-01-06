@@ -39,10 +39,6 @@ namespace KustoCopyBookmarks.Export
             public DbIterationData? DbIteration { get; set; }
 
             public TableExportPlanData? TableExportPlan { get; set; }
-
-            public EmptyTableExportEventData? EmptyTableExportEvent { get; set; }
-
-            public TableExportEventData? TableExportEvent { get; set; }
         }
         #endregion
 
@@ -65,8 +61,6 @@ namespace KustoCopyBookmarks.Export
                 .Where(a => a.Value.DbIteration != null);
             var tableExportPlans = aggregates
                 .Where(a => a.Value.TableExportPlan != null);
-            var emptyTableExportEvents = aggregates
-                .Where(a => a.Value.EmptyTableExportEvent != null);
 
             if (epochs.Count() > 2)
             {
@@ -78,32 +72,19 @@ namespace KustoCopyBookmarks.Export
                 bookmarkGateway,
                 epochs.Select(b => b.Project(a => a.DbEpoch!)),
                 dbIterations.Select(b => b.Project(a => a.DbIteration!)),
-                tableExportPlans.Select(b => b.Project(a => a.TableExportPlan!)),
-                emptyTableExportEvents.Select(e => e.Project(e => e.EmptyTableExportEvent!)));
+                tableExportPlans.Select(b => b.Project(a => a.TableExportPlan!)));
         }
 
         private DbExportBookmark(
             BookmarkGateway bookmarkGateway,
             IEnumerable<BookmarkBlockValue<DbEpochData>> dbEpochs,
             IEnumerable<BookmarkBlockValue<DbIterationData>> dbIterations,
-            IEnumerable<BookmarkBlockValue<TableExportPlanData>> tableExportPlans,
-            IEnumerable<BookmarkBlockValue<EmptyTableExportEventData>> emptyTableExportEvents)
+            IEnumerable<BookmarkBlockValue<TableExportPlanData>> tableExportPlans)
         {
             _bookmarkGateway = bookmarkGateway;
             _dbEpochs = dbEpochs.ToList();
             _dbIterations = dbIterations.ToList();
             _tableExportPlan = tableExportPlans.ToList();
-
-            //var backfillTableIterations = tableIterations
-            //    .Where(t => t.Value.EpochEndCursor == _backfillDbEpoch?.Value.EndCursor)
-            //    .Select(t => KeyValuePair.Create(t.Value.TableName, t));
-            //var forwardTableIterations = tableIterations
-            //    .Where(t => t.Value.EpochEndCursor == _forwardDbEpoch?.Value.EndCursor)
-            //    .Select(t => KeyValuePair.Create(t.Value.TableName, t));
-
-            //_backfillTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(backfillTableIterations);
-            //_forwardTableIterationMap = new ConcurrentDictionary<string, BookmarkBlockValue<TableIterationData>>(forwardTableIterations);
-            //_emptyTableExportEvents = new ConcurrentQueue<BookmarkBlockValue<EmptyTableExportEventData>>(emptyTableExportEvents);
         }
 
         public IImmutableList<DbEpochData> GetAllDbEpochs()

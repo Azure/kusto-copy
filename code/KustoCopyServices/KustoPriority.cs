@@ -9,35 +9,31 @@ namespace KustoCopyServices
 {
     public class KustoPriority : IComparable<KustoPriority>
     {
-        public KustoPriority(KustoOperation operation, bool isBackfill, DateTime ingestionTime)
-            : this(false, operation, isBackfill, ingestionTime)
-        {
-        }
-
         private KustoPriority(
             bool isWildCard,
-            KustoOperation operation,
-            bool isBackfill,
+            bool isExportRelated,
             DateTime ingestionTime)
         {
             IsWildcard = isWildCard;
-            IsBackfill = isBackfill;
+            IsExportRelated = isExportRelated;
             IngestionTime = ingestionTime;
-            Operation = operation;
+        }
+
+        public static KustoPriority QueryPriority(DateTime ingestionTime)
+        {
+            return new KustoPriority(false, false, ingestionTime);
         }
 
         public static KustoPriority WildcardPriority { get; } =
-            new KustoPriority(true, KustoOperation.QueryOrCommand, false, DateTime.MinValue);
+            new KustoPriority(true, true, DateTime.MinValue);
 
-        public static KustoPriority TerminateExportPriority { get; } =
-            new KustoPriority(true, KustoOperation.TerminateExport, false, DateTime.MinValue);
+        public static KustoPriority ExportPriority { get; } =
+            new KustoPriority(false, true, DateTime.MinValue);
 
         public bool IsWildcard { get; }
-        
-        public KustoOperation Operation { get; }
-        
-        public bool IsBackfill { get; }
-        
+
+        public bool IsExportRelated { get; }
+
         public DateTime IngestionTime { get; }
 
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
@@ -59,26 +55,21 @@ namespace KustoCopyServices
             {
                 return 1;
             }
+            else if (IsExportRelated && other.IsExportRelated)
+            {
+                return 0;
+            }
+            else if (IsExportRelated && !other.IsExportRelated)
+            {
+                return -1;
+            }
+            else if (!IsExportRelated && other.IsExportRelated)
+            {
+                return 1;
+            }
             else
             {
-                var operationCompare = Operation.CompareTo(other.Operation);
-
-                if (operationCompare != 0 || Operation == KustoOperation.TerminateExport)
-                {
-                    return operationCompare;
-                }
-                else if (IsBackfill && !other.IsBackfill)
-                {
-                    return 1;
-                }
-                else if (!IsBackfill && other.IsBackfill)
-                {
-                    return -1;
-                }
-                else
-                {
-                    return -IngestionTime.CompareTo(other.IngestionTime);
-                }
+                return -IngestionTime.CompareTo(other.IngestionTime);
             }
         }
     }

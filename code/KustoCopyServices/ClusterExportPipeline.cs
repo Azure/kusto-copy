@@ -28,7 +28,7 @@ namespace KustoCopyServices
             }
 
             public DbExportPlanPipeline DbExportPlan { get; }
-            
+
             public DbExportExecutionPipeline DbExportExecution { get; }
         }
         #endregion
@@ -123,7 +123,8 @@ namespace KustoCopyServices
                 var dbExportExecution = new DbExportExecutionPipeline(
                     db,
                     dbExportBookmark,
-                    _kustoClient);
+                    _kustoClient,
+                    _mainParameterization.Configuration.ExportSlotsRatio / 100.0);
                 var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
 
                 _dbPipelinesMap.Add(dbExportPlan.DbName, pipelines);

@@ -27,6 +27,8 @@ namespace KustoCopyBookmarks
             _availableRunningSlots = _parallelRunCount;
         }
 
+        public bool HasAvailability => _availableRunningSlots > 0;
+
         public int ParallelRunCount
         {
             get { return _parallelRunCount; }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyBookmarks;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,21 +9,43 @@ namespace KustoCopyServices
 {
     internal class KustoExportQueue
     {
-        private readonly KustoClient _kustoClient;
+        private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(1);
 
-        public KustoExportQueue(KustoClient kustoClient, int exportSlotsRatio)
+        private readonly KustoQueuedClient _kustoClient;
+        private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
+        private readonly double _exportSlotsRatio;
+        private readonly Task _refreshTask;
+
+        public KustoExportQueue(KustoQueuedClient kustoClient, double exportSlotsRatio)
         {
             _kustoClient = kustoClient;
+            _exportSlotsRatio = exportSlotsRatio;
+            _refreshTask = RefreshAsync();
         }
 
-        public async Task RequestRunAsync(
-            string databaseName,
-            string tableName,
-            string? startCursor,
-            string endCursor,
-            DateTime ingestionTimes)
+        public bool HasAvailability => _executionQueue.HasAvailability;
+
+        public async Task RequestRunAsync(Func<Task> actionAsync)
         {
-            await ValueTask.CompletedTask;
+            await _executionQueue.RequestRunAsync(actionAsync);
+        }
+
+        private async Task RefreshAsync()
+        {
+            while (true)
+            {
+                var capacities = await _kustoClient.ExecuteCommandAsync(
+                    KustoPriority.ExportPriority,
+                    string.Empty,
+                    ".show capacity | where Resource=='DataExport' | project Total",
+                    r => (int)r["Total"]);
+                var capacity = capacities.First();
+                var newMax = Math.Min(1, (int)(capacity * _exportSlotsRatio));
+
+                _executionQueue.ParallelRunCount = newMax;
+                //  Sleep for a while
+                await Task.Delay(CAPACITY_REFRESH_PERIOD);
+            }
         }
     }
 }

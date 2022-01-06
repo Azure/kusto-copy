@@ -86,7 +86,7 @@ namespace KustoCopyServices
             DateTime epochStartTime)
         {
             var tableNames = await _kustoClient.ExecuteCommandAsync(
-                new KustoPriority(KustoOperation.QueryOrCommand, isBackfill, epochStartTime),
+                KustoPriority.QueryPriority(epochStartTime),
                 DbName,
                 ".show tables | project TableName",
                 r => (string)r["TableName"]);
@@ -135,10 +135,7 @@ namespace KustoCopyServices
             DbIterationData dbIteration,
             string tableName)
         {
-            var priority = new KustoPriority(
-                KustoOperation.QueryOrCommand,
-                dbEpoch.IsBackfill,
-                dbIteration.MinIngestionTime
+            var priority = KustoPriority.QueryPriority(dbIteration.MinIngestionTime
                 ?? (dbIteration.MaxIngestionTime ?? dbEpoch.EpochStartTime));
             var ingestionTimes =
                 await FetchIngestionSchedulesAsync(dbEpoch, dbIteration, priority, tableName);
@@ -259,10 +256,7 @@ table(TargetTableName)
                 .SetParameter("StartCursor", dbEpoch.StartCursor ?? string.Empty)
                 .SetParameter("EndCursor", dbEpoch.EndCursor)
                 .ExecuteQueryAsync(
-                new KustoPriority(
-                    KustoOperation.QueryOrCommand,
-                    dbEpoch.IsBackfill,
-                    dbEpoch.EpochStartTime),
+                KustoPriority.QueryPriority(dbEpoch.EpochStartTime),
                 DbName,
                 @"
 declare query_parameters(TargetTable: string);

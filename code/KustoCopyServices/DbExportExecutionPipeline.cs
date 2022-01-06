@@ -5,6 +5,7 @@ using KustoCopyBookmarks;
 using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.Export;
 using KustoCopyBookmarks.Parameters;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Runtime.Intrinsics.Arm;
@@ -66,17 +67,21 @@ namespace KustoCopyServices
 
         private readonly DbExportBookmark _dbExportBookmark;
         private readonly KustoQueuedClient _kustoClient;
+        private readonly KustoExportQueue _exportQueue;
         private readonly PriorityQueue<TablePlanContext, TablePlanContext> _planQueue
             = new PriorityQueue<TablePlanContext, TablePlanContext>();
+        //private readonly ConcurrentDictionary<DateTime, Bookmark> ;
 
         public DbExportExecutionPipeline(
             string dbName,
             DbExportBookmark dbExportBookmark,
-            KustoQueuedClient kustoClient)
+            KustoQueuedClient kustoClient,
+            double exportSlotsRatio)
         {
             DbName = dbName;
             _dbExportBookmark = dbExportBookmark;
             _kustoClient = kustoClient;
+            _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
             //  Populate plan queue
             var list = new List<TablePlanContext>();
 
@@ -115,6 +120,7 @@ namespace KustoCopyServices
         public async Task RunAsync()
         {
             var stopGoAwaiter = new StopGoAwaiter(false);
+            var taskList = new List<Task>();
 
             _dbExportBookmark.NewDbIteration += (sender, e) =>
             {   //  Make sure we wake up
@@ -136,7 +142,46 @@ namespace KustoCopyServices
                 {
                     await stopGoAwaiter.WaitForGoAsync();
                 }
+                else
+                {
+                    while (!_exportQueue.HasAvailability)
+                    {
+                        taskList = await CleanTaskListAsync(taskList);
+                    }
+                    taskList.Add(ProcessPlanAsync(context));
+                }
             }
+        }
+
+        private Task ProcessPlanAsync(TablePlanContext context)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static async Task<List<Task>> CleanTaskListAsync(List<Task> taskList)
+        {
+            await Task.WhenAny(taskList);
+
+            //  We take a snapshot of the state
+            var snapshot = taskList
+                .Select(t => new
+                {
+                    t.IsCompleted,
+                    Task = t
+                })
+                .ToImmutableArray();
+            var completed = snapshot
+                .Where(s => s.IsCompleted);
+
+            foreach (var s in completed)
+            {
+                await s.Task;
+            }
+
+            return snapshot
+                .Where(s => !s.IsCompleted)
+                .Select(s => s.Task)
+                .ToList();
         }
     }
 }

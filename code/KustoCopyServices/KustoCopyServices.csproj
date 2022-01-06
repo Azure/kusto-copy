@@ -18,12 +18,10 @@
 
 	<ItemGroup>
 	  <Compile Remove="DbExportPipeline.cs" />
-	  <Compile Remove="KustoExportQueue.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <None Include="DbExportPipeline.cs" />
-	  <None Include="KustoExportQueue.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
