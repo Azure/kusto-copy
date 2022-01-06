@@ -10,7 +10,7 @@ using System.Text.Json;
 
 namespace KustoCopyBookmarks.Export
 {
-    public class DbExportBookmark
+    public class DbExportPlanBookmark
     {
         #region Inner Types
         public class DbIterationEventArgs : EventArgs
@@ -49,7 +49,7 @@ namespace KustoCopyBookmarks.Export
 
         public event EventHandler<DbIterationEventArgs>? NewDbIteration;
 
-        public static async Task<DbExportBookmark> RetrieveAsync(
+        public static async Task<DbExportPlanBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential)
         {
@@ -68,14 +68,14 @@ namespace KustoCopyBookmarks.Export
                     "Expected at most two iterations definition block");
             }
 
-            return new DbExportBookmark(
+            return new DbExportPlanBookmark(
                 bookmarkGateway,
                 epochs.Select(b => b.Project(a => a.DbEpoch!)),
                 dbIterations.Select(b => b.Project(a => a.DbIteration!)),
                 tableExportPlans.Select(b => b.Project(a => a.TableExportPlan!)));
         }
 
-        private DbExportBookmark(
+        private DbExportPlanBookmark(
             BookmarkGateway bookmarkGateway,
             IEnumerable<BookmarkBlockValue<DbEpochData>> dbEpochs,
             IEnumerable<BookmarkBlockValue<DbIterationData>> dbIterations,

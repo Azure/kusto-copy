@@ -65,7 +65,7 @@ namespace KustoCopyServices
         }
         #endregion
 
-        private readonly DbExportBookmark _dbExportBookmark;
+        private readonly DbExportPlanBookmark _dbExportPlanBookmark;
         private readonly KustoQueuedClient _kustoClient;
         private readonly KustoExportQueue _exportQueue;
         private readonly PriorityQueue<TablePlanContext, TablePlanContext> _planQueue
@@ -74,22 +74,22 @@ namespace KustoCopyServices
 
         public DbExportExecutionPipeline(
             string dbName,
-            DbExportBookmark dbExportBookmark,
+            DbExportPlanBookmark dbExportPlanBookmark,
             KustoQueuedClient kustoClient,
             double exportSlotsRatio)
         {
             DbName = dbName;
-            _dbExportBookmark = dbExportBookmark;
+            _dbExportPlanBookmark = dbExportPlanBookmark;
             _kustoClient = kustoClient;
             _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
             //  Populate plan queue
             var list = new List<TablePlanContext>();
 
-            foreach (var dbEpoch in _dbExportBookmark.GetAllDbEpochs())
+            foreach (var dbEpoch in _dbExportPlanBookmark.GetAllDbEpochs())
             {
-                foreach (var dbIteration in _dbExportBookmark.GetDbIterations(dbEpoch.EndCursor))
+                foreach (var dbIteration in _dbExportPlanBookmark.GetDbIterations(dbEpoch.EndCursor))
                 {
-                    var plans = _dbExportBookmark.GetTableExportPlans(
+                    var plans = _dbExportPlanBookmark.GetTableExportPlans(
                         dbIteration.EpochEndCursor,
                         dbIteration.Iteration);
 
@@ -102,7 +102,7 @@ namespace KustoCopyServices
                 }
             }
             _planQueue.EnqueueRange(list.Select(c => (c, c)));
-            _dbExportBookmark.NewDbIteration += (sender, e) =>
+            _dbExportPlanBookmark.NewDbIteration += (sender, e) =>
             {
                 lock (_planQueue)
                 {
@@ -122,7 +122,7 @@ namespace KustoCopyServices
             var stopGoAwaiter = new StopGoAwaiter(false);
             var taskList = new List<Task>();
 
-            _dbExportBookmark.NewDbIteration += (sender, e) =>
+            _dbExportPlanBookmark.NewDbIteration += (sender, e) =>
             {   //  Make sure we wake up
                 stopGoAwaiter.Go();
             };

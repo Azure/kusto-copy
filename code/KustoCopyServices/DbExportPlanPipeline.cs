@@ -40,18 +40,18 @@ namespace KustoCopyServices
 
         private const double TOLERANCE_RATIO_MAX_ROW = 0.15;
 
-        private readonly DbExportBookmark _dbExportBookmark;
+        private readonly DbExportPlanBookmark _dbExportPlanBookmark;
         private readonly KustoQueuedClient _kustoClient;
         private readonly long _maxRowsPerTablePerIteration;
 
         public DbExportPlanPipeline(
             string dbName,
-            DbExportBookmark dbExportBookmark,
+            DbExportPlanBookmark dbExportPlanBookmark,
             KustoQueuedClient kustoClient,
             long maxRowsPerTablePerIteration)
         {
             DbName = dbName;
-            _dbExportBookmark = dbExportBookmark;
+            _dbExportPlanBookmark = dbExportPlanBookmark;
             _kustoClient = kustoClient;
             _maxRowsPerTablePerIteration = maxRowsPerTablePerIteration;
         }
@@ -71,7 +71,7 @@ namespace KustoCopyServices
         {
             var dbEpoch = await GetOrCreateDbEpochAsync(isBackfill);
             var lastDbIteration =
-                _dbExportBookmark.GetDbIterations(dbEpoch.EndCursor).LastOrDefault();
+                _dbExportPlanBookmark.GetDbIterations(dbEpoch.EndCursor).LastOrDefault();
             var tableNames = await FetchTableNamesAsync(isBackfill, dbEpoch.EpochStartTime);
 
             while (!dbEpoch.AllIterationsPlanned)
@@ -125,7 +125,7 @@ namespace KustoCopyServices
                 .Select(t => t.Result)
                 .ToImmutableArray();
 
-            await _dbExportBookmark.CreateNewDbIterationAsync(dbEpoch, dbIteration, tableExportPlans);
+            await _dbExportPlanBookmark.CreateNewDbIterationAsync(dbEpoch, dbIteration, tableExportPlans);
 
             return dbIteration;
         }
@@ -288,7 +288,7 @@ table(TargetTable)
 
         private async Task<DbEpochData> GetOrCreateDbEpochAsync(bool isBackfill)
         {
-            var dbEpoch = _dbExportBookmark.GetDbEpoch(isBackfill);
+            var dbEpoch = _dbExportPlanBookmark.GetDbEpoch(isBackfill);
 
             if (dbEpoch == null)
             {   //  Create epoch
@@ -303,7 +303,7 @@ table(TargetTable)
                     });
                 var epochInfo = epochInfos.First();
 
-                dbEpoch = await _dbExportBookmark.CreateNewEpochAsync(
+                dbEpoch = await _dbExportPlanBookmark.CreateNewEpochAsync(
                     isBackfill,
                     epochInfo.CurrentTime,
                     epochInfo.Cursor);

@@ -112,17 +112,17 @@ namespace KustoCopyServices
                 var sourceFileClient = _sourceFolderClient
                     .GetSubDirectoryClient(db)
                     .GetFileClient("plan-db.bookmark");
-                var dbExportBookmark = await DbExportBookmark.RetrieveAsync(
+                var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
                     sourceFileClient,
                     _credential);
                 var dbExportPlan = new DbExportPlanPipeline(
                     db,
-                    dbExportBookmark,
+                    dbExportPlanBookmark,
                     _kustoClient,
                     dbConfig.MaxRowsPerTablePerIteration!.Value);
                 var dbExportExecution = new DbExportExecutionPipeline(
                     db,
-                    dbExportBookmark,
+                    dbExportPlanBookmark,
                     _kustoClient,
                     _mainParameterization.Configuration.ExportSlotsRatio / 100.0);
                 var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
