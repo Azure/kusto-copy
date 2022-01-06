@@ -8,7 +8,7 @@ using System.Diagnostics;
 using System.Reflection.Metadata;
 using System.Text.Json;
 
-namespace KustoCopyBookmarks.Export
+namespace KustoCopyBookmarks.ExportPlan
 {
     public class DbExportPlanBookmark
     {

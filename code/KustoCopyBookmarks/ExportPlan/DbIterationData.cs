@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyBookmarks.Export
+namespace KustoCopyBookmarks.ExportPlan
 {
     public class DbIterationData
     {
