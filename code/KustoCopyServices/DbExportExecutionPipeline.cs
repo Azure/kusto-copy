@@ -156,9 +156,76 @@ namespace KustoCopyServices
             }
         }
 
-        private Task ProcessPlanAsync(TablePlanContext context)
+        private async Task ProcessPlanAsync(TablePlanContext context)
         {
-            throw new NotImplementedException();
+            var iterationFolderClient = _iterationFederation.GetIterationFolder(
+                context.DbEpoch.IsBackfill,
+                context.DbEpoch.EpochStartTime,
+                context.DbIteration.Iteration);
+            var tableFolderClient =
+                iterationFolderClient.GetSubDirectoryClient(context.TablePlan.TableName);
+            var iterationBookmark = await _iterationFederation.FetchIterationBookmarkAsync(
+                context.DbEpoch.IsBackfill,
+                context.DbEpoch.EpochStartTime,
+                context.DbIteration.Iteration);
+            var table = iterationBookmark.GetTable(context.TablePlan.TableName);
+
+            //  It is possible the table was processed but the plan wasn't removed
+            if (table == null)
+            {
+                var schemaBefore = await FetchTableSchemaAsync(context.TablePlan.TableName);
+
+                table = new TableStorageData
+                {
+                    TableName = context.TablePlan.TableName,
+                    Schema = schemaBefore
+                };
+                if (context.TablePlan.Steps.Any())
+                {
+                    throw new NotImplementedException();
+                }
+            }
+            //  This is done on a different blob, hence a different "transaction"
+            //  For that reason it might fail in between hence the check for table not null
+            await _dbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
+        }
+
+        private async Task<TableSchemaData> FetchTableSchemaAsync(string tableName)
+        {
+            //  Technically we could parse the 'Schema' column but in general it would require
+            //  taking care of character escape which make it non-trivial so we use getschema
+            //  in a separate query
+            var tableSchemaTask = _kustoClient.ExecuteCommandAsync(
+                KustoPriority.ExportPriority,
+                DbName,
+                $".show table ['{tableName}'] schema as csl | project Folder, DocString",
+                r => new TableSchemaData
+                {
+                    Folder = (string)r["Folder"],
+                    DocString = (string)r["DocString"]
+                });
+            var columns = await _kustoClient
+                .SetParameter("TargetTableName", tableName)
+                .ExecuteQueryAsync(
+                KustoPriority.ExportPriority,
+                DbName,
+                "declare query_parameters(TargetTableName: string);"
+                + "table(TargetTableName) | getschema | project ColumnName, ColumnType",
+                r => new ColumnSchemaData
+                {
+                    ColumnName = (string)r["ColumnName"],
+                    ColumnType = (string)r["ColumnType"]
+                });
+            var tableSchema = (await tableSchemaTask).FirstOrDefault();
+
+            if (tableSchema == null)
+            {
+                throw new CopyException($"Table '{tableName}' was dropped during export");
+            }
+
+            tableSchema.Columns = columns;
+
+            return tableSchema;
         }
 
         private static async Task<List<Task>> CleanTaskListAsync(List<Task> taskList)

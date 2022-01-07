@@ -30,7 +30,7 @@ namespace KustoCopyBookmarks.ExportStorage
             _credential = credential;
         }
 
-        public DataLakeFileClient GetIterationFolder(
+        public DataLakeDirectoryClient GetIterationFolder(
             bool isBackfill,
             DateTime epochStartTime,
             int iteration)

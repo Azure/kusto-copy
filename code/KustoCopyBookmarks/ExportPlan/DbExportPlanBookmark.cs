@@ -26,9 +26,9 @@ namespace KustoCopyBookmarks.ExportPlan
             }
 
             public DbEpochData DbEpoch { get; }
-            
+
             public DbIterationData DbIteration { get; }
-            
+
             public IImmutableList<TableExportPlanData> TablePlans { get; }
         }
 
@@ -250,12 +250,52 @@ namespace KustoCopyBookmarks.ExportPlan
             OnNewDbIteration(new DbIterationEventArgs(dbEpoch, dbIteration, tableExportPlans));
         }
 
+        public async Task CompleteTableExportPlanAsync(TableExportPlanData tableExportPlan)
+        {
+            var tableExportPlanValue = GetTableExportPlanValue(
+                tableExportPlan.EpochEndCursor,
+                tableExportPlan.Iteration,
+                tableExportPlan.TableName);
+
+            if (tableExportPlanValue == null)
+            {
+                throw new InvalidOperationException("Table export plan isn't present anymore");
+            }
+            var transaction = new BookmarkTransaction(
+                null,
+                null,
+                new[] { tableExportPlanValue.BlockId });
+            var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
+
+            if (result.DeletedBlockIds.Count != 1
+                || result.DeletedBlockIds.First() != tableExportPlanValue.BlockId)
+            {
+                throw new InvalidOperationException(
+                    "Inconsistency while deleting table export plan");
+            }
+        }
+
         private BookmarkBlockValue<DbEpochData>? GetDbEpochValue(bool isBackfill)
         {
             lock (_dbEpochs)
             {
                 return _dbEpochs
                     .Where(e => e.Value.IsBackfill == isBackfill)
+                    .FirstOrDefault();
+            }
+        }
+
+        private BookmarkBlockValue<TableExportPlanData>? GetTableExportPlanValue(
+            string epochEndCursor,
+            int iteration,
+            string tableName)
+        {
+            lock (_tableExportPlan)
+            {
+                return _tableExportPlan
+                    .Where(t => t.Value.EpochEndCursor == epochEndCursor)
+                    .Where(t => t.Value.Iteration == iteration)
+                    .Where(t => t.Value.TableName == tableName)
                     .FirstOrDefault();
             }
         }
