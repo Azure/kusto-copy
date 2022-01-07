@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks.ExportStorage
 {
-    internal class TableStorageData
+    public class TableStorageData
     {
         public string TableName { get; set; } = string.Empty;
 

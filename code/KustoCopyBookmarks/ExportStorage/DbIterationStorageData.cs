@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyBookmarks.ExportStorage
 {
-    internal class DbIterationStorageData
+    public class DbIterationStorageData
     {
         public int Iteration { get; set; } = 0;
 
