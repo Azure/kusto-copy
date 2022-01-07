@@ -3,6 +3,7 @@ using Azure.Storage.Files.DataLake;
 using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.ExportPlan;
+using KustoCopyBookmarks.ExportStorage;
 using KustoCopyBookmarks.Parameters;
 using System;
 using System.Collections.Generic;
@@ -109,12 +110,13 @@ namespace KustoCopyServices
                     configMap.ContainsKey(db)
                     ? configMap[db]
                     : new DatabaseOverrideParameterization { Name = db });
-                var sourceFileClient = _sourceFolderClient
-                    .GetSubDirectoryClient(db)
-                    .GetFileClient("plan-db.bookmark");
+                var dbFolderClient = _sourceFolderClient.GetSubDirectoryClient(db);
+                var sourceFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
                 var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
                     sourceFileClient,
                     _credential);
+                var iterationFederation =
+                    new DbIterationStorageFederation(dbFolderClient, _credential);
                 var dbExportPlan = new DbExportPlanPipeline(
                     db,
                     dbExportPlanBookmark,
@@ -123,6 +125,7 @@ namespace KustoCopyServices
                 var dbExportExecution = new DbExportExecutionPipeline(
                     db,
                     dbExportPlanBookmark,
+                    iterationFederation,
                     _kustoClient,
                     _mainParameterization.Configuration.ExportSlotsRatio / 100.0);
                 var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);

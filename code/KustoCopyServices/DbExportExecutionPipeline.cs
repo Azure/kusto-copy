@@ -4,6 +4,7 @@ using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.ExportPlan;
+using KustoCopyBookmarks.ExportStorage;
 using KustoCopyBookmarks.Parameters;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
@@ -66,20 +67,22 @@ namespace KustoCopyServices
         #endregion
 
         private readonly DbExportPlanBookmark _dbExportPlanBookmark;
+        private readonly DbIterationStorageFederation _iterationFederation;
         private readonly KustoQueuedClient _kustoClient;
         private readonly KustoExportQueue _exportQueue;
         private readonly PriorityQueue<TablePlanContext, TablePlanContext> _planQueue
             = new PriorityQueue<TablePlanContext, TablePlanContext>();
-        //private readonly ConcurrentDictionary<DateTime, Bookmark> ;
 
         public DbExportExecutionPipeline(
             string dbName,
             DbExportPlanBookmark dbExportPlanBookmark,
+            DbIterationStorageFederation iterationFederation,
             KustoQueuedClient kustoClient,
             double exportSlotsRatio)
         {
             DbName = dbName;
             _dbExportPlanBookmark = dbExportPlanBookmark;
+            _iterationFederation = iterationFederation;
             _kustoClient = kustoClient;
             _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
             //  Populate plan queue

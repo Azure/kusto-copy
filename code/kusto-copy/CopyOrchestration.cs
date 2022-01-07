@@ -101,7 +101,11 @@ namespace kusto_copy
         {
             Trace.WriteLine("Connecting to Data Lake...");
 
-            var credential = new InteractiveBrowserCredential();
+            var options = new InteractiveBrowserCredentialOptions
+            {
+                TokenCachePersistenceOptions = new TokenCachePersistenceOptions()
+            };
+            var credential = new InteractiveBrowserCredential(options);
             var folder = new DataLakeFolder(dataLakeFolderUrl);
             var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
             var lockClient = folderClient.GetFileClient("lock");
