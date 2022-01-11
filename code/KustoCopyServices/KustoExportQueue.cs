@@ -38,7 +38,7 @@ namespace KustoCopyServices
                     KustoPriority.ExportPriority,
                     string.Empty,
                     ".show capacity | where Resource=='DataExport' | project Total",
-                    r => (int)r["Total"]);
+                    r => (long)r["Total"]);
                 var capacity = capacities.First();
                 var newMax = Math.Min(1, (int)(capacity * _exportSlotsRatio));
 
