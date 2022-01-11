@@ -65,17 +65,14 @@ namespace KustoCopyBookmarks.ExportStorage
             return _dbIteration?.Value;
         }
 
-        public async Task<DbIterationStorageData> CreateDbIterationAsync(int iteration)
+        public async Task<DbIterationStorageData> CreateDbIterationAsync()
         {
             if (_dbIteration != null)
             {
                 throw new InvalidOperationException("A DB iteration block is already present");
             }
 
-            var dbIteration = new DbIterationStorageData()
-            {
-                Iteration = iteration
-            };
+            var dbIteration = new DbIterationStorageData();
             var dbIterationBuffer = SerializationHelper.ToMemory(
                 new IterationAggregate { DbIteration = dbIteration });
             var transaction = new BookmarkTransaction(

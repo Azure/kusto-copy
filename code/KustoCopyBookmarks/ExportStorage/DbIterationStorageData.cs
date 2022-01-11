@@ -8,8 +8,6 @@ namespace KustoCopyBookmarks.ExportStorage
 {
     public class DbIterationStorageData
     {
-        public int Iteration { get; set; } = 0;
-
         public bool AllTablesExported { get; set; } = false;
     }
 }
