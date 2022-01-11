@@ -17,8 +17,8 @@ namespace KustoCopyBookmarks
         }
         #endregion
 
-        private readonly int _parallelRunCount;
         private readonly ConcurrentQueue<Request> _requestQueue = new ConcurrentQueue<Request>();
+        private int _parallelRunCount;
         private volatile int _availableRunningSlots;
 
         public ExecutionQueue(int parallelRunCount)
@@ -34,7 +34,16 @@ namespace KustoCopyBookmarks
             get { return _parallelRunCount; }
             set
             {
-                throw new NotImplementedException();
+                var before = _parallelRunCount;
+                var after = value;
+                var delta = after - before;
+
+                _parallelRunCount = value;
+                Interlocked.Add(ref _availableRunningSlots, delta);
+                if (delta > 0)
+                {
+                    PumpRequestOut();
+                }
             }
         }
 

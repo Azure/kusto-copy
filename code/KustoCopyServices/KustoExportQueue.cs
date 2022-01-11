@@ -40,7 +40,7 @@ namespace KustoCopyServices
                     ".show capacity | where Resource=='DataExport' | project Total",
                     r => (long)r["Total"]);
                 var capacity = capacities.First();
-                var newMax = Math.Min(1, (int)(capacity * _exportSlotsRatio));
+                var newMax = Math.Max(1, (int)(capacity * _exportSlotsRatio));
 
                 _executionQueue.ParallelRunCount = newMax;
                 //  Sleep for a while
