@@ -37,7 +37,6 @@ namespace KustoCopyServices
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
         private readonly KustoQueuedClient _kustoClient;
-        private readonly TempFolderService _tempFolderService;
         private readonly IDictionary<string, DbPipelines> _dbPipelinesMap =
             new Dictionary<string, DbPipelines>();
         private readonly MainParameterization _mainParameterization;
@@ -46,13 +45,11 @@ namespace KustoCopyServices
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoQueuedClient kustoClient,
-            TempFolderService tempFolderService,
             MainParameterization mainParameterization)
         {
             _sourceFolderClient = sourceFolderClient;
             _credential = credential;
             _kustoClient = kustoClient;
-            _tempFolderService = tempFolderService;
             _mainParameterization = mainParameterization;
         }
 
@@ -60,7 +57,6 @@ namespace KustoCopyServices
             DataLakeDirectoryClient folderClient,
             TokenCredential credential,
             KustoQueuedClient kustoClient,
-            TempFolderService tempFolderService,
             MainParameterization mainParameterization)
         {
             var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
@@ -71,7 +67,6 @@ namespace KustoCopyServices
                 sourceFolderClient,
                 credential,
                 kustoClient,
-                tempFolderService,
                 mainParameterization);
         }
 

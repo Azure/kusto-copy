@@ -80,18 +80,15 @@ namespace kusto_copy
 
         private readonly IAsyncDisposable _blobLock;
         private readonly RootBookmark _rootBookmark;
-        private readonly TempFolderService _tempFolderService;
         private readonly ClusterExportPipeline _exportPipeline;
 
         private CopyOrchestration(
             IAsyncDisposable blobLock,
             RootBookmark rootBookmark,
-            TempFolderService tempFolderService,
             ClusterExportPipeline exportPipeline)
         {
             _blobLock = blobLock;
             _rootBookmark = rootBookmark;
-            _tempFolderService = tempFolderService;
             _exportPipeline = exportPipeline;
         }
 
@@ -134,9 +131,6 @@ namespace kusto_copy
                         + "another in the same data lake folder");
                 }
 
-                var tempFolderService =
-                    await TempFolderService.CreateAsync(folderClient, credential);
-
                 Trace.WriteLine("Connecting to source cluster...");
 
                 var sourceKustoClient = new KustoQueuedClient(
@@ -147,13 +141,11 @@ namespace kusto_copy
                     folderClient,
                     credential,
                     sourceKustoClient,
-                    tempFolderService,
                     parameterization);
 
                 return new CopyOrchestration(
                     blobLock,
                     rootBookmark,
-                    tempFolderService,
                     exportPipeline);
             }
             catch
@@ -165,10 +157,9 @@ namespace kusto_copy
 
         public async Task RunAsync()
         {
-            var tempTask = _tempFolderService.RunAsync();
             var exportTask = _exportPipeline.RunAsync();
 
-            await Task.WhenAll(tempTask, exportTask);
+            await Task.WhenAll(exportTask);
         }
 
         async ValueTask IAsyncDisposable.DisposeAsync()
