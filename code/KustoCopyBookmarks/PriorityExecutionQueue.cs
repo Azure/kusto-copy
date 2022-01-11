@@ -41,7 +41,10 @@ namespace KustoCopyBookmarks
         {
             var request = new Request();
 
-            _requestQueue.Enqueue(request, priority);
+            lock (_requestQueue)
+            {
+                _requestQueue.Enqueue(request, priority);
+            }
             PumpRequestOut();
 
             await request.Source.Task;
