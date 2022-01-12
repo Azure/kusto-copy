@@ -158,12 +158,6 @@ namespace KustoCopyServices
 
         private async Task ProcessPlanAsync(TablePlanContext context)
         {
-            var iterationFolderClient = _iterationFederation.GetIterationFolder(
-                context.DbEpoch.IsBackfill,
-                context.DbEpoch.EpochStartTime,
-                context.DbIteration.Iteration);
-            var tableFolderClient =
-                iterationFolderClient.GetSubDirectoryClient(context.TablePlan.TableName);
             var iterationBookmark = await _iterationFederation.FetchIterationBookmarkAsync(
                 context.DbEpoch.IsBackfill,
                 context.DbEpoch.EpochStartTime,
@@ -182,12 +176,35 @@ namespace KustoCopyServices
                 };
                 if (context.TablePlan.Steps.Any())
                 {
-                    throw new NotImplementedException();
+                    await ProcessPlannedStepsAsync(context);
                 }
             }
             //  This is done on a different blob, hence a different "transaction"
             //  For that reason it might fail in between hence the check for table not null
             await _dbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
+        }
+
+        private async Task ProcessPlannedStepsAsync(TablePlanContext context)
+        {
+            var iterationFolderClient = _iterationFederation.GetIterationFolder(
+                context.DbEpoch.IsBackfill,
+                context.DbEpoch.EpochStartTime,
+                context.DbIteration.Iteration);
+            var tableFolderClient =
+                iterationFolderClient.GetSubDirectoryClient(context.TablePlan.TableName);
+
+            await CleanUpSubFoldersAsync(tableFolderClient);
+            throw new NotImplementedException();
+        }
+
+        private async Task CleanUpSubFoldersAsync(DataLakeDirectoryClient folderClient)
+        {
+            var paths = await folderClient.GetPathsAsync().ToListAsync();
+            var subFolders = paths.Where(p => p.IsDirectory == true);
+            var deleteTasks = subFolders
+                .Select(p => folderClient.GetSubDirectoryClient(p.Name).DeleteAsync());
+
+            await Task.WhenAll(deleteTasks);
         }
 
         private async Task<TableSchemaData> FetchTableSchemaAsync(string tableName)
