@@ -129,8 +129,7 @@ namespace KustoCopyBookmarks.ExportStorage
                 : "forward");
             var epochFolderClient = mainFolderClient
                 .GetSubDirectoryClient(epochStartTime.Year.ToString())
-                .GetSubDirectoryClient(epochStartTime.Month.ToString("00"))
-                .GetSubDirectoryClient(epochStartTime.Day.ToString("00"))
+                .GetSubDirectoryClient($"{epochStartTime.Month:00}-{epochStartTime.Day:00}")
                 .GetSubDirectoryClient($"{epochStartTime.Hour:00}:{epochStartTime.Minute:00}:{epochStartTime.Second:00}");
             var iterationFolderClient = epochFolderClient
                 .GetSubDirectoryClient(iteration.ToString("000000"));

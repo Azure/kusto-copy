@@ -1,4 +1,5 @@
 ﻿using KustoCopyBookmarks;
+using Microsoft.Identity.Client;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -27,7 +28,17 @@ namespace KustoCopyServices
 
         public async Task RequestRunAsync(Func<Task> actionAsync)
         {
-            await _executionQueue.RequestRunAsync(actionAsync);
+            await RequestRunAsync(async () =>
+            {
+                await actionAsync();
+
+                return 0;
+            });
+        }
+
+        public async Task<T> RequestRunAsync<T>(Func<Task<T>> functionAsync)
+        {
+            return await _executionQueue.RequestRunAsync(functionAsync);
         }
 
         private async Task RefreshAsync()

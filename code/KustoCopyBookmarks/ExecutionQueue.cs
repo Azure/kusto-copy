@@ -57,7 +57,7 @@ namespace KustoCopyBookmarks
             });
         }
 
-        public async Task<T> RequestRunAsync<T>(Func<Task<T>> actionAsync)
+        public async Task<T> RequestRunAsync<T>(Func<Task<T>> functionAsync)
         {
             var request = new Request();
 
@@ -68,7 +68,7 @@ namespace KustoCopyBookmarks
 
             try
             {
-                return await actionAsync();
+                return await functionAsync();
             }
             finally
             {
