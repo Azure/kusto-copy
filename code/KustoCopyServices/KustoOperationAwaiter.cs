@@ -42,12 +42,6 @@ namespace KustoCopyServices
             var thisOperationState = new OperationState();
 
             _operations.TryAdd(operationId, thisOperationState);
-            if(_operations.Count>=2)
-            {
-                int a = 2;
-
-                ++a;
-            }
 
             do
             {
@@ -85,6 +79,11 @@ namespace KustoCopyServices
                 });
             }
             while (thisOperationState.State == IN_PROGRESS_STATE);
+
+            if (!_operations.Remove(operationId, out _))
+            {
+                throw new InvalidOperationException("Operation ID wasn't present");
+            }
 
             if (thisOperationState.State == FAILED_STATE)
             {

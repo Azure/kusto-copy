@@ -243,28 +243,35 @@ namespace KustoCopyServices
             TableExportStepData step,
             int stepIndex)
         {
-            var operationId = await _exportQueue.RequestRunAsync(async () => await ExportAsync(
-                context.TablePlan.TableName,
-                stepIndex,
-                (context.DbEpoch.StartCursor, context.DbEpoch.EndCursor),
-                step.IngestionTimes,
-                tableFolderClient));
+            var results = await _exportQueue.RequestRunAsync(async () =>
+            {
+                var operationId = await ExportAsync(
+                    context.TablePlan.TableName,
+                    stepIndex,
+                    (context.DbEpoch.StartCursor, context.DbEpoch.EndCursor),
+                    step.IngestionTimes,
+                    tableFolderClient);
 
-            await _operationAwaiter.WaitForOperationCompletionAsync(operationId);
+                await _operationAwaiter.WaitForOperationCompletionAsync(operationId);
 
-            var results = await _kustoClient.ExecuteCommandAsync(
-                KustoPriority.ExportPriority,
-                DbName,
-                $".show operation {operationId} details",
-                r => new
-                {
-                    Path = (string)r["Path"],
-                    NumRecords = (long)r["NumRecords"]
-                });
+                var results = await _kustoClient.ExecuteCommandAsync(
+                    KustoPriority.ExportPriority,
+                    DbName,
+                    $".show operation {operationId} details",
+                    r => new
+                    {
+                        Path = (string)r["Path"],
+                        NumRecords = (long)r["NumRecords"]
+                    });
+
+                return results;
+            });
 
             return new TableStorageFolderData
             {
-                OverrideIngestionTime = step.OverrideIngestionTime
+                OverrideIngestionTime = step.OverrideIngestionTime,
+                RowCount = results.Sum(r => r.NumRecords),
+                BlobNames = results.Select(r => Path.GetFileName(r.Path)).ToImmutableArray()
             };
         }
 
