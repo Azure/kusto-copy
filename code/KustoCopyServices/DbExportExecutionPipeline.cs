@@ -213,7 +213,7 @@ namespace KustoCopyServices
                         .ToImmutableArray();
 
                     await Task.WhenAll(stepTasks);
-                    table.Steps.AddRange(stepTasks.Select(t => t.Result));
+                    table.Steps = stepTasks.Select(t => t.Result).ToImmutableArray();
 
                     var schemaAfter = await FetchTableSchemaAsync(context.TablePlan.TableName);
 
