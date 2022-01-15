@@ -21,6 +21,7 @@ namespace KustoCopyServices
 
         private const string IN_PROGRESS_STATE = "InProgress";
         private const string FAILED_STATE = "Failed";
+        private const string THROTTLED_STATE = "Throttled";
 
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
@@ -41,6 +42,12 @@ namespace KustoCopyServices
             var thisOperationState = new OperationState();
 
             _operations.TryAdd(operationId, thisOperationState);
+            if(_operations.Count>=2)
+            {
+                int a = 2;
+
+                ++a;
+            }
 
             do
             {
@@ -83,6 +90,12 @@ namespace KustoCopyServices
             {
                 throw new CopyException(
                     $"Operation {operationId} failed with message:  "
+                    + $"'{thisOperationState.Status}'");
+            }
+            if (thisOperationState.State == THROTTLED_STATE)
+            {
+                throw new CopyException(
+                    $"Operation {operationId} has been throttled with message:  "
                     + $"'{thisOperationState.Status}'");
             }
         }

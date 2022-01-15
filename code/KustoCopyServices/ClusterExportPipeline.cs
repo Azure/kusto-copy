@@ -34,6 +34,7 @@ namespace KustoCopyServices
         }
         #endregion
 
+        private readonly DataLakeDirectoryClient _rootTempFolderClient;
         private readonly DataLakeDirectoryClient _sourceFolderClient;
         private readonly TokenCredential _credential;
         private readonly KustoQueuedClient _kustoClient;
@@ -42,11 +43,13 @@ namespace KustoCopyServices
         private readonly MainParameterization _mainParameterization;
 
         private ClusterExportPipeline(
+            DataLakeDirectoryClient rootTempFolderClient,
             DataLakeDirectoryClient sourceFolderClient,
             TokenCredential credential,
             KustoQueuedClient kustoClient,
             MainParameterization mainParameterization)
         {
+            _rootTempFolderClient = rootTempFolderClient;
             _sourceFolderClient = sourceFolderClient;
             _credential = credential;
             _kustoClient = kustoClient;
@@ -60,10 +63,12 @@ namespace KustoCopyServices
             MainParameterization mainParameterization)
         {
             var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
+            var rootTempFolderClient = folderClient.GetSubDirectoryClient("temp");
 
-            await ValueTask.CompletedTask;
+            await rootTempFolderClient.DeleteIfExistsAsync();
 
             return new ClusterExportPipeline(
+                rootTempFolderClient,
                 sourceFolderClient,
                 credential,
                 kustoClient,
@@ -118,6 +123,7 @@ namespace KustoCopyServices
                     _kustoClient,
                     dbConfig.MaxRowsPerTablePerIteration!.Value);
                 var dbExportExecution = new DbExportExecutionPipeline(
+                    _rootTempFolderClient,
                     db,
                     dbExportPlanBookmark,
                     iterationFederation,

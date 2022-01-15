@@ -23,7 +23,7 @@ namespace KustoCopyBookmarks.ExportStorage
 
         private readonly BookmarkGateway _bookmarkGateway;
         private readonly ConcurrentDictionary<string, BookmarkBlockValue<TableStorageData>> _tables;
-        private BookmarkBlockValue<DbIterationStorageData>? _dbIteration;
+        private BookmarkBlockValue<DbIterationStorageData> _dbIteration;
 
         public static async Task<DbIterationStorageBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
@@ -33,24 +33,42 @@ namespace KustoCopyBookmarks.ExportStorage
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<IterationAggregate>();
             var dbIterations = aggregates
                 .Where(a => a.Value.DbIteration != null);
+            var dbIterationValue = dbIterations
+                .Select(b => b.Project(a => a.DbIteration!))
+                .FirstOrDefault();
             var tables = aggregates
                 .Where(a => a.Value.Table != null);
 
             if (dbIterations.Count() > 1)
             {
                 throw new InvalidOperationException(
-                    "Expected at one db iteration definition block");
+                    "Expected at most one db iteration definition block");
+            }
+            if (dbIterationValue == null)
+            {   //  Ensure a db iteration exist
+                var dbIteration = new DbIterationStorageData();
+                var dbIterationBuffer = SerializationHelper.ToMemory(
+                    new IterationAggregate { DbIteration = dbIteration });
+                var transaction = new BookmarkTransaction(
+                    new[] { dbIterationBuffer },
+                    null,
+                    null);
+                var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
+                
+                dbIterationValue = new BookmarkBlockValue<DbIterationStorageData>(
+                    result.AddedBlockIds.First(),
+                    dbIteration);
             }
 
             return new DbIterationStorageBookmark(
                 bookmarkGateway,
-                dbIterations.Select(b => b.Project(a => a.DbIteration!)).FirstOrDefault(),
+                dbIterationValue,
                 tables.Select(b => b.Project(a => a.Table!)));
         }
 
         private DbIterationStorageBookmark(
             BookmarkGateway bookmarkGateway,
-            BookmarkBlockValue<DbIterationStorageData>? dbIteration,
+            BookmarkBlockValue<DbIterationStorageData> dbIteration,
             IEnumerable<BookmarkBlockValue<TableStorageData>> tables)
         {
             _bookmarkGateway = bookmarkGateway;
@@ -60,39 +78,16 @@ namespace KustoCopyBookmarks.ExportStorage
                 .Select(t => KeyValuePair.Create(t.Value.TableName, t)));
         }
 
-        public DbIterationStorageData? GetDbIteration()
+        public DbIterationStorageData GetDbIteration()
         {
-            return _dbIteration?.Value;
-        }
-
-        public async Task<DbIterationStorageData> CreateDbIterationAsync()
-        {
-            if (_dbIteration != null)
-            {
-                throw new InvalidOperationException("A DB iteration block is already present");
-            }
-
-            var dbIteration = new DbIterationStorageData();
-            var dbIterationBuffer = SerializationHelper.ToMemory(
-                new IterationAggregate { DbIteration = dbIteration });
-            var transaction = new BookmarkTransaction(
-                new[] { dbIterationBuffer },
-                null,
-                null);
-            var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
-
-            _dbIteration = new BookmarkBlockValue<DbIterationStorageData>(
-                result.AddedBlockIds.First(),
-                dbIteration);
-
-            return dbIteration;
+            return _dbIteration.Value;
         }
 
         public async Task SealDbIterationAsync()
         {
-            if (_dbIteration == null)
+            if (_dbIteration.Value.AllTablesExported)
             {
-                throw new InvalidOperationException("No DB iteration block present");
+                throw new InvalidOperationException("DB iteration is already sealed");
             }
 
             //  Seal in-memory

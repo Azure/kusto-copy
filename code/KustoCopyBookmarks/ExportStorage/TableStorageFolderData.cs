@@ -1,8 +1,10 @@
-﻿namespace KustoCopyBookmarks.ExportStorage
+﻿using System.Collections.Immutable;
+
+namespace KustoCopyBookmarks.ExportStorage
 {
     public class TableStorageFolderData
     {
-        public string FolderName { get; set; } = string.Empty;
+        public IImmutableList<string> BlobNames { get; set; } = ImmutableArray<string>.Empty;
 
         public DateTime OverrideIngestionTime { get; set; } = DateTime.MinValue;
 

@@ -137,6 +137,17 @@ namespace KustoCopyBookmarks.ExportStorage
             return iterationFolderClient;
         }
 
+        public DataLakeDirectoryClient GetTempFolder(
+            bool isBackfill,
+            DateTime epochStartTime,
+            int iteration)
+        {
+            var iterationFolder = GetIterationFolder(isBackfill, epochStartTime, iteration);
+            var tempFolder = iterationFolder.GetSubDirectoryClient("#temp");
+
+            return tempFolder;
+        }
+
         public async Task<DbIterationStorageBookmark> FetchIterationBookmarkAsync(
             bool isBackfill,
             DateTime epochStartTime,
@@ -243,15 +254,18 @@ namespace KustoCopyBookmarks.ExportStorage
 
                 if (!_cache.TryGetValue(cacheKey, out iterationNode))
                 {
-                    var folder = GetIterationFolder(
+                    var iterationFolder = GetIterationFolder(
                         isBackfill,
                         cacheKey.epochStartTime,
                         cacheKey.iteration);
-                    var file = folder.GetFileClient("iteration-storage.bookmark");
+                    var tempFolder = GetTempFolder(
+                        isBackfill,
+                        cacheKey.epochStartTime,
+                        cacheKey.iteration);
 
-                    iterationNode = new IterationNode(DbIterationStorageBookmark.RetrieveAsync(
-                        file,
-                        _credential));
+                    iterationNode = new IterationNode(RetrieveAndCleanBookmarkAsync(
+                        iterationFolder,
+                        tempFolder));
                     _cache.Add(cacheKey, iterationNode);
                 }
 
@@ -261,6 +275,19 @@ namespace KustoCopyBookmarks.ExportStorage
             {
                 _lock.ExitWriteLock();
             }
+        }
+
+        private async Task<DbIterationStorageBookmark> RetrieveAndCleanBookmarkAsync(
+            DataLakeDirectoryClient iterationFolder,
+            DataLakeDirectoryClient tempFolder)
+        {
+            var file = iterationFolder.GetFileClient("iteration-storage.bookmark");
+            var cleanupTask = tempFolder.DeleteIfExistsAsync();
+            var retrieveTask = DbIterationStorageBookmark.RetrieveAsync(file, _credential);
+
+            await cleanupTask;
+
+            return await retrieveTask;
         }
     }
 }

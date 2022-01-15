@@ -66,6 +66,7 @@ namespace KustoCopyServices
         }
         #endregion
 
+        private readonly DataLakeDirectoryClient _rootTempFolderClient;
         private readonly DbExportPlanBookmark _dbExportPlanBookmark;
         private readonly DbIterationStorageFederation _iterationFederation;
         private readonly KustoQueuedClient _kustoClient;
@@ -75,12 +76,14 @@ namespace KustoCopyServices
             = new PriorityQueue<TablePlanContext, TablePlanContext>();
 
         public DbExportExecutionPipeline(
+            DataLakeDirectoryClient rootTempFolderClient,
             string dbName,
             DbExportPlanBookmark dbExportPlanBookmark,
             DbIterationStorageFederation iterationFederation,
             KustoQueuedClient kustoClient,
             double exportSlotsRatio)
         {
+            _rootTempFolderClient = rootTempFolderClient;
             DbName = dbName;
             _dbExportPlanBookmark = dbExportPlanBookmark;
             _iterationFederation = iterationFederation;
@@ -158,22 +161,41 @@ namespace KustoCopyServices
             }
         }
 
+        /// <summary>
+        /// To make the plan processing transactional:
+        /// 
+        /// 1 - Snapshot schema
+        /// 2 - Export to temp folder
+        /// 3 - Snapshot schema (both must be same or redo)
+        /// 4 - Bookmark as stored
+        /// 5 - Move folder
+        /// 6 - Raise notification for subscription (destination clusters)
+        /// 7 - Remove the plan bookmark
+        /// </summary>
+        /// <param name="context"></param>
+        /// <returns></returns>
         private async Task ProcessPlanAsync(TablePlanContext context)
         {
             var iterationFolderClient = _iterationFederation.GetIterationFolder(
                 context.DbEpoch.IsBackfill,
                 context.DbEpoch.EpochStartTime,
                 context.DbIteration.Iteration);
+            var tempFolderClient = _rootTempFolderClient.GetSubDirectoryClient(
+                $"{context.TablePlan.TableName}-{Guid.NewGuid()}");
             var tableFolderClient =
                 iterationFolderClient.GetSubDirectoryClient(context.TablePlan.TableName);
+            var tableFolderExistTask = tableFolderClient.ExistsAsync();
             var iterationBookmark = await _iterationFederation.FetchIterationBookmarkAsync(
                 context.DbEpoch.IsBackfill,
                 context.DbEpoch.EpochStartTime,
                 context.DbIteration.Iteration);
+            var tableFolderExist = (await tableFolderExistTask).Value;
             var table = iterationBookmark.GetTable(context.TablePlan.TableName);
 
             //  It is possible the table was processed but the plan wasn't removed
-            if (table == null)
+            //  It is also possible the table was processed but temp folder wasn't moved
+            //  In the later case, we reprocess the table
+            if (table == null || !tableFolderExist)
             {
                 var schemaBefore = await FetchTableSchemaAsync(context.TablePlan.TableName);
 
@@ -184,23 +206,38 @@ namespace KustoCopyServices
                 };
                 if (context.TablePlan.Steps.Any())
                 {
-                    await CleanUpFolderAsync(tableFolderClient);
-
                     var stepIndexes = Enumerable.Range(0, context.TablePlan.Steps.Count());
                     var stepTasks = context.TablePlan.Steps
                         .Zip(stepIndexes, (s, i) => (s, i))
-                        .Select(c => ProcessStepAsync(context, tableFolderClient, c.s, c.i))
+                        .Select(c => ProcessStepAsync(context, tempFolderClient, c.s, c.i))
                         .ToImmutableArray();
 
                     await Task.WhenAll(stepTasks);
+                    table.Steps.AddRange(stepTasks.Select(t => t.Result));
+
+                    var schemaAfter = await FetchTableSchemaAsync(context.TablePlan.TableName);
+
+                    if (!schemaBefore.Equals(schemaAfter))
+                    {   //  Schema changed while we were processing:  cleanup and redo
+                        var cleanupTask = tempFolderClient.DeleteAsync();
+                        var reprocessTask = ProcessPlanAsync(context);
+
+                        await Task.WhenAll(cleanupTask, reprocessTask);
+
+                        return;
+                    }
+
+                    //  Move temp folder to permanent location
+                    await tempFolderClient.RenameAsync(tableFolderClient.Path);
                 }
             }
+            await iterationBookmark.CreateTableAsync(table);
             //  This is done on a different blob, hence a different "transaction"
             //  For that reason it might fail in between hence the check for table not null
             await _dbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
         }
 
-        private async Task ProcessStepAsync(
+        private async Task<TableStorageFolderData> ProcessStepAsync(
             TablePlanContext context,
             DataLakeDirectoryClient tableFolderClient,
             TableExportStepData step,
@@ -214,6 +251,21 @@ namespace KustoCopyServices
                 tableFolderClient));
 
             await _operationAwaiter.WaitForOperationCompletionAsync(operationId);
+
+            var results = await _kustoClient.ExecuteCommandAsync(
+                KustoPriority.ExportPriority,
+                DbName,
+                $".show operation {operationId} details",
+                r => new
+                {
+                    Path = (string)r["Path"],
+                    NumRecords = (long)r["NumRecords"]
+                });
+
+            return new TableStorageFolderData
+            {
+                OverrideIngestionTime = step.OverrideIngestionTime
+            };
         }
 
         private async Task<Guid> ExportAsync(
@@ -226,10 +278,11 @@ namespace KustoCopyServices
             var ingestionTimeList = string.Join(
                 ", ",
                 ingestionTimes.Select(t => CslDateTimeLiteral.AsCslString(t)));
+            var prefix = $"{tableName}-{stepIndex:0000}";
             var commandText = @$"
 .export async compressed
 to csv (h@'{folderClient.Uri};impersonate')
-with(namePrefix = 'export-{stepIndex:0000}', includeHeaders = all, encoding = UTF8NoBOM) <|
+with(namePrefix = '{prefix}', includeHeaders = all, encoding = UTF8NoBOM) <|
 ['{tableName}']
 | where cursor_before_or_at('{cursorInterval.endCursor}')
 | where cursor_after('{cursorInterval.startCursor}')
@@ -244,19 +297,6 @@ with(namePrefix = 'export-{stepIndex:0000}', includeHeaders = all, encoding = UT
             var operationId = operationIds.First();
 
             return operationId;
-        }
-
-        private async Task CleanUpFolderAsync(DataLakeDirectoryClient folderClient)
-        {
-            if (await folderClient.ExistsAsync())
-            {
-                var paths = await folderClient.GetPathsAsync().ToListAsync();
-                var exportBlobs = paths.Where(p => !p.Name.EndsWith(".bookmark"));
-                var deleteTasks = exportBlobs
-                    .Select(p => folderClient.GetFileClient(p.Name).DeleteAsync());
-
-                await Task.WhenAll(deleteTasks);
-            }
         }
 
         private async Task<TableSchemaData> FetchTableSchemaAsync(string tableName)

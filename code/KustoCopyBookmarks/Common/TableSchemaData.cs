@@ -14,5 +14,22 @@ namespace KustoCopyBookmarks.Common
         public string Folder { get; set; } = string.Empty;
 
         public string DocString { get; set; } = string.Empty;
+
+        #region Object methods
+        public override bool Equals(object? obj)
+        {
+            var other = obj as TableSchemaData;
+
+            return other != null
+                && Folder == other.Folder
+                && DocString == other.DocString
+                && Columns.SequenceEqual(other.Columns);
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+        #endregion
     }
 }
