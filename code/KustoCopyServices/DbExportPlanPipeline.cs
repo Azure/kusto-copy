@@ -99,11 +99,20 @@ namespace KustoCopyServices
             DbIterationData? lastDbIteration,
             IImmutableList<string> tableNames)
         {
+            var newIteration = lastDbIteration != null ? lastDbIteration.Iteration + 1 : 0;
+            var watch = new Stopwatch();
+            var iterationMessage =
+                $"db '{DbName}' iteration {newIteration} of epoch {dbEpoch.EpochStartTime}";
+
+            Trace.WriteLine($"Start planning {iterationMessage}");
+            watch.Start();
+
             var tableIntervalTasks = tableNames
                 .Select(t => FetchTableIntervalAsync(dbEpoch, lastDbIteration, t))
                 .ToImmutableList();
 
             await Task.WhenAll(tableIntervalTasks);
+            Trace.TraceInformation($"Computed interval for {iterationMessage}");
 
             var tableIntervals = tableIntervalTasks
                 .Select(t => t.Result)
@@ -111,7 +120,7 @@ namespace KustoCopyServices
             var dbIteration = new DbIterationData
             {
                 EpochEndCursor = dbEpoch.EndCursor,
-                Iteration = lastDbIteration != null ? lastDbIteration.Iteration + 1 : 0,
+                Iteration = newIteration,
                 MinIngestionTime = tableIntervals.Select(i => i.MinIngestionTime).Min(),
                 MaxIngestionTime = tableIntervals.Select(i => i.MaxIngestionTime).Max()
             };
@@ -126,6 +135,8 @@ namespace KustoCopyServices
                 .ToImmutableArray();
 
             await _dbExportPlanBookmark.CreateNewDbIterationAsync(dbEpoch, dbIteration, tableExportPlans);
+
+            Trace.WriteLine($"Planning for {iterationMessage} done:  {watch.Elapsed}");
 
             return dbIteration;
         }

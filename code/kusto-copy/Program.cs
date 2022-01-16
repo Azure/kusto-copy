@@ -5,6 +5,7 @@ using KustoCopyBookmarks;
 using KustoCopyBookmarks.Parameters;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -17,6 +18,47 @@ namespace kusto_copy
 {
     internal class Program
     {
+        #region Inner Types
+        private class MultiFilter : TraceFilter
+        {
+            private readonly IImmutableList<TraceFilter> _filters;
+
+            public MultiFilter(params TraceFilter[] filters)
+            {
+                _filters = filters.ToImmutableArray();
+            }
+
+            public override bool ShouldTrace(
+                TraceEventCache? cache,
+                string source,
+                TraceEventType eventType,
+                int id,
+                string? formatOrMessage,
+                object?[]? args,
+                object? data1,
+                object?[]? data)
+            {
+                foreach (var filter in _filters)
+                {
+                    if (!filter.ShouldTrace(
+                        cache,
+                        source,
+                        eventType,
+                        id,
+                        formatOrMessage,
+                        args,
+                        data1,
+                        data))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+        #endregion
+
         public static string AssemblyVersion
         {
             get
@@ -142,7 +184,9 @@ namespace kusto_copy
         {
             var consoleListener = new TextWriterTraceListener(Console.Out)
             {
-                Filter = new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning)
+                Filter = new MultiFilter(
+                    new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning),
+                    new SourceFilter("kusto-copy"))
             };
 
             Trace.Listeners.Add(consoleListener);

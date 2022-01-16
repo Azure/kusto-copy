@@ -156,7 +156,7 @@ namespace KustoCopyServices
                     {
                         taskList = await CleanTaskListAsync(taskList);
                     }
-                    taskList.Add(ProcessPlanAsync(context));
+                    taskList.Add(ProcessTablePlanAsync(context));
                 }
             }
         }
@@ -174,8 +174,16 @@ namespace KustoCopyServices
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
-        private async Task ProcessPlanAsync(TablePlanContext context)
+        private async Task ProcessTablePlanAsync(TablePlanContext context)
         {
+            var tableMessage = $"database '{DbName}', table '{context.TablePlan.TableName}' "
+                + $"in iteration "
+                + $"{context.DbIteration.Iteration} of epoch {context.DbEpoch.EpochStartTime}";
+            var watch = new Stopwatch();
+
+            Trace.TraceInformation($"Start export for {tableMessage}");
+            watch.Start();
+
             var iterationFolderClient = _iterationFederation.GetIterationFolder(
                 context.DbEpoch.IsBackfill,
                 context.DbEpoch.EpochStartTime,
@@ -220,9 +228,10 @@ namespace KustoCopyServices
                     if (!schemaBefore.Equals(schemaAfter))
                     {   //  Schema changed while we were processing:  cleanup and redo
                         var cleanupTask = tempFolderClient.DeleteAsync();
-                        var reprocessTask = ProcessPlanAsync(context);
+                        var reprocessTask = ProcessTablePlanAsync(context);
 
                         await Task.WhenAll(cleanupTask, reprocessTask);
+                        Trace.WriteLine($"Schema mismatch for {tableMessage} ; redo");
 
                         return;
                     }
@@ -235,6 +244,7 @@ namespace KustoCopyServices
             //  This is done on a different blob, hence a different "transaction"
             //  For that reason it might fail in between hence the check for table not null
             await _dbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
+            Trace.TraceInformation($"Export for {tableMessage} done:  {watch.Elapsed}");
         }
 
         private async Task<TableStorageFolderData> ProcessStepAsync(
