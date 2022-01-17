@@ -76,42 +76,52 @@ namespace KustoCopyServices
             var pipelineList = new List<DbPipelines>();
 
             await rootTempFolderClient.DeleteIfExistsAsync();
-            foreach (var db in dbNames)
-            {
-                var dbConfig = mainParameterization.DatabaseDefault.Override(
-                    configMap.ContainsKey(db)
-                    ? configMap[db]
-                    : new DatabaseOverrideParameterization { Name = db });
-                var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db);
-                var sourceFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
-                var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
-                    sourceFileClient,
-                    credential);
-                var iterationFederation =
-                    new DbIterationStorageFederation(dbFolderClient, credential);
-                var dbExportPlan = new DbExportPlanPipeline(
-                    db,
-                    dbExportPlanBookmark,
-                    kustoClient,
-                    dbConfig.MaxRowsPerTablePerIteration!.Value);
-                var dbExportExecution = new DbExportExecutionPipeline(
-                    rootTempFolderClient,
-                    db,
-                    dbExportPlanBookmark,
-                    iterationFederation,
-                    kustoClient,
-                    mainParameterization.Configuration.ExportSlotsRatio / 100.0);
-                var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
+            Trace.WriteLine($"Source databases:  {{{string.Join(", ", dbNames.Sort())}}}");
 
-                pipelineList.Add(pipelines);
-            }
+            var pipelineTasks = dbNames
+                .Select(async db =>
+                {
+                    var dbConfig = mainParameterization.DatabaseDefault.Override(
+                        configMap.ContainsKey(db)
+                        ? configMap[db]
+                        : new DatabaseOverrideParameterization { Name = db });
+                    var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db);
+                    var sourceFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
+                    var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
+                        sourceFileClient,
+                        credential);
+                    var iterationFederation =
+                        new DbIterationStorageFederation(dbFolderClient, credential);
+                    var dbExportPlan = new DbExportPlanPipeline(
+                        db,
+                        dbExportPlanBookmark,
+                        kustoClient,
+                        dbConfig.MaxRowsPerTablePerIteration!.Value);
+                    var dbExportExecution = new DbExportExecutionPipeline(
+                        rootTempFolderClient,
+                        db,
+                        dbExportPlanBookmark,
+                        iterationFederation,
+                        kustoClient,
+                        mainParameterization.Configuration.ExportSlotsRatio / 100.0);
+                    var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
+
+                    return pipelines;
+                })
+                .ToImmutableArray();
+
+            await Task.WhenAll(pipelineTasks);
+
+            var dbPipelinesMap = pipelineTasks
+                .Select(t => t.Result)
+                .ToImmutableDictionary(p => p.DbExportPlan.DbName);
 
             return new ClusterExportPipeline(
                 rootTempFolderClient,
                 sourceFolderClient,
                 credential,
                 kustoClient,
-                pipelineList.ToImmutableDictionary(p => p.DbExportPlan.DbName),
+                dbPipelinesMap,
                 mainParameterization);
         }
 
