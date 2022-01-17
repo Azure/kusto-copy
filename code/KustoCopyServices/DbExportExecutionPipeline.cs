@@ -67,7 +67,6 @@ namespace KustoCopyServices
         #endregion
 
         private readonly DataLakeDirectoryClient _rootTempFolderClient;
-        private readonly DbExportPlanBookmark _dbExportPlanBookmark;
         private readonly DbIterationStorageFederation _iterationFederation;
         private readonly KustoQueuedClient _kustoClient;
         private readonly KustoExportQueue _exportQueue;
@@ -85,7 +84,7 @@ namespace KustoCopyServices
         {
             _rootTempFolderClient = rootTempFolderClient;
             DbName = dbName;
-            _dbExportPlanBookmark = dbExportPlanBookmark;
+            DbExportPlanBookmark = dbExportPlanBookmark;
             _iterationFederation = iterationFederation;
             _kustoClient = kustoClient;
             _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
@@ -93,11 +92,11 @@ namespace KustoCopyServices
             //  Populate plan queue
             var list = new List<TablePlanContext>();
 
-            foreach (var dbEpoch in _dbExportPlanBookmark.GetAllDbEpochs())
+            foreach (var dbEpoch in DbExportPlanBookmark.GetAllDbEpochs())
             {
-                foreach (var dbIteration in _dbExportPlanBookmark.GetDbIterations(dbEpoch.EndCursor))
+                foreach (var dbIteration in DbExportPlanBookmark.GetDbIterations(dbEpoch.EndCursor))
                 {
-                    var plans = _dbExportPlanBookmark.GetTableExportPlans(
+                    var plans = DbExportPlanBookmark.GetTableExportPlans(
                         dbIteration.EpochEndCursor,
                         dbIteration.Iteration);
 
@@ -110,7 +109,7 @@ namespace KustoCopyServices
                 }
             }
             _planQueue.EnqueueRange(list.Select(c => (c, c)));
-            _dbExportPlanBookmark.NewDbIteration += (sender, e) =>
+            DbExportPlanBookmark.NewDbIteration += (sender, e) =>
             {
                 lock (_planQueue)
                 {
@@ -125,12 +124,14 @@ namespace KustoCopyServices
 
         public string DbName { get; }
 
+        public DbExportPlanBookmark DbExportPlanBookmark { get; }
+
         public async Task RunAsync()
         {
             var stopGoAwaiter = new StopGoAwaiter(false);
             var taskList = new List<Task>();
 
-            _dbExportPlanBookmark.NewDbIteration += (sender, e) =>
+            DbExportPlanBookmark.NewDbIteration += (sender, e) =>
             {   //  Make sure we wake up
                 stopGoAwaiter.Go();
             };
@@ -243,7 +244,7 @@ namespace KustoCopyServices
             await iterationBookmark.CreateTableAsync(table);
             //  This is done on a different blob, hence a different "transaction"
             //  For that reason it might fail in between hence the check for table not null
-            await _dbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
+            await DbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
             Trace.TraceInformation($"Export for {tableMessage} done:  {watch.Elapsed}");
         }
 
