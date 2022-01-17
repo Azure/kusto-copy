@@ -13,7 +13,7 @@ using System.Runtime.Intrinsics.Arm;
 
 namespace KustoCopyServices
 {
-    internal class DbExportExecutionPipeline
+    public class DbExportExecutionPipeline
     {
         #region Inner Types
         public class TablePlanContext : IComparable<TablePlanContext>

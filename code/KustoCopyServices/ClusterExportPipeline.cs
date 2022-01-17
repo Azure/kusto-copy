@@ -125,6 +125,9 @@ namespace KustoCopyServices
                 mainParameterization);
         }
 
+        public IEnumerable<DbExportExecutionPipeline> ExportExecutionPipelines =>
+            _dbPipelinesMap.Values.Select(p => p.DbExportExecution);
+
         public async Task RunAsync()
         {
             var planTasks = _dbPipelinesMap.Values.Select(d => d.DbExportPlan.RunAsync());
