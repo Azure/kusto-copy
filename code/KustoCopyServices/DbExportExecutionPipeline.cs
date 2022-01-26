@@ -4,7 +4,7 @@ using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.Common;
 using KustoCopyBookmarks.ExportPlan;
-using KustoCopyBookmarks.ExportStorage;
+using KustoCopyBookmarks.IterationExportStorage;
 using KustoCopyBookmarks.Parameters;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
@@ -13,7 +13,7 @@ using System.Runtime.Intrinsics.Arm;
 
 namespace KustoCopyServices
 {
-    public class DbExportExecutionPipeline
+    internal class DbExportExecutionPipeline
     {
         #region Inner Types
         public class TablePlanContext : IComparable<TablePlanContext>

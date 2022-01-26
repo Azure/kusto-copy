@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyBookmarks.ExportStorage
+namespace KustoCopyBookmarks.IterationExportStorage
 {
     public class DbIterationStorageFederation
     {

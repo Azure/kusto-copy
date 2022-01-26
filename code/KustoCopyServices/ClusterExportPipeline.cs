@@ -3,7 +3,7 @@ using Azure.Storage.Files.DataLake;
 using Kusto.Data.Common;
 using KustoCopyBookmarks;
 using KustoCopyBookmarks.ExportPlan;
-using KustoCopyBookmarks.ExportStorage;
+using KustoCopyBookmarks.IterationExportStorage;
 using KustoCopyBookmarks.Parameters;
 using System;
 using System.Collections.Generic;
