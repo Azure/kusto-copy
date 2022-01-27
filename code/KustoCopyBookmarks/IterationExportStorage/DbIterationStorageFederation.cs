@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
+using KustoCopyBookmarks.DbExportStorage;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -102,6 +103,7 @@ namespace KustoCopyBookmarks.IterationExportStorage
 
         private static readonly TimeSpan CACHE_DURATION = TimeSpan.FromMinutes(1);
 
+        private readonly DbStorageBookmark _dbStorageBookmark;
         private readonly DataLakeDirectoryClient _dbFolderClient;
         private readonly TokenCredential _credential;
         private readonly IDictionary<(DateTime startTime, int iteration), IterationNode> _cache =
@@ -111,9 +113,11 @@ namespace KustoCopyBookmarks.IterationExportStorage
         private volatile object _lastVacuum = DateTime.Now;
 
         public DbIterationStorageFederation(
+            DbStorageBookmark dbStorageBookmark,
             DataLakeDirectoryClient dbFolderClient,
             TokenCredential credential)
         {
+            _dbStorageBookmark = dbStorageBookmark;
             _dbFolderClient = dbFolderClient;
             _credential = credential;
         }
@@ -254,18 +258,10 @@ namespace KustoCopyBookmarks.IterationExportStorage
 
                 if (!_cache.TryGetValue(cacheKey, out iterationNode))
                 {
-                    var iterationFolder = GetIterationFolder(
-                        isBackfill,
-                        cacheKey.epochStartTime,
-                        cacheKey.iteration);
-                    var tempFolder = GetTempFolder(
-                        isBackfill,
-                        cacheKey.epochStartTime,
-                        cacheKey.iteration);
-
                     iterationNode = new IterationNode(RetrieveAndCleanBookmarkAsync(
-                        iterationFolder,
-                        tempFolder));
+                        isBackfill,
+                        cacheKey.epochStartTime,
+                        cacheKey.iteration));
                     _cache.Add(cacheKey, iterationNode);
                 }
 
@@ -278,13 +274,27 @@ namespace KustoCopyBookmarks.IterationExportStorage
         }
 
         private async Task<DbIterationStorageBookmark> RetrieveAndCleanBookmarkAsync(
-            DataLakeDirectoryClient iterationFolder,
-            DataLakeDirectoryClient tempFolder)
+            bool isBackfill,
+            DateTime epochStartTime,
+            int iteration)
         {
+            var iterationFolder = GetIterationFolder(
+                isBackfill,
+                epochStartTime,
+                iteration);
+            var tempFolder = GetTempFolder(
+                isBackfill,
+                epochStartTime,
+                iteration);
             var file = iterationFolder.GetFileClient("iteration-storage.bookmark");
+            var dbStorageTask = _dbStorageBookmark.EnsureIterationExistsAsync(
+                isBackfill,
+                epochStartTime,
+                iteration);
             var cleanupTask = tempFolder.DeleteIfExistsAsync();
             var retrieveTask = DbIterationStorageBookmark.RetrieveAsync(file, _credential);
 
+            await dbStorageTask;
             await cleanupTask;
 
             return await retrieveTask;

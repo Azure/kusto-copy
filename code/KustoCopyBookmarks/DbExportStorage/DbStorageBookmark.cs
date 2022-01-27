@@ -72,9 +72,7 @@ namespace KustoCopyBookmarks.DbExportStorage
             }
             else
             {
-                var iterationMap = epochMap[epochStartTime];
-
-                if (iterationMap == null)
+                if(!epochMap.TryGetValue(epochStartTime, out var iterationMap))
                 {
                     epochMap.TryAdd(epochStartTime, new ConcurrentDictionary<int, bool>());
                     //  Maybe a concurrent thread got there before us
