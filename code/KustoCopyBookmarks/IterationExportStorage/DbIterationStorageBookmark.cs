@@ -54,7 +54,7 @@ namespace KustoCopyBookmarks.IterationExportStorage
                     null,
                     null);
                 var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
-                
+
                 dbIterationValue = new BookmarkBlockValue<DbIterationStorageData>(
                     result.AddedBlockIds.First(),
                     dbIteration);
@@ -83,30 +83,6 @@ namespace KustoCopyBookmarks.IterationExportStorage
             return _dbIteration.Value;
         }
 
-        public async Task SealDbIterationAsync()
-        {
-            if (_dbIteration.Value.AllTablesExported)
-            {
-                throw new InvalidOperationException("DB iteration is already sealed");
-            }
-
-            //  Seal in-memory
-            _dbIteration.Value.AllTablesExported = true;
-
-            var dbIterationBuffer = SerializationHelper.ToMemory(_dbIteration);
-            var transaction = new BookmarkTransaction(
-                null,
-                new[] { new BookmarkBlock(_dbIteration.BlockId, dbIterationBuffer) },
-                null);
-            var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
-
-            if (result.UpdatedBlockIds.Count != 1
-                || result.UpdatedBlockIds.First() != _dbIteration.BlockId)
-            {
-                throw new InvalidOperationException("Inconsistency with db iteration update");
-            }
-        }
-
         public TableStorageData? GetTable(string tableName)
         {
             _tables.TryGetValue(tableName, out var table);
@@ -114,30 +90,63 @@ namespace KustoCopyBookmarks.IterationExportStorage
             return table?.Value;
         }
 
-        public async Task CreateTableAsync(TableStorageData table)
+        public async Task CreateTableAsync(
+            TableStorageData table,
+            bool doReplaceTable,
+            bool isIterationCompletelyExported)
         {
-            if (_tables.ContainsKey(table.TableName))
+            if (!doReplaceTable && _tables.ContainsKey(table.TableName))
             {
                 throw new InvalidOperationException(
                     $"A table block for '{table.TableName}' already exist");
             }
+            if (isIterationCompletelyExported &&
+                _dbIteration.Value.IsIterationCompletelyExported)
+            {
+                throw new InvalidOperationException("DB iteration is already sealed");
+            }
 
+            var newDbIteration = new DbIterationStorageData
+            {
+                IsIterationCompletelyExported = isIterationCompletelyExported
+            };
             var tableBuffer = SerializationHelper.ToMemory(
                 new IterationAggregate { Table = table });
+            var addingBlockBuffers = !doReplaceTable ? new[] { tableBuffer } : null;
+            var updatingBlocks = new List<BookmarkBlock>(2);
+
+            if (doReplaceTable)
+            {
+                updatingBlocks.Add(new BookmarkBlock(_tables[table.TableName]!.BlockId, tableBuffer));
+                _tables.TryRemove(table.TableName, out _);
+            }
+            if (isIterationCompletelyExported)
+            {
+                updatingBlocks.Add(new BookmarkBlock(
+                    _dbIteration.BlockId,
+                    SerializationHelper.ToMemory(newDbIteration)));
+            }
             var transaction = new BookmarkTransaction(
-                new[] { tableBuffer },
-                null,
+                addingBlockBuffers,
+                updatingBlocks,
                 null);
             var result = await _bookmarkGateway.ApplyTransactionAsync(transaction);
             var tableValue = new BookmarkBlockValue<TableStorageData>(
-                result.AddedBlockIds.First(),
+                doReplaceTable ? result.UpdatedBlockIds.First() : result.AddedBlockIds.First(),
                 table);
-            var legal = _tables.TryAdd(table.TableName, tableValue);
 
-            if (!legal)
+            if (!_tables.TryAdd(table.TableName, tableValue))
             {
                 throw new InvalidOperationException(
                     $"Two table blocks for '{table.TableName}' were inserted at once");
+            }
+            if (isIterationCompletelyExported)
+            {
+                var newId = result.UpdatedBlockIds.Last();
+
+                _dbIteration = new BookmarkBlockValue<DbIterationStorageData>(
+                    newId,
+                    newDbIteration);
             }
         }
     }

@@ -16,17 +16,38 @@ namespace KustoCopyServices
     internal class DbExportExecutionPipeline
     {
         #region Inner Types
+        public class TablePlanCountDown
+        {
+            private volatile int _tableCount;
+
+            public TablePlanCountDown(int tableCount)
+            {
+                _tableCount = tableCount;
+            }
+
+            public bool IsIterationCompletelyExported => _tableCount == 0;
+
+            public void DecreaseTableCount()
+            {
+                Interlocked.Decrement(ref _tableCount);
+            }
+        }
+
         public class TablePlanContext : IComparable<TablePlanContext>
         {
             public TablePlanContext(
+                TablePlanCountDown tablePlanCountDown,
                 DbEpochData dbEpoch,
                 DbIterationData dbIteration,
                 TableExportPlanData tablePlan)
             {
+                TablePlanCountDown = tablePlanCountDown;
                 DbEpoch = dbEpoch;
                 DbIteration = dbIteration;
                 TablePlan = tablePlan;
             }
+
+            public TablePlanCountDown TablePlanCountDown { get; }
 
             public DbEpochData DbEpoch { get; }
 
@@ -99,10 +120,15 @@ namespace KustoCopyServices
                     var plans = DbExportPlanBookmark.GetTableExportPlans(
                         dbIteration.EpochEndCursor,
                         dbIteration.Iteration);
+                    var planCountDown = new TablePlanCountDown(plans.Count);
 
                     foreach (var tablePlan in plans)
                     {
-                        var context = new TablePlanContext(dbEpoch, dbIteration, tablePlan);
+                        var context = new TablePlanContext(
+                            planCountDown,
+                            dbEpoch,
+                            dbIteration,
+                            tablePlan);
 
                         list.Add(context);
                     }
@@ -113,8 +139,9 @@ namespace KustoCopyServices
             {
                 lock (_planQueue)
                 {
+                    var planCountDown = new TablePlanCountDown(e.TablePlans.Count);
                     var contexts = e.TablePlans
-                    .Select(p => new TablePlanContext(e.DbEpoch, e.DbIteration, p))
+                    .Select(p => new TablePlanContext(planCountDown, e.DbEpoch, e.DbIteration, p))
                     .Select(c => (c, c));
 
                     _planQueue.EnqueueRange(contexts);
@@ -168,7 +195,7 @@ namespace KustoCopyServices
         /// 1 - Snapshot schema
         /// 2 - Export to temp folder
         /// 3 - Snapshot schema (both must be same or redo)
-        /// 4 - Bookmark as stored
+        /// 4 - Bookmark as stored (and mark iteration as completed if that was the last table)
         /// 5 - Move folder
         /// 6 - Raise notification for subscription (destination clusters)
         /// 7 - Remove the plan bookmark
@@ -203,10 +230,13 @@ namespace KustoCopyServices
 
             //  It is possible the table was processed but the plan wasn't removed
             //  It is also possible the table was processed but temp folder wasn't moved
-            //  In the later case, we reprocess the table
-            if (table == null || !tableFolderExist)
+            //  In the latter case, we reprocess the table
+            if (table == null || tableFolderExist)
             {
                 var schemaBefore = await FetchTableSchemaAsync(context.TablePlan.TableName);
+                var deleteExistingFolderTask = tableFolderExist
+                    ? tableFolderClient.DeleteAsync()
+                    : Task.CompletedTask;
 
                 table = new TableStorageData
                 {
@@ -237,11 +267,16 @@ namespace KustoCopyServices
                         return;
                     }
 
+                    await deleteExistingFolderTask;
                     //  Move temp folder to permanent location
                     await tempFolderClient.RenameAsync(tableFolderClient.Path);
                 }
             }
-            await iterationBookmark.CreateTableAsync(table);
+            context.TablePlanCountDown.DecreaseTableCount();
+            await iterationBookmark.CreateTableAsync(
+                table,
+                tableFolderExist,
+                context.TablePlanCountDown.IsIterationCompletelyExported);
             //  This is done on a different blob, hence a different "transaction"
             //  For that reason it might fail in between hence the check for table not null
             await DbExportPlanBookmark.CompleteTableExportPlanAsync(context.TablePlan);
