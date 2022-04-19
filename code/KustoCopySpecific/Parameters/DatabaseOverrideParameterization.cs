@@ -8,10 +8,6 @@ namespace KustoCopySpecific.Parameters
 {
     public class DatabaseOverrideParameterization
     {
-        public string Name { get; set; } = string.Empty;
-
-        public string? DestinationName { get; set; } = null;
-
         public bool? IsEnabled { get; set; } = null;
 
         public long? MaxRowsPerTablePerIteration { get; set; } = null;
@@ -22,8 +18,6 @@ namespace KustoCopySpecific.Parameters
             var other = obj as DatabaseOverrideParameterization;
 
             return other != null
-                && object.Equals(Name, other.Name)
-                && object.Equals(DestinationName, other.DestinationName)
                 && object.Equals(IsEnabled, other.IsEnabled)
                 && object.Equals(MaxRowsPerTablePerIteration, other.MaxRowsPerTablePerIteration);
         }

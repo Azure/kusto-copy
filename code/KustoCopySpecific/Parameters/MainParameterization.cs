@@ -14,9 +14,6 @@ namespace KustoCopySpecific.Parameters
         public IImmutableList<DestinationParameterization> Destinations { get; set; } =
             ImmutableArray<DestinationParameterization>.Empty;
 
-        public DatabaseConfigParameterization DatabaseDefault { get; set; } =
-            new DatabaseConfigParameterization();
-
         #region Object methods
         public override bool Equals(object? obj)
         {
@@ -24,8 +21,7 @@ namespace KustoCopySpecific.Parameters
 
             return other != null
                 && object.Equals(Source, other.Source)
-                && Destinations.SequenceEqual(other.Destinations)
-                && object.Equals(DatabaseDefault, other.DatabaseDefault);
+                && Destinations.SequenceEqual(other.Destinations);
         }
 
         public override int GetHashCode()

@@ -7,11 +7,14 @@ namespace KustoCopySpecific.Parameters
         public string? ClusterQueryUri { get; set; }
 
         public int ConcurrentQueryCount { get; set; } = 1;
-        
+
         public int ConcurrentExportCommandCount { get; set; } = 2;
 
-        public IImmutableList<DatabaseOverrideParameterization> DatabaseOverrides { get; set; } =
-            ImmutableArray<DatabaseOverrideParameterization>.Empty;
+        public DatabaseConfigParameterization DatabaseDefault { get; set; } =
+            new DatabaseConfigParameterization();
+
+        public IImmutableList<SourceDatabaseParameterization> Databases { get; set; } =
+            ImmutableArray<SourceDatabaseParameterization>.Empty;
 
         #region Object methods
         public override bool Equals(object? obj)
@@ -19,8 +22,11 @@ namespace KustoCopySpecific.Parameters
             var other = obj as SourceParameterization;
 
             return other != null
-                && object.Equals(ClusterQueryUri, other.ClusterQueryUri)
-                && DatabaseOverrides.SequenceEqual(other.DatabaseOverrides);
+                && string.Equals(ClusterQueryUri, other.ClusterQueryUri)
+                && ConcurrentQueryCount == other.ConcurrentQueryCount
+                && ConcurrentExportCommandCount == other.ConcurrentExportCommandCount
+                && object.Equals(DatabaseDefault, other.DatabaseDefault)
+                && Databases.SequenceEqual(other.Databases);
         }
 
         public override int GetHashCode()

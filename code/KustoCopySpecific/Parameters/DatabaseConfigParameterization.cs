@@ -28,12 +28,12 @@ namespace KustoCopySpecific.Parameters
         }
 
         public DatabaseOverrideParameterization Override(
-            DatabaseOverrideParameterization databaseOverride)
+            DatabaseOverrideParameterization? databaseOverride)
         {
+            databaseOverride = databaseOverride ?? new DatabaseOverrideParameterization();
+
             var combination = new DatabaseOverrideParameterization
             {
-                Name = databaseOverride.Name,
-                DestinationName = databaseOverride.DestinationName,
                 IsEnabled = databaseOverride.IsEnabled ?? this.IsEnabled,
                 MaxRowsPerTablePerIteration = databaseOverride.MaxRowsPerTablePerIteration
                 ?? this.MaxRowsPerTablePerIteration

@@ -67,26 +67,27 @@ namespace KustoCopySpecific.Pipelines
             var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
             var rootTempFolderClient = folderClient.GetSubDirectoryClient("temp");
             //  Fetch the database list from the cluster
-            var dbNames = await kustoClient.ExecuteCommandAsync(
+            var allDbNames = await kustoClient.ExecuteCommandAsync(
                 KustoPriority.WildcardPriority,
                 string.Empty,
                 ".show databases | project DatabaseName",
                 r => (string)r["DatabaseName"]);
-            var configMap = mainParameterization.Source!.DatabaseOverrides.ToImmutableDictionary(
-                o => o.Name);
+            var databases = mainParameterization.Source!.Databases
+                ?? allDbNames.Select(n => new SourceDatabaseParameterization
+                {
+                    Name = n
+                }).ToImmutableArray();
             var pipelineList = new List<DbPipelines>();
 
             await rootTempFolderClient.DeleteIfExistsAsync();
-            Trace.WriteLine($"Source databases:  {{{string.Join(", ", dbNames.Sort())}}}");
+            Trace.WriteLine($"Source databases:  {{{string.Join(", ", allDbNames.Sort())}}}");
 
-            var pipelineTasks = dbNames
+            var pipelineTasks = databases
                 .Select(async db =>
                 {
-                    var dbConfig = mainParameterization.DatabaseDefault.Override(
-                        configMap.ContainsKey(db)
-                        ? configMap[db]
-                        : new DatabaseOverrideParameterization { Name = db });
-                    var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db);
+                    var dbConfig = mainParameterization.Source!.DatabaseDefault.Override(
+                        db.DatabaseOverrides);
+                    var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db.Name);
                     var planFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
                     var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
                         planFileClient,
@@ -100,17 +101,17 @@ namespace KustoCopySpecific.Pipelines
                         dbFolderClient,
                         credential);
                     var dbExportPlan = new DbExportPlanPipeline(
-                        db,
+                        db.Name!,
                         dbExportPlanBookmark,
                         kustoClient,
                         dbConfig.MaxRowsPerTablePerIteration!.Value);
                     var dbExportExecution = new DbExportExecutionPipeline(
                         rootTempFolderClient,
-                        db,
+                        db.Name!,
                         dbExportPlanBookmark,
                         iterationFederation,
                         kustoClient,
-                        mainParameterization.Source.ConcurrentExportCommandCount);
+                        mainParameterization.Source!.ConcurrentExportCommandCount);
                     var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
 
                     return pipelines;
