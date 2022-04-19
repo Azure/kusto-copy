@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyFoundation
+namespace KustoCopyFoundation.KustoQuery
 {
-    internal static class DbNullHelper
+    public static class DbNullHelper
     {
         public static T? To<T>(this object obj) where T : struct
         {

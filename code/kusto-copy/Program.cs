@@ -1,8 +1,8 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using Kusto.Cloud.Platform.Utils;
-using KustoCopyBookmarks;
-using KustoCopyBookmarks.Parameters;
+using KustoCopyFoundation;
+using KustoCopySpecific.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

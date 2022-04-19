@@ -3,7 +3,6 @@ using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
-using KustoCopyBookmarks;
 using System.Timers;
 
 namespace kusto_copy
