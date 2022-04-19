@@ -14,9 +14,6 @@ namespace KustoCopyBookmarks.Parameters
         public IImmutableList<DestinationParameterization> Destinations { get; set; } =
             ImmutableArray<DestinationParameterization>.Empty;
 
-        public ConfigurationParameterization Configuration { get; set; }
-            = new ConfigurationParameterization();
-
         public DatabaseConfigParameterization DatabaseDefault { get; set; } =
             new DatabaseConfigParameterization();
 
@@ -28,7 +25,6 @@ namespace KustoCopyBookmarks.Parameters
             return other != null
                 && object.Equals(Source, other.Source)
                 && Destinations.SequenceEqual(other.Destinations)
-                && object.Equals(Configuration, other.Configuration)
                 && object.Equals(DatabaseDefault, other.DatabaseDefault);
         }
 

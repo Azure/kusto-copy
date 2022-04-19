@@ -101,14 +101,14 @@ namespace KustoCopyServices
             DbExportPlanBookmark dbExportPlanBookmark,
             DbIterationStorageFederation iterationFederation,
             KustoQueuedClient kustoClient,
-            double exportSlotsRatio)
+            int concurrentExportCommandCount)
         {
             _rootTempFolderClient = rootTempFolderClient;
             DbName = dbName;
             DbExportPlanBookmark = dbExportPlanBookmark;
             _iterationFederation = iterationFederation;
             _kustoClient = kustoClient;
-            _exportQueue = new KustoExportQueue(_kustoClient, exportSlotsRatio);
+            _exportQueue = new KustoExportQueue(_kustoClient, concurrentExportCommandCount);
             _operationAwaiter = new KustoOperationAwaiter(_kustoClient, DbName);
             //  Populate plan queue
             var list = new List<TablePlanContext>();

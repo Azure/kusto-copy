@@ -110,7 +110,7 @@ namespace KustoCopyServices
                         dbExportPlanBookmark,
                         iterationFederation,
                         kustoClient,
-                        mainParameterization.Configuration.ExportSlotsRatio / 100.0);
+                        mainParameterization.Source.ConcurrentExportCommandCount);
                     var pipelines = new DbPipelines(dbExportPlan, dbExportExecution);
 
                     return pipelines;

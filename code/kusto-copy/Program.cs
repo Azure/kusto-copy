@@ -157,9 +157,10 @@ namespace kusto_copy
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
 
-            if (options.ExportSlotsRatio != null)
+            if (options.ConcurrentExportCommandCount != null)
             {
-                parameterization.Configuration.ExportSlotsRatio = options.ExportSlotsRatio.Value;
+                parameterization.Source!.ConcurrentExportCommandCount =
+                    options.ConcurrentExportCommandCount.Value;
             }
             if (options.ConcurrentQueries != null)
             {
