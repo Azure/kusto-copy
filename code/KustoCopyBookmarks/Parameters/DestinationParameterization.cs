@@ -5,6 +5,8 @@
         public string? ClusterQueryUri { get; set; }
 
         public int ConcurrentQueryCount { get; set; } = 2;
+        
+        public bool IsEnabled { get; set; } = true;
 
         #region Object methods
         public override bool Equals(object? obj)
