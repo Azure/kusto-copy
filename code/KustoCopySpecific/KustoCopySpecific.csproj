@@ -16,7 +16,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="Pipelines\DbExportPipeline.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <ProjectReference Include="..\KustoCopyFoundation\KustoCopyFoundation.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Bookmarks\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="Pipelines\DbExportPipeline.cs" />
 	</ItemGroup>
 
 </Project>

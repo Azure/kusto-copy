@@ -25,8 +25,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\KustoCopyBookmarks\KustoCopyBookmarks.csproj" />
-	  <ProjectReference Include="..\KustoCopyServices\KustoCopyServices.csproj" />
+	  <ProjectReference Include="..\KustoCopySpecific\KustoCopySpecific.csproj" />
 	</ItemGroup>
 
 </Project>

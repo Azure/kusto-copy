@@ -6,10 +6,11 @@ using Kusto.Cloud.Platform.Utils;
 using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
-using KustoCopyBookmarks;
-using KustoCopyBookmarks.Parameters;
-using KustoCopyBookmarks.Root;
-using KustoCopyServices;
+using KustoCopyFoundation;
+using KustoCopyFoundation.KustoQuery;
+using KustoCopySpecific.Bookmarks.Root;
+using KustoCopySpecific.Parameters;
+using KustoCopySpecific.Pipelines;
 using System.Diagnostics;
 
 namespace kusto_copy
