@@ -81,7 +81,7 @@ namespace kusto_copy
 
         private readonly IAsyncDisposable _blobLock;
         private readonly RootBookmark _rootBookmark;
-        private readonly ClusterExportPipeline _exportPipeline;
+        private readonly ClusterExportPipeline _clusterExportPipeline;
 
         private CopyOrchestration(
             IAsyncDisposable blobLock,
@@ -90,7 +90,7 @@ namespace kusto_copy
         {
             _blobLock = blobLock;
             _rootBookmark = rootBookmark;
-            _exportPipeline = exportPipeline;
+            _clusterExportPipeline = exportPipeline;
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -158,7 +158,7 @@ namespace kusto_copy
 
         public async Task RunAsync()
         {
-            var exportTask = _exportPipeline.RunAsync();
+            var exportTask = _clusterExportPipeline.RunAsync();
 
             await Task.WhenAll(exportTask);
         }
