@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopySpecific.Bookmarks.DbExportStorage
 {
-    public class DbStorageBookmark
+    public class DbExportStorageBookmark
     {
         #region Inner Types
         private class DbAggregate
@@ -27,7 +27,7 @@ namespace KustoCopySpecific.Bookmarks.DbExportStorage
         private readonly ConcurrentDictionary<bool, ConcurrentDictionary<DateTime, ConcurrentDictionary<int, bool>>>
             _iterationIndex;
 
-        public static async Task<DbStorageBookmark> RetrieveAsync(
+        public static async Task<DbExportStorageBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential)
         {
@@ -39,10 +39,10 @@ namespace KustoCopySpecific.Bookmarks.DbExportStorage
                 .Select(v => v.Value.DbIterations!)
                 .SelectMany(i => i);
 
-            return new DbStorageBookmark(bookmarkGateway, dbIterations);
+            return new DbExportStorageBookmark(bookmarkGateway, dbIterations);
         }
 
-        private DbStorageBookmark(BookmarkGateway bookmarkGateway, IEnumerable<DbIterationData> dbIterations)
+        private DbExportStorageBookmark(BookmarkGateway bookmarkGateway, IEnumerable<DbIterationData> dbIterations)
         {
             _bookmarkGateway = bookmarkGateway;
 

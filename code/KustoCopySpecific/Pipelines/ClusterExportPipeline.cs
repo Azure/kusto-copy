@@ -93,7 +93,7 @@ namespace KustoCopySpecific.Pipelines
                         planFileClient,
                         credential);
                     var storageFileClient = dbFolderClient.GetFileClient("db-storage.bookmark");
-                    var dbStorageBookmark = await DbStorageBookmark.RetrieveAsync(
+                    var dbStorageBookmark = await DbExportStorageBookmark.RetrieveAsync(
                         storageFileClient,
                         credential);
                     var iterationFederation = new DbIterationStorageFederation(

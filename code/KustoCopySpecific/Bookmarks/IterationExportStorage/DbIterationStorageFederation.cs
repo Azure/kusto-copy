@@ -103,7 +103,7 @@ namespace KustoCopySpecific.Bookmarks.IterationExportStorage
 
         private static readonly TimeSpan CACHE_DURATION = TimeSpan.FromMinutes(1);
 
-        private readonly DbStorageBookmark _dbStorageBookmark;
+        private readonly DbExportStorageBookmark _dbStorageBookmark;
         private readonly DataLakeDirectoryClient _dbFolderClient;
         private readonly TokenCredential _credential;
         private readonly IDictionary<(DateTime startTime, int iteration), IterationNode> _cache =
@@ -113,7 +113,7 @@ namespace KustoCopySpecific.Bookmarks.IterationExportStorage
         private volatile object _lastVacuum = DateTime.Now;
 
         public DbIterationStorageFederation(
-            DbStorageBookmark dbStorageBookmark,
+            DbExportStorageBookmark dbStorageBookmark,
             DataLakeDirectoryClient dbFolderClient,
             TokenCredential credential)
         {

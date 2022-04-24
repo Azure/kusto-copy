@@ -24,10 +24,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Bookmarks\" />
-	</ItemGroup>
-
-	<ItemGroup>
 	  <None Include="Pipelines\DbExportPipeline.cs" />
 	</ItemGroup>
 
