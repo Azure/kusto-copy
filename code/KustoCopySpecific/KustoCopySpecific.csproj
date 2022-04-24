@@ -27,4 +27,8 @@
 	  <None Include="Pipelines\DbExportPipeline.cs" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Bookmarks\DbStorage\" />
+	</ItemGroup>
+
 </Project>
