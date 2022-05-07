@@ -94,23 +94,23 @@ namespace kusto_copy
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
+            AuthenticationMode authenticationMode,
             string dataLakeFolderUrl,
             MainParameterization parameterization)
         {
             Trace.WriteLine("Connecting to Data Lake...");
 
-            var options = new InteractiveBrowserCredentialOptions
-            {
-                TokenCachePersistenceOptions = new TokenCachePersistenceOptions()
-            };
-            var credential = new InteractiveBrowserCredential(options);
+            var adlsCredential = CreateAdlsCredentials(authenticationMode);
             var folder = new DataLakeFolder(dataLakeFolderUrl);
-            var folderClient = await GetFolderClientAsync(dataLakeFolderUrl, credential, folder);
+            var folderClient = await GetFolderClientAsync(
+                dataLakeFolderUrl,
+                adlsCredential,
+                folder);
             var lockClient = folderClient.GetFileClient("lock");
 
             await lockClient.CreateIfNotExistsAsync();
 
-            var blobLock = await BlobLock.CreateAsync(new BlobClient(lockClient.Uri, credential));
+            var blobLock = await BlobLock.CreateAsync(new BlobClient(lockClient.Uri, adlsCredential));
 
             if (blobLock == null)
             {
@@ -122,7 +122,7 @@ namespace kusto_copy
             {
                 var rootBookmark = await RootBookmark.RetrieveAsync(
                     folderClient.GetFileClient("root.bookmark"),
-                    credential,
+                    adlsCredential,
                     parameterization);
 
                 if (!rootBookmark.Parameterization!.Equals(parameterization))
@@ -134,13 +134,16 @@ namespace kusto_copy
 
                 Trace.WriteLine("Connecting to source cluster...");
 
+                var kustoBuilder = CreateKustoCredentials(
+                    authenticationMode,
+                    parameterization.Source!.ClusterQueryUri!);
                 var sourceKustoClient = new KustoQueuedClient(
-                    parameterization.Source!.ClusterQueryUri!,
+                    kustoBuilder,
                     parameterization.Source!.ConcurrentQueryCount,
                     parameterization.Source!.ConcurrentExportCommandCount);
                 var exportPipeline = await ClusterExportPipeline.CreateAsync(
                     folderClient,
-                    credential,
+                    adlsCredential,
                     sourceKustoClient,
                     parameterization);
 
@@ -153,6 +156,48 @@ namespace kusto_copy
             {
                 await blobLock.DisposeAsync();
                 throw;
+            }
+        }
+
+        private static KustoConnectionStringBuilder CreateKustoCredentials(
+            AuthenticationMode authenticationMode,
+            string clusterQueryUrl)
+        {
+            var builder = new KustoConnectionStringBuilder(clusterQueryUrl);
+
+            switch (authenticationMode)
+            {
+                case AuthenticationMode.AppSecret:
+                    throw new NotSupportedException();
+                case AuthenticationMode.AzCli:
+                    return builder.WithAadAzCliAuthentication();
+                case AuthenticationMode.Browser:
+                    return builder.WithAadUserPromptAuthentication();
+
+                default:
+                    throw new NotSupportedException(
+                        $"Unsupported authentication mode '{authenticationMode}'");
+            }
+        }
+
+        private static TokenCredential CreateAdlsCredentials(
+            AuthenticationMode authenticationMode)
+        {
+            switch(authenticationMode)
+            {
+                case AuthenticationMode.AppSecret:
+                    throw new NotSupportedException();
+                case AuthenticationMode.AzCli:
+                    return new AzureCliCredential();
+                case AuthenticationMode.Browser:
+                    return new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
+                    {
+                        TokenCachePersistenceOptions = new TokenCachePersistenceOptions()
+                    });
+
+                default:
+                    throw new NotSupportedException(
+                        $"Unsupported authentication mode '{authenticationMode}'");
             }
         }
 

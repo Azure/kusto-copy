@@ -10,6 +10,9 @@ namespace kusto_copy
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
         public bool Verbose { get; set; }
 
+        [Option('a', "authMode", Required = false, HelpText = "Authentication mode:  AppSecret, AzCli or Browser")]
+        public AuthenticationMode AuthenticationMode { get; set; } = AuthenticationMode.AzCli;
+
         [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL")]
         public string Lake { get; set; } = string.Empty;
 

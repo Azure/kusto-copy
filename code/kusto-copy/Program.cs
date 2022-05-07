@@ -178,6 +178,7 @@ namespace kusto_copy
             }
 
             await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
+                options.AuthenticationMode,
                 options.Lake,
                 parameterization))
             {

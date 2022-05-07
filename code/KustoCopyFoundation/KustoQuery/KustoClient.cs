@@ -22,19 +22,17 @@ namespace KustoCopyFoundation.KustoQuery
                 5,
                 attempt => TimeSpan.FromSeconds(attempt));
 
-        private readonly Uri _clusterQueryUri;
+        private readonly KustoConnectionStringBuilder _builder;
         private readonly ICslAdminProvider _commandProvider;
         private readonly ICslQueryProvider _queryProvider;
 
-        public KustoClient(string clusterQueryUrl)
+        public KustoClient(KustoConnectionStringBuilder builder)
         {
-            var clusterQueryUri = ValidateClusterQueryUri(clusterQueryUrl);
-            var builder = new KustoConnectionStringBuilder(clusterQueryUri.ToString())
-                .WithAadUserPromptAuthentication();
+            var clusterQueryUri = ValidateClusterQueryUri(builder.Hostname);
             var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
             var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
-            _clusterQueryUri = clusterQueryUri;
+            _builder = builder;
             _commandProvider = commandProvider;
             _queryProvider = queryProvider;
         }
@@ -57,7 +55,7 @@ namespace KustoCopyFoundation.KustoQuery
             {
                 throw new CopyException(
                     "Issue while executing a command in cluster "
-                    + $"'{_clusterQueryUri}', database '{database}' "
+                    + $"'{_builder.Hostname}', database '{database}' "
                     + $"for command '{command}'",
                     ex);
             }
@@ -152,7 +150,7 @@ namespace KustoCopyFoundation.KustoQuery
                 catch (Exception ex)
                 {
                     throw new CopyException(
-                        $"Issue while executing a query in cluster '{_clusterQueryUri}', "
+                        $"Issue while executing a query in cluster '{_builder.Hostname}', "
                         + $"database '{database}':  '{query}'",
                         ex);
                 }

@@ -1,4 +1,5 @@
-﻿using Kusto.Data.Common;
+﻿using Kusto.Data;
+using Kusto.Data.Common;
 using KustoCopyFoundation.Concurrency;
 using System;
 using System.Collections.Generic;
@@ -17,11 +18,11 @@ namespace KustoCopyFoundation.KustoQuery
         private class InnerConfiguration
         {
             public InnerConfiguration(
-                string clusterQueryUrl,
+                KustoConnectionStringBuilder builder,
                 int concurrentQueryCount,
                 int concurrentExportCommandCount)
             {
-                Client = new KustoClient(clusterQueryUrl);
+                Client = new KustoClient(builder);
                 QueryExecutionQueue =
                     new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
                 ExportCommandExecutionQueue = new ExecutionQueue(concurrentExportCommandCount);
@@ -41,12 +42,12 @@ namespace KustoCopyFoundation.KustoQuery
         private readonly ClientRequestProperties _properties;
 
         public KustoQueuedClient(
-            string clusterQueryUrl,
+            KustoConnectionStringBuilder kustoBuilder,
             int concurrentQueryCount,
             int concurrentExportCommandCount)
         {
             _config = new InnerConfiguration(
-                clusterQueryUrl,
+                kustoBuilder,
                 concurrentQueryCount,
                 concurrentExportCommandCount);
             _properties = new ClientRequestProperties();
