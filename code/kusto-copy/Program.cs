@@ -148,7 +148,11 @@ namespace kusto_copy
             {
                 Source = new SourceParameterization
                 {
-                    ClusterQueryUri = options.Source
+                    ClusterQueryUri = options.Source,
+                    Databases = new[] { "mydb1", "yourdb2" }.Select(db => new SourceDatabaseParameterization
+                    {
+                        Name = db
+                    }).ToImmutableArray()
                 }
             };
 

@@ -16,11 +16,14 @@ namespace kusto_copy
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
         public string? ParameterFilePath { get; set; }
 
-        [Option('q', "concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands per cluster")]
-        public int? ConcurrentQueries { get; set; } = null;
+        //[Option("dbs", Required = false, Separator = ',', HelpText = "DBs (from the source) to include")]
+        //public string[] Dbs { get; set; } = new string[0];
 
         [Option('s', "source", Required = false, HelpText = "Source Cluster URI")]
         public string Source { get; set; } = string.Empty;
+
+        [Option('q', "concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands per cluster")]
+        public int? ConcurrentQueries { get; set; } = null;
 
         [Option('e', "export-slots", Required = false, HelpText = "# export slots to use")]
         public int? ConcurrentExportCommandCount { get; set; }
