@@ -8,9 +8,13 @@ using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
 using KustoCopyFoundation;
 using KustoCopyFoundation.KustoQuery;
+using KustoCopySpecific.Bookmarks.DbExportStorage;
+using KustoCopySpecific.Bookmarks.ExportPlan;
+using KustoCopySpecific.Bookmarks.IterationExportStorage;
 using KustoCopySpecific.Bookmarks.Root;
 using KustoCopySpecific.Parameters;
 using KustoCopySpecific.Pipelines;
+using System.Collections.Immutable;
 using System.Diagnostics;
 
 namespace kusto_copy
@@ -80,17 +84,17 @@ namespace kusto_copy
         #endregion
 
         private readonly IAsyncDisposable _blobLock;
-        private readonly RootBookmark _rootBookmark;
-        private readonly ClusterExportPipeline _clusterExportPipeline;
+        private readonly IImmutableList<DbExportPlanPipeline> _dbExportPlanPipelines;
+        private readonly IImmutableList<DbExportExecutionPipeline> _dbExportExecutionPipelines;
 
         private CopyOrchestration(
             IAsyncDisposable blobLock,
-            RootBookmark rootBookmark,
-            ClusterExportPipeline exportPipeline)
+            IEnumerable<DbExportPlanPipeline> dbExportPlanPipelines,
+            IEnumerable<DbExportExecutionPipeline> dbExportExecutionPipelines)
         {
             _blobLock = blobLock;
-            _rootBookmark = rootBookmark;
-            _clusterExportPipeline = exportPipeline;
+            _dbExportPlanPipelines = dbExportPlanPipelines.ToImmutableArray();
+            _dbExportExecutionPipelines = dbExportExecutionPipelines.ToImmutableArray();
         }
 
         public static async Task<CopyOrchestration> CreationOrchestrationAsync(
@@ -141,22 +145,85 @@ namespace kusto_copy
                     kustoBuilder,
                     parameterization.Source!.ConcurrentQueryCount,
                     parameterization.Source!.ConcurrentExportCommandCount);
-                var exportPipeline = await ClusterExportPipeline.CreateAsync(
-                    folderClient,
-                    adlsCredential,
-                    sourceKustoClient,
-                    parameterization);
+                var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
+                var rootTempFolderClient = folderClient.GetSubDirectoryClient("temp");
+                //  Fetch the database list from the cluster
+                var allDbNames = await sourceKustoClient.ExecuteCommandAsync(
+                    KustoPriority.WildcardPriority,
+                    string.Empty,
+                    ".show databases | project DatabaseName",
+                    r => (string)r["DatabaseName"]);
+                var databases = parameterization.Source!.Databases
+                    ?? allDbNames.Select(n => new SourceDatabaseParameterization
+                    {
+                        Name = n
+                    }).ToImmutableArray();
+
+                //  Flush temp folder
+                await rootTempFolderClient.DeleteIfExistsAsync();
+                Trace.WriteLine($"Source databases:  {{{string.Join(", ", allDbNames.Sort())}}}");
+
+                var pipelineTasks = databases
+                    .Select(async db => await CreateDbPipelinesAsync(
+                        parameterization,
+                        db,
+                        adlsCredential,
+                        sourceKustoClient,
+                        sourceFolderClient,
+                        rootTempFolderClient))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(pipelineTasks);
 
                 return new CopyOrchestration(
                     blobLock,
-                    rootBookmark,
-                    exportPipeline);
+                    pipelineTasks.Select(t => t.Result.dbExportPlan),
+                    pipelineTasks.Select(t => t.Result.dbExportExecution));
             }
             catch
             {
                 await blobLock.DisposeAsync();
                 throw;
             }
+        }
+
+        private static async Task<(DbExportPlanPipeline dbExportPlan, DbExportExecutionPipeline dbExportExecution)> CreateDbPipelinesAsync(
+            MainParameterization parameterization,
+            SourceDatabaseParameterization db,
+            TokenCredential adlsCredential,
+            KustoQueuedClient sourceKustoClient,
+            DataLakeDirectoryClient sourceFolderClient,
+            DataLakeDirectoryClient rootTempFolderClient)
+        {
+            var dbConfig = parameterization.Source!.DatabaseDefault.Override(
+                db.DatabaseOverrides);
+            var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db.Name);
+            var planFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
+            var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
+                planFileClient,
+                adlsCredential);
+            var storageFileClient = dbFolderClient.GetFileClient("db-storage.bookmark");
+            var dbStorageBookmark = await DbExportStorageBookmark.RetrieveAsync(
+                storageFileClient,
+                adlsCredential);
+            var iterationFederation = new DbIterationStorageFederation(
+                dbStorageBookmark,
+                dbFolderClient,
+                adlsCredential);
+            var dbExportPlan = new DbExportPlanPipeline(
+                db.Name!,
+                dbExportPlanBookmark,
+                sourceKustoClient,
+                dbConfig.MaxRowsPerTablePerIteration!.Value);
+            var dbExportExecution = new DbExportExecutionPipeline(
+                rootTempFolderClient,
+                db.Name!,
+                dbExportPlanBookmark,
+                iterationFederation,
+                sourceKustoClient,
+                parameterization.Source!.ConcurrentExportCommandCount);
+
+            return (dbExportPlan, dbExportExecution);
         }
 
         private static KustoConnectionStringBuilder CreateKustoCredentials(
@@ -183,7 +250,7 @@ namespace kusto_copy
         private static TokenCredential CreateAdlsCredentials(
             AuthenticationMode authenticationMode)
         {
-            switch(authenticationMode)
+            switch (authenticationMode)
             {
                 case AuthenticationMode.AppSecret:
                     throw new NotSupportedException();
@@ -203,9 +270,10 @@ namespace kusto_copy
 
         public async Task RunAsync()
         {
-            var exportTask = _clusterExportPipeline.RunAsync();
+            var planTasks = _dbExportPlanPipelines.Select(p => p.RunAsync()).ToImmutableArray();
+            var executionTasks = _dbExportExecutionPipelines.Select(p => p.RunAsync()).ToImmutableArray();
 
-            await Task.WhenAll(exportTask);
+            await Task.WhenAll(planTasks.Concat(executionTasks));
         }
 
         async ValueTask IAsyncDisposable.DisposeAsync()

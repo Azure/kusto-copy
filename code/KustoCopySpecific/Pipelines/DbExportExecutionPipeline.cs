@@ -14,7 +14,7 @@ using System.Runtime.Intrinsics.Arm;
 
 namespace KustoCopySpecific.Pipelines
 {
-    internal class DbExportExecutionPipeline
+    public class DbExportExecutionPipeline
     {
         #region Inner Types
         public class TablePlanCountDown

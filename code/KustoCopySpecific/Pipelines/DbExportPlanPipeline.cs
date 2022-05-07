@@ -9,7 +9,7 @@ using System.Runtime.Intrinsics.Arm;
 
 namespace KustoCopySpecific.Pipelines
 {
-    internal class DbExportPlanPipeline
+    public class DbExportPlanPipeline
     {
         #region Inner Types
         private class TableInterval
