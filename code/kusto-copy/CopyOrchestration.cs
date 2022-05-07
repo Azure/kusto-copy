@@ -2,16 +2,12 @@
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Files.DataLake;
-using Kusto.Cloud.Platform.Utils;
 using Kusto.Data;
-using Kusto.Data.Common;
-using Kusto.Data.Net.Client;
 using KustoCopyFoundation;
 using KustoCopyFoundation.KustoQuery;
 using KustoCopySpecific.Bookmarks.DbExportStorage;
 using KustoCopySpecific.Bookmarks.ExportPlan;
 using KustoCopySpecific.Bookmarks.IterationExportStorage;
-using KustoCopySpecific.Bookmarks.Root;
 using KustoCopySpecific.Parameters;
 using KustoCopySpecific.Pipelines;
 using System.Collections.Immutable;
@@ -124,18 +120,6 @@ namespace kusto_copy
             }
             try
             {
-                var rootBookmark = await RootBookmark.RetrieveAsync(
-                    folderClient.GetFileClient("root.bookmark"),
-                    adlsCredential,
-                    parameterization);
-
-                if (!rootBookmark.Parameterization!.Equals(parameterization))
-                {
-                    throw new CopyException(
-                        "Parameters can't be different from one run to "
-                        + "another in the same data lake folder");
-                }
-
                 Trace.WriteLine("Connecting to source cluster...");
 
                 var kustoBuilder = CreateKustoCredentials(
@@ -196,6 +180,7 @@ namespace kusto_copy
             DataLakeDirectoryClient rootTempFolderClient)
         {
             var dbConfig = parameterization.Source!.DatabaseDefault.Override(
+                parameterization,
                 db.DatabaseOverrides);
             var dbFolderClient = sourceFolderClient.GetSubDirectoryClient(db.Name);
             var planFileClient = dbFolderClient.GetFileClient("plan-db.bookmark");
@@ -214,7 +199,7 @@ namespace kusto_copy
                 db.Name!,
                 dbExportPlanBookmark,
                 sourceKustoClient,
-                dbConfig.MaxRowsPerTablePerIteration!.Value);
+                dbConfig.MaxRowsPerTablePerIteration);
             var dbExportExecution = new DbExportExecutionPipeline(
                 rootTempFolderClient,
                 db.Name!,
