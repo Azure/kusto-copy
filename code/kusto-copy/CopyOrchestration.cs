@@ -122,53 +122,69 @@ namespace kusto_copy
             {
                 Trace.WriteLine("Connecting to source cluster...");
 
-                var kustoBuilder = CreateKustoCredentials(
+                return await CreationOrchestrationAsync(
                     authenticationMode,
-                    parameterization.Source!.ClusterQueryUri!);
-                var sourceKustoClient = new KustoQueuedClient(
-                    kustoBuilder,
-                    parameterization.Source!.ConcurrentQueryCount,
-                    parameterization.Source!.ConcurrentExportCommandCount);
-                var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
-                var rootTempFolderClient = folderClient.GetSubDirectoryClient("temp");
-                //  Fetch the database list from the cluster
-                var allDbNames = await sourceKustoClient.ExecuteCommandAsync(
-                    KustoPriority.WildcardPriority,
-                    string.Empty,
-                    ".show databases | project DatabaseName",
-                    r => (string)r["DatabaseName"]);
-                var databases = parameterization.Source!.Databases
-                    ?? allDbNames.Select(n => new SourceDatabaseParameterization
-                    {
-                        Name = n
-                    }).ToImmutableArray();
-
-                //  Flush temp folder
-                await rootTempFolderClient.DeleteIfExistsAsync();
-                Trace.WriteLine($"Source databases:  {{{string.Join(", ", allDbNames.Sort())}}}");
-
-                var pipelineTasks = databases
-                    .Select(async db => await CreateDbPipelinesAsync(
-                        parameterization,
-                        db,
-                        adlsCredential,
-                        sourceKustoClient,
-                        sourceFolderClient,
-                        rootTempFolderClient))
-                    .ToImmutableArray();
-
-                await Task.WhenAll(pipelineTasks);
-
-                return new CopyOrchestration(
-                    blobLock,
-                    pipelineTasks.Select(t => t.Result.dbExportPlan),
-                    pipelineTasks.Select(t => t.Result.dbExportExecution));
+                    parameterization,
+                    adlsCredential,
+                    folderClient,
+                    blobLock);
             }
             catch
             {
                 await blobLock.DisposeAsync();
                 throw;
             }
+        }
+
+        private static async Task<CopyOrchestration> CreationOrchestrationAsync(
+            AuthenticationMode authenticationMode,
+            MainParameterization parameterization,
+            TokenCredential adlsCredential,
+            DataLakeDirectoryClient folderClient,
+            IAsyncDisposable blobLock)
+        {
+            var kustoBuilder = CreateKustoCredentials(
+                authenticationMode,
+                parameterization.Source!.ClusterQueryUri!);
+            var sourceKustoClient = new KustoQueuedClient(
+                kustoBuilder,
+                parameterization.Source!.ConcurrentQueryCount,
+                parameterization.Source!.ConcurrentExportCommandCount);
+            var sourceFolderClient = folderClient.GetSubDirectoryClient("source");
+            var rootTempFolderClient = folderClient.GetSubDirectoryClient("temp");
+            //  Flush temp folder
+            var flushTempFolderTask = rootTempFolderClient.DeleteIfExistsAsync();
+            //  Fetch the database list from the cluster
+            var allDbNames = await sourceKustoClient.ExecuteCommandAsync(
+                KustoPriority.WildcardPriority,
+                string.Empty,
+                ".show databases | project DatabaseName",
+                r => (string)r["DatabaseName"]);
+            var databases = parameterization.Source!.Databases
+                ?? allDbNames.Select(n => new SourceDatabaseParameterization
+                {
+                    Name = n
+                }).ToImmutableArray();
+
+            Trace.WriteLine($"Source databases:  {{{string.Join(", ", databases.OrderBy(n => n))}}}");
+            await flushTempFolderTask;
+
+            var pipelineTasks = databases
+                .Select(async db => await CreateDbPipelinesAsync(
+                    parameterization,
+                    db,
+                    adlsCredential,
+                    sourceKustoClient,
+                    sourceFolderClient,
+                    rootTempFolderClient))
+                .ToImmutableArray();
+
+            await Task.WhenAll(pipelineTasks);
+
+            return new CopyOrchestration(
+                blobLock,
+                pipelineTasks.Select(t => t.Result.dbExportPlan),
+                pipelineTasks.Select(t => t.Result.dbExportExecution));
         }
 
         private static async Task<(DbExportPlanPipeline dbExportPlan, DbExportExecutionPipeline dbExportExecution)> CreateDbPipelinesAsync(
