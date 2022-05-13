@@ -155,7 +155,8 @@ namespace KustoCopyFoundation.Bookmarks
             return values;
         }
 
-        public async Task<BookmarkTransactionResult> ApplyTransactionAsync(BookmarkTransaction transaction)
+        public async Task<BookmarkTransactionResult> ApplyTransactionAsync(
+            BookmarkTransaction transaction)
         {
             var headerFunc = async () =>
             {

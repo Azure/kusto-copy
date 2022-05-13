@@ -207,7 +207,8 @@ namespace kusto_copy
             var dbFileClient = dbFolderClient.GetFileClient("db.bookmark");
             var dbStorageBookmark = await DbStorageBookmark.RetrieveAsync(
                 dbFileClient,
-                adlsCredential);
+                adlsCredential,
+                dbConfig);
             var storageFileClient = dbFolderClient.GetFileClient("db-storage.bookmark");
             var dbExportStorageBookmark = await DbExportStorageBookmark.RetrieveAsync(
                 storageFileClient,

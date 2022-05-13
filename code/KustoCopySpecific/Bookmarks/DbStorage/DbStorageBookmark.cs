@@ -3,6 +3,7 @@ using Azure.Storage.Files.DataLake;
 using KustoCopyFoundation;
 using KustoCopyFoundation.Bookmarks;
 using KustoCopyFoundation.Concurrency;
+using KustoCopySpecific.Parameters;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -19,29 +20,50 @@ namespace KustoCopySpecific.Bookmarks.DbStorage
         #region Inner Types
         private class DbStorageAggregate
         {
+            public CompleteDatabaseParameterization? DbConfig { get; set; }
         }
         #endregion
 
         private readonly BookmarkGateway _bookmarkGateway;
+        private BookmarkBlockValue<CompleteDatabaseParameterization> _dbConfig;
 
         public static async Task<DbStorageBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
-            TokenCredential credential)
+            TokenCredential credential,
+            CompleteDatabaseParameterization dbConfig)
         {
             var bookmarkGateway = await BookmarkGateway.CreateAsync(fileClient, credential, false);
             var aggregates = await bookmarkGateway.ReadAllBlockValuesAsync<DbStorageAggregate>();
-            //var dbIterationValues = aggregates
-            //    .Where(a => a.Value.DbIterations != null);
-            //var dbIterations = dbIterationValues
-            //    .Select(v => v.Value.DbIterations!)
-            //    .SelectMany(i => i);
+            var dbConfigValue = aggregates
+                .Where(a => a.Value.DbConfig != null)
+                .Select(a => a.Project(i => i.DbConfig))
+                .Cast<BookmarkBlockValue<CompleteDatabaseParameterization>>()
+                .FirstOrDefault();
 
-            return new DbStorageBookmark(bookmarkGateway);
+            if (dbConfigValue == null)
+            {
+                var dbConfigBuffer = SerializationHelper.ToMemory(dbConfig);
+
+                var transaction = new BookmarkTransaction(
+                    new[] { dbConfigBuffer },
+                    null,
+                    null);
+                var result = await bookmarkGateway.ApplyTransactionAsync(transaction);
+
+                dbConfigValue = new BookmarkBlockValue<CompleteDatabaseParameterization>(
+                    result.AddedBlockIds.First(),
+                    dbConfigValue!.Value);
+            }
+
+            return new DbStorageBookmark(bookmarkGateway, dbConfigValue);
         }
 
-        private DbStorageBookmark(BookmarkGateway bookmarkGateway)
+        private DbStorageBookmark(
+            BookmarkGateway bookmarkGateway,
+            BookmarkBlockValue<CompleteDatabaseParameterization> dbConfig)
         {
             _bookmarkGateway = bookmarkGateway;
+            _dbConfig = dbConfig;
         }
     }
 }
