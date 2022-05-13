@@ -6,6 +6,7 @@ using Kusto.Data;
 using KustoCopyFoundation;
 using KustoCopyFoundation.KustoQuery;
 using KustoCopySpecific.Bookmarks.DbExportStorage;
+using KustoCopySpecific.Bookmarks.DbStorage;
 using KustoCopySpecific.Bookmarks.ExportPlan;
 using KustoCopySpecific.Bookmarks.IterationExportStorage;
 using KustoCopySpecific.Parameters;
@@ -203,22 +204,28 @@ namespace kusto_copy
             var dbExportPlanBookmark = await DbExportPlanBookmark.RetrieveAsync(
                 planFileClient,
                 adlsCredential);
+            var dbFileClient = dbFolderClient.GetFileClient("db.bookmark");
+            var dbStorageBookmark = await DbStorageBookmark.RetrieveAsync(
+                dbFileClient,
+                adlsCredential);
             var storageFileClient = dbFolderClient.GetFileClient("db-storage.bookmark");
-            var dbStorageBookmark = await DbExportStorageBookmark.RetrieveAsync(
+            var dbExportStorageBookmark = await DbExportStorageBookmark.RetrieveAsync(
                 storageFileClient,
                 adlsCredential);
             var iterationFederation = new DbIterationStorageFederation(
-                dbStorageBookmark,
+                dbExportStorageBookmark,
                 dbFolderClient,
                 adlsCredential);
             var dbExportPlan = new DbExportPlanPipeline(
                 db.Name!,
+                dbStorageBookmark,
                 dbExportPlanBookmark,
                 sourceKustoClient,
                 dbConfig.MaxRowsPerTablePerIteration);
             var dbExportExecution = new DbExportExecutionPipeline(
                 rootTempFolderClient,
                 db.Name!,
+                dbStorageBookmark,
                 dbExportPlanBookmark,
                 iterationFederation,
                 sourceKustoClient,

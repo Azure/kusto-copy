@@ -5,6 +5,7 @@ using KustoCopyFoundation;
 using KustoCopyFoundation.Concurrency;
 using KustoCopyFoundation.KustoQuery;
 using KustoCopySpecific.Bookmarks.Common;
+using KustoCopySpecific.Bookmarks.DbStorage;
 using KustoCopySpecific.Bookmarks.ExportPlan;
 using KustoCopySpecific.Bookmarks.IterationExportStorage;
 using System.Collections.Concurrent;
@@ -89,6 +90,7 @@ namespace KustoCopySpecific.Pipelines
         #endregion
 
         private readonly DataLakeDirectoryClient _rootTempFolderClient;
+        private readonly DbStorageBookmark _dbStorageBookmark;
         private readonly DbIterationStorageFederation _iterationFederation;
         private readonly KustoQueuedClient _kustoClient;
         private readonly KustoExportQueue _exportQueue;
@@ -99,6 +101,7 @@ namespace KustoCopySpecific.Pipelines
         public DbExportExecutionPipeline(
             DataLakeDirectoryClient rootTempFolderClient,
             string dbName,
+            DbStorageBookmark dbStorageBookmark,
             DbExportPlanBookmark dbExportPlanBookmark,
             DbIterationStorageFederation iterationFederation,
             KustoQueuedClient kustoClient,
@@ -107,6 +110,7 @@ namespace KustoCopySpecific.Pipelines
             _rootTempFolderClient = rootTempFolderClient;
             DbName = dbName;
             DbExportPlanBookmark = dbExportPlanBookmark;
+            _dbStorageBookmark = dbStorageBookmark;
             _iterationFederation = iterationFederation;
             _kustoClient = kustoClient;
             _exportQueue = new KustoExportQueue(_kustoClient, concurrentExportCommandCount);

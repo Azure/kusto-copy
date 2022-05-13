@@ -2,6 +2,7 @@
 using Azure.Storage.Files.DataLake;
 using Kusto.Data.Common;
 using KustoCopyFoundation.KustoQuery;
+using KustoCopySpecific.Bookmarks.DbStorage;
 using KustoCopySpecific.Bookmarks.ExportPlan;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -37,18 +38,20 @@ namespace KustoCopySpecific.Pipelines
         #endregion
 
         private const double TOLERANCE_RATIO_MAX_ROW = 0.15;
-
+        private readonly DbStorageBookmark _dbStorageBookmark;
         private readonly DbExportPlanBookmark _dbExportPlanBookmark;
         private readonly KustoQueuedClient _kustoClient;
         private readonly long _maxRowsPerTablePerIteration;
 
         public DbExportPlanPipeline(
             string dbName,
+            DbStorageBookmark dbStorageBookmark,
             DbExportPlanBookmark dbExportPlanBookmark,
             KustoQueuedClient kustoClient,
             long maxRowsPerTablePerIteration)
         {
             DbName = dbName;
+            _dbStorageBookmark = dbStorageBookmark;
             _dbExportPlanBookmark = dbExportPlanBookmark;
             _kustoClient = kustoClient;
             _maxRowsPerTablePerIteration = maxRowsPerTablePerIteration;
