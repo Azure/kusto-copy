@@ -27,6 +27,7 @@ namespace KustoCopySpecific.Bookmarks.DbStorage
         private readonly BookmarkGateway _bookmarkGateway;
         private BookmarkBlockValue<CompleteDatabaseParameterization> _dbConfig;
 
+        #region Constructors
         public static async Task<DbStorageBookmark> RetrieveAsync(
             DataLakeFileClient fileClient,
             TokenCredential credential,
@@ -65,5 +66,8 @@ namespace KustoCopySpecific.Bookmarks.DbStorage
             _bookmarkGateway = bookmarkGateway;
             _dbConfig = dbConfig;
         }
+        #endregion
+
+        public CompleteDatabaseParameterization DbParameterization { get => _dbConfig.Value; }
     }
 }
