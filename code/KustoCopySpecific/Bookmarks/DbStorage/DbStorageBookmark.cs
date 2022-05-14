@@ -68,6 +68,12 @@ namespace KustoCopySpecific.Bookmarks.DbStorage
         }
         #endregion
 
+        #region DbParameterization
         public CompleteDatabaseParameterization DbParameterization { get => _dbConfig.Value; }
+        #endregion
+
+        #region DbEpochData
+        public CompleteDatabaseParameterization DbParameterization { get => _dbConfig.Value; }
+        #endregion
     }
 }
