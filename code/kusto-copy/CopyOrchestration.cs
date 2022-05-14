@@ -279,8 +279,12 @@ namespace kusto_copy
 
         public async Task RunAsync()
         {
-            var planTasks = _dbExportPlanPipelines.Select(p => p.RunAsync()).ToImmutableArray();
-            var executionTasks = _dbExportExecutionPipelines.Select(p => p.RunAsync()).ToImmutableArray();
+            var planTasks = _dbExportPlanPipelines
+                .Select(p => p.RunAsync())
+                .ToImmutableArray();
+            var executionTasks = _dbExportExecutionPipelines
+                .Select(p => p.RunAsync())
+                .ToImmutableArray();
 
             await Task.WhenAll(planTasks.Concat(executionTasks));
         }
