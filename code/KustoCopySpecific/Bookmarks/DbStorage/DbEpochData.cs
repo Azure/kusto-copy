@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace KustoCopySpecific.Bookmarks.ExportPlan
+namespace KustoCopySpecific.Bookmarks.DbStorage
 {
     /// <summary>Represents a replication iteration at the database level.</summary>
     public class DbEpochData

@@ -3,6 +3,7 @@ using Azure.Storage.Files.DataLake;
 using KustoCopyFoundation;
 using KustoCopyFoundation.Bookmarks;
 using KustoCopySpecific.Bookmarks.Common;
+using KustoCopySpecific.Bookmarks.DbStorage;
 using KustoCopySpecific.Parameters;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
