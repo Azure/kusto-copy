@@ -1,8 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
-using Kusto.Cloud.Platform.Utils;
-using KustoCopyFoundation;
-using KustoCopySpecific.Parameters;
+using KustoCopyConsole.Orchestrations;
+using KustoCopyConsole.Parameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -14,7 +13,7 @@ using System.Threading.Tasks;
 
 // See https://aka.ms/new-console-template for more information
 
-namespace kusto_copy
+namespace KustoCopyConsole
 {
     internal class Program
     {
@@ -144,46 +143,14 @@ namespace kusto_copy
 
         private static async Task RunOptionsAsync(CommandLineOptions options)
         {
-            var parameterization = new MainParameterization
-            {
-                Source = new SourceParameterization
-                {
-                    ClusterQueryUri = options.Source,
-                    Databases = new[] { "mydb1", "yourdb2" }.Select(db => new SourceDatabaseParameterization
-                    {
-                        Name = db
-                    }).ToImmutableArray()
-                }
-            };
+            var parameterization = MainParameterization.Create(options);
 
             ConfigureTrace(options.Verbose);
 
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
 
-            if (options.ConcurrentExportCommandCount != null)
-            {
-                parameterization.Source!.ConcurrentExportCommandCount =
-                    options.ConcurrentExportCommandCount.Value;
-            }
-            if (options.ConcurrentQueries != null)
-            {
-                parameterization.Source.ConcurrentQueryCount =
-                    options.ConcurrentQueries.Value;
-                if (parameterization.Destinations != null)
-                {
-                    parameterization.Destinations.ForEach(
-                        d => d.ConcurrentQueryCount = options.ConcurrentQueries.Value);
-                }
-            }
-
-            await using (var orchestration = await CopyOrchestration.CreationOrchestrationAsync(
-                options.AuthenticationMode,
-                options.Lake,
-                parameterization))
-            {
-                await orchestration.RunAsync();
-            }
+            await CopyOrchestration.CopyAsync(parameterization);
         }
 
         private static void ConfigureTrace(bool isVerbose)

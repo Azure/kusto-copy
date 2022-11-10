@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-namespace KustoCopySpecific.Parameters
+namespace KustoCopyConsole.Parameters
 {
     public class CompleteDatabaseParameterization
     {
