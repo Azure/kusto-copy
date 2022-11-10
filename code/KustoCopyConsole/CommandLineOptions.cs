@@ -25,10 +25,10 @@ namespace KustoCopyConsole
         [Option("db", Required = false, HelpText = "Database to copy")]
         public string? Db { get; set; }
 
-        [Option("tables-include", Required = false, HelpText = "Tables to include")]
+        [Option("tables-include", Required = false, HelpText = "Tables to include", Default = new string[0])]
         public string[] TablesToInclude { get; set; } = new string[0];
 
-        [Option("tables-exclude", Required = false, HelpText = "Tables to exclude")]
+        [Option("tables-exclude", Required = false, HelpText = "Tables to exclude", Default = new string[0])]
         public string[] TablesToExclude { get; set; } = new string[0];
 
         [Option("concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
