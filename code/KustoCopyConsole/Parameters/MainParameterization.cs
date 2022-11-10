@@ -9,7 +9,7 @@ namespace KustoCopyConsole.Parameters
 {
     public class MainParameterization
     {
-        public Uri? LakeFolderUri { get; set; }
+        public string? LakeFolderConnectionString { get; set; }
 
         public SourceParameterization? Source { get; set; }
 
@@ -17,10 +17,10 @@ namespace KustoCopyConsole.Parameters
 
         public void Validate()
         {
-            if (LakeFolderUri == null || !LakeFolderUri.IsAbsoluteUri)
+            if (string.IsNullOrWhiteSpace(LakeFolderConnectionString))
             {
                 throw new CopyException(
-                    $"{nameof(LakeFolderUri)} isn't specified or bad format:  '{LakeFolderUri}'");
+                    $"{nameof(LakeFolderConnectionString)} isn't specified or bad format:  '{LakeFolderConnectionString}'");
             }
             if (Source == null)
             {
@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Parameters
         {
             var parameterization = new MainParameterization
             {
-                LakeFolderUri = options.LakeFolderUri,
+                LakeFolderConnectionString = options.LakeFolderConnectionString,
                 Source = new SourceParameterization
                 {
                     ClusterQueryConnectionString = options.SourceConnectionString,
