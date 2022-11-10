@@ -5,7 +5,7 @@ using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using System.Timers;
 
-namespace kusto_copy
+namespace KustoCopyConsole.Storage
 {
     internal class BlobLock : IAsyncDisposable
     {
