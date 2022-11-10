@@ -5,7 +5,7 @@ using System.Text;
 
 namespace KustoCopyConsole
 {
-    internal class CommandLineOptions
+    public class CommandLineOptions
     {
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
         public bool Verbose { get; set; }
@@ -22,8 +22,14 @@ namespace KustoCopyConsole
         [Option('d', "destination", Required = false, HelpText = "Destination Cluster Query Connection String")]
         public string DestinationConnectionString { get; set; } = string.Empty;
 
-        [Option("dbs", Required = false, HelpText = "Databases to copy")]
-        public string[] Dbs { get; set; } = new string[0];
+        [Option("db", Required = false, HelpText = "Database to copy")]
+        public string? Db { get; set; }
+
+        [Option("tables-include", Required = false, HelpText = "Tables to include")]
+        public string[] TablesToInclude { get; set; } = new string[0];
+
+        [Option("tables-exclude", Required = false, HelpText = "Tables to exclude")]
+        public string[] TablesToExclude { get; set; } = new string[0];
 
         [Option("concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
         public int ConcurrentQueryCount { get; set; } = 1;

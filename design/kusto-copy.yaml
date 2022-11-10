@@ -5,10 +5,16 @@ source:
     concurrentExportCommandCount:  2    #   Number of export commands sent in parallel to a given cluster
     databaseDefault:
         isEnabled:  true #   Indicates if data will be exported from the source
-        backfillHorizon:  null  #   Horizon back in time we replicate history in creation-time (as timespan) ; null means infinite
+        backfillHorizon:  null  #   Horizon back in time we replicate history in ingestion-time (as timespan) ; null means infinite
         rpo:  1:00:00  #   As a timestamp ; if not specified, replicate until now and stop
     databases:  #  Default:  all databases are replicated
     - name:  github
+      tablesToInclude:  # List of strings
+      - Table1
+      - Table2
+      tablesToExclude:  # Only tablesToInclude or tablesToExclude (or none) should be populated
+      - Table3
+      - Table4
       databaseOverrides:
         isEnabled:  true    # and everything below 'databaseDefault'
       destination:

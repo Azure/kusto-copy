@@ -15,7 +15,21 @@ namespace KustoCopyConsole.Parameters
 
         public DestinationParameterization? Destination { get; set; }
 
-        internal static MainParameterization Create(CommandLineOptions options)
+        public void Validate()
+        {
+            if (LakeFolderUri == null || !LakeFolderUri.IsAbsoluteUri)
+            {
+                throw new CopyException(
+                    $"{nameof(LakeFolderUri)} isn't specified or bad format:  '{LakeFolderUri}'");
+            }
+            if (Source == null)
+            {
+                throw new CopyException($"{nameof(Source)} isn't specified");
+            }
+            Source.Validate();
+        }
+
+        public static MainParameterization Create(CommandLineOptions options)
         {
             var parameterization = new MainParameterization
             {
@@ -25,9 +39,12 @@ namespace KustoCopyConsole.Parameters
                     ClusterQueryConnectionString = options.SourceConnectionString,
                     ConcurrentQueryCount = options.ConcurrentQueryCount,
                     ConcurrentExportCommandCount = options.ConcurrentExportCommandCount,
-                    Databases = options.Dbs.Select(db => new SourceDatabaseParameterization
+                    Databases = new[] { options.Db! }
+                    .Select(db => new SourceDatabaseParameterization
                     {
-                        Name = db
+                        Name = db,
+                        TablesToInclude = options.TablesToInclude.ToImmutableArray(),
+                        TablesToExclude = options.TablesToExclude.ToImmutableArray()
                     }).ToImmutableArray()
                 },
                 Destination = new DestinationParameterization

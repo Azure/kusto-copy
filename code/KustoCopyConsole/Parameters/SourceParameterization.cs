@@ -15,5 +15,23 @@ namespace KustoCopyConsole.Parameters
 
         public IImmutableList<SourceDatabaseParameterization> Databases { get; set; } =
             ImmutableArray<SourceDatabaseParameterization>.Empty;
+
+        public void Validate()
+        {
+            if (string.IsNullOrWhiteSpace(ClusterQueryConnectionString))
+            {
+                throw new CopyException(
+                    $"{nameof(ClusterQueryConnectionString)} isn't specified");
+            }
+            if (!Databases.Any())
+            {
+                throw new CopyException(
+                    $"{nameof(Databases)} should contain at least one database");
+            }
+            foreach (var d in Databases)
+            {
+                d.Validate();
+            }
+        }
     }
 }
