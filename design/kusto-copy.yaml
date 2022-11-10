@@ -7,7 +7,7 @@ source:
         isEnabled:  true #   Indicates if data will be exported from the source
         backfillHorizon:  null  #   Horizon back in time we replicate history in ingestion-time (as timespan) ; null means infinite
         rpo:  1:00:00  #   As a timestamp ; if not specified, replicate until now and stop
-    databases:  #  Default:  all databases are replicated
+    databases:  #  List of databases:  must be specified
     - name:  github
       tablesToInclude:  # List of strings
       - Table1

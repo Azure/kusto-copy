@@ -13,7 +13,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyFoundation.KustoQuery
+namespace KustoCopyConsole.KustoQuery
 {
     public class KustoClient
     {
@@ -22,17 +22,16 @@ namespace KustoCopyFoundation.KustoQuery
                 5,
                 attempt => TimeSpan.FromSeconds(attempt));
 
-        private readonly KustoConnectionStringBuilder _builder;
+        private readonly string _hostName;
         private readonly ICslAdminProvider _commandProvider;
         private readonly ICslQueryProvider _queryProvider;
 
         public KustoClient(KustoConnectionStringBuilder builder)
         {
-            var clusterQueryUri = ValidateClusterQueryUri(builder.Hostname);
             var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
             var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
-            _builder = builder;
+            _hostName = builder.Hostname;
             _commandProvider = commandProvider;
             _queryProvider = queryProvider;
         }
@@ -55,7 +54,7 @@ namespace KustoCopyFoundation.KustoQuery
             {
                 throw new CopyException(
                     "Issue while executing a command in cluster "
-                    + $"'{_builder.Hostname}', database '{database}' "
+                    + $"'{_hostName}', database '{database}' "
                     + $"for command '{command}'",
                     ex);
             }
@@ -150,7 +149,7 @@ namespace KustoCopyFoundation.KustoQuery
                 catch (Exception ex)
                 {
                     throw new CopyException(
-                        $"Issue while executing a query in cluster '{_builder.Hostname}', "
+                        $"Issue while executing a query in cluster '{_hostName}', "
                         + $"database '{database}':  '{query}'",
                         ex);
                 }
@@ -164,20 +163,6 @@ namespace KustoCopyFoundation.KustoQuery
             while (reader.Read())
             {
                 yield return projection(reader);
-            }
-        }
-
-        private static Uri ValidateClusterQueryUri(string clusterQueryUrl)
-        {
-            Uri? clusterUri;
-
-            if (Uri.TryCreate(clusterQueryUrl, UriKind.Absolute, out clusterUri))
-            {
-                return clusterUri;
-            }
-            else
-            {
-                throw new CopyException($"Invalid cluster query uri:  '{clusterQueryUrl}'");
             }
         }
     }

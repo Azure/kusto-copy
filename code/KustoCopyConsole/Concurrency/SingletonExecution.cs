@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyFoundation.Concurrency
+namespace KustoCopyConsole.Concurrency
 {
     public class SingletonExecution
     {

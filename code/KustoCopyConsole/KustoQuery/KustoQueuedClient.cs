@@ -1,6 +1,6 @@
 ﻿using Kusto.Data;
 using Kusto.Data.Common;
-using KustoCopyFoundation.Concurrency;
+using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -10,7 +10,7 @@ using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyFoundation.KustoQuery
+namespace KustoCopyConsole.KustoQuery
 {
     public class KustoQueuedClient
     {
@@ -18,11 +18,11 @@ namespace KustoCopyFoundation.KustoQuery
         private class InnerConfiguration
         {
             public InnerConfiguration(
-                KustoConnectionStringBuilder builder,
+                KustoClient kustoClient,
                 int concurrentQueryCount,
                 int concurrentExportCommandCount)
             {
-                Client = new KustoClient(builder);
+                Client = kustoClient;
                 QueryExecutionQueue =
                     new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
                 ExportCommandExecutionQueue = new ExecutionQueue(concurrentExportCommandCount);
@@ -36,18 +36,19 @@ namespace KustoCopyFoundation.KustoQuery
         }
         #endregion
 
-        private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES = new ClientRequestProperties();
+        private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES =
+            new ClientRequestProperties();
 
         private readonly InnerConfiguration _config;
         private readonly ClientRequestProperties _properties;
 
         public KustoQueuedClient(
-            KustoConnectionStringBuilder kustoBuilder,
+            KustoClient kustoClient,
             int concurrentQueryCount,
             int concurrentExportCommandCount)
         {
             _config = new InnerConfiguration(
-                kustoBuilder,
+                kustoClient,
                 concurrentQueryCount,
                 concurrentExportCommandCount);
             _properties = new ClientRequestProperties();

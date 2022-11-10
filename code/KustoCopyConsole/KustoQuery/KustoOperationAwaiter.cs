@@ -1,4 +1,4 @@
-﻿using KustoCopyFoundation.Concurrency;
+﻿using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyFoundation.KustoQuery
+namespace KustoCopyConsole.KustoQuery
 {
     public class KustoOperationAwaiter
     {
