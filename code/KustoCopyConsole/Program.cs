@@ -79,7 +79,7 @@ namespace KustoCopyConsole
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
 
             Console.WriteLine();
-            Console.WriteLine($"kusto-copy { AssemblyVersion }");
+            Console.WriteLine($"kusto-copy {AssemblyVersion}");
 
             //  Use CommandLineParser NuGet package to parse command line
             //  See https://github.com/commandlineparser/commandline
@@ -143,12 +143,14 @@ namespace KustoCopyConsole
 
         private static async Task RunOptionsAsync(CommandLineOptions options)
         {
-            var parameterization = MainParameterization.Create(options);
-
             ConfigureTrace(options.Verbose);
 
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
+
+            var parameterization = MainParameterization.Create(options);
+
+            parameterization.Validate();
 
             await CopyOrchestration.CopyAsync(parameterization);
         }

@@ -1,4 +1,4 @@
-lakeFolderUri:  URL  # URL of ADLS gen 2 folder where state data (including export data) are going to be persisted
+lakeFolderConnectionString:  URL  # URL of ADLS gen 2 folder where state data (including export data) are going to be persisted
 source:
     clusterQueryConnectionString:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
     concurrentQueryCount:  1    #   Number of queries / commands sent in parallel to a given cluster

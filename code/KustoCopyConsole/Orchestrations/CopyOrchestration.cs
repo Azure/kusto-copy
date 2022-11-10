@@ -1,4 +1,6 @@
-﻿using KustoCopyConsole.Parameters;
+﻿using Kusto.Data;
+using KustoCopyConsole.KustoQuery;
+using KustoCopyConsole.Parameters;
 
 namespace KustoCopyConsole.Orchestrations
 {
@@ -13,6 +15,14 @@ namespace KustoCopyConsole.Orchestrations
 
         internal static async Task CopyAsync(MainParameterization parameterization)
         {
+            var sourceBuilder = new KustoConnectionStringBuilder(
+                parameterization.Source!.ClusterQueryConnectionString!);
+            var sourceKustoClient = new KustoClient(sourceBuilder);
+            var sourceQueuedClient = new KustoQueuedClient(
+                sourceKustoClient,
+                parameterization.Source!.ConcurrentQueryCount,
+                parameterization.Source!.ConcurrentExportCommandCount);
+
             var orchestration = new CopyOrchestration(parameterization);
 
             await orchestration.RunAsync();
