@@ -14,7 +14,7 @@ namespace KustoCopyConsole
         public string? ParameterFilePath { get; set; }
 
         [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL or Kusto-style connection string")]
-        public Uri? LakeFolderConnectionString { get; set; }
+        public string? LakeFolderConnectionString { get; set; }
 
         [Option('s', "source", Required = false, HelpText = "Source Cluster Query Connection String")]
         public string SourceConnectionString { get; set; } = string.Empty;
