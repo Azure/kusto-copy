@@ -19,8 +19,7 @@ namespace KustoCopyConsole.Orchestrations
             var credentials = CreateCredentials(lakeFolderBuilder);
             var lakeFolderUri = new Uri(lakeFolderBuilder.DataSource);
             var lakeFolderClient = new DataLakeDirectoryClient(lakeFolderUri, credentials);
-            var lakeContainerClient = new BlobClient(lakeFolderUri, credentials)
-                .GetParentBlobContainerClient();
+            var lakeContainerClient = GetLakeContainerClient(lakeFolderUri, credentials);
             var sourceQueuedClient = parameterization.Source != null
                 ? CreateKustoQueuedClient(
                     parameterization.Source!.ClusterQueryConnectionString!,
@@ -52,6 +51,23 @@ namespace KustoCopyConsole.Orchestrations
         }
 
         #region Helpers
+        private static BlobContainerClient GetLakeContainerClient(
+            Uri lakeFolderUri,
+            TokenCredential credentials)
+        {
+            var builder = new BlobUriBuilder(lakeFolderUri);
+
+            //  Enforce blob storage API
+            builder.Host =
+                builder.Host.Replace(".dfs.core.windows.net", ".blob.core.windows.net");
+            lakeFolderUri = builder.ToUri();
+
+            var blobClient = new BlobClient(lakeFolderUri, credentials);
+            var containerClient = blobClient.GetParentBlobContainerClient();
+
+            return containerClient;
+        }
+
         private static KustoQueuedClient CreateKustoQueuedClient(
             string clusterQueryConnectionString,
             int concurrentQueryCount)

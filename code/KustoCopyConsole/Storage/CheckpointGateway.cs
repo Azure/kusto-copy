@@ -14,29 +14,30 @@ namespace KustoCopyConsole.Storage
 {
     internal class CheckpointGateway
     {
+        private const string CHECKPOINT_BLOB = "index.csv";
         private const string TEMP_CHECKPOINT_BLOB = "temp-index.csv";
 
+        private readonly DataLakeDirectoryClient _lakeFolderClient;
         private readonly AppendBlobClient _blobClient;
-        private readonly TokenCredential _credential;
         private volatile int _blockCount;
 
         #region Constructors
-        public CheckpointGateway(Uri blobUri, TokenCredential credential)
-            : this(blobUri, credential, 0)
+        public CheckpointGateway(
+            DataLakeDirectoryClient lakeFolderClient,
+            BlobContainerClient lakeContainerClient)
+            : this(lakeFolderClient, lakeContainerClient, CHECKPOINT_BLOB, 0)
         {
         }
 
-        private CheckpointGateway(Uri blobUri, TokenCredential credential, int blockCount)
+        private CheckpointGateway(
+            DataLakeDirectoryClient lakeFolderClient,
+            BlobContainerClient lakeContainerClient,
+            string blobName,
+            int blockCount)
         {
-            var builder = new BlobUriBuilder(blobUri);
-
-            //  Enforce blob storage API
-            builder.Host =
-                builder.Host.Replace(".dfs.core.windows.net", ".blob.core.windows.net");
-            blobUri = builder.ToUri();
-
-            _blobClient = new AppendBlobClient(blobUri, credential);
-            _credential = credential;
+            _lakeFolderClient = lakeFolderClient;
+            _blobClient = lakeContainerClient.GetAppendBlobClient(
+                $"{lakeFolderClient.Path}/{blobName}");
             _blockCount = blockCount;
         }
         #endregion
@@ -63,12 +64,11 @@ namespace KustoCopyConsole.Storage
         public async Task<CheckpointGateway> GetTemporaryCheckpointGatewayAsync(
             CancellationToken ct)
         {
-            var tempSegments = _blobClient.Uri.Segments
-                .Take(_blobClient.Uri.Segments.Length - 1)
-                .Append(TEMP_CHECKPOINT_BLOB);
-            var tempPath = string.Join(string.Empty, tempSegments);
-            var tempBlobUrl = new Uri($"https://{_blobClient.Uri.Authority}{tempPath}");
-            var tempCheckpointGateway = new CheckpointGateway(tempBlobUrl, _credential);
+            var tempCheckpointGateway = new CheckpointGateway(
+                _lakeFolderClient,
+                _blobClient.GetParentBlobContainerClient(),
+                TEMP_CHECKPOINT_BLOB,
+                0);
 
             await tempCheckpointGateway.DeleteIfExistsAsync(ct);
             await tempCheckpointGateway.CreateAsync(ct);
@@ -93,14 +93,20 @@ namespace KustoCopyConsole.Storage
             Interlocked.Increment(ref _blockCount);
         }
 
-        public async Task<CheckpointGateway> MoveAsync(Uri destinationUri, CancellationToken ct)
+        public async Task<CheckpointGateway> MoveAsync(string destinationName, CancellationToken ct)
         {
-            var currentFile = new DataLakeFileClient(_blobClient.Uri, _credential);
-            var destinationFile = new DataLakeFileClient(destinationUri);
+            var currentFile =
+                _lakeFolderClient.GetFileClient(_blobClient.Uri.Segments.Last());
+            var destinationFile =
+                _lakeFolderClient.GetFileClient(destinationName);
 
             await currentFile.RenameAsync(destinationFile.Path, cancellationToken: ct);
 
-            return new CheckpointGateway(destinationUri, _credential, _blockCount);
+            return new CheckpointGateway(
+                _lakeFolderClient,
+                _blobClient.GetParentBlobContainerClient(),
+                destinationName,
+                _blockCount);
         }
     }
 }

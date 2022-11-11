@@ -34,6 +34,7 @@ namespace KustoCopyConsole.Orchestrations
                     {
                         var dbStatusTasks = parameterization.Source.Databases
                             .Select(d => DatabaseStatus.RetrieveAsync(
+                                d.Name,
                                 connectionMaker.LakeFolderClient,
                                 connectionMaker.LakeContainerClient,
                                 ct))
