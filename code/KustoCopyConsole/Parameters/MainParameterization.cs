@@ -22,11 +22,19 @@ namespace KustoCopyConsole.Parameters
                 throw new CopyException(
                     $"{nameof(LakeFolderConnectionString)} isn't specified or bad format:  '{LakeFolderConnectionString}'");
             }
-            if (Source == null)
+            if (Source == null && Destination == null)
             {
-                throw new CopyException($"{nameof(Source)} isn't specified");
+                throw new CopyException(
+                    $"Neither {nameof(Source)} nor {nameof(Destination)} is specified");
             }
-            Source.Validate();
+            if (Source != null)
+            {
+                Source.Validate();
+            }
+            if (Destination != null)
+            {
+                Destination.Validate();
+            }
         }
 
         public static MainParameterization Create(CommandLineOptions options)
