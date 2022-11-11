@@ -149,10 +149,18 @@ namespace KustoCopyConsole
             Trace.WriteLine("Initialization...");
 
             var parameterization = MainParameterization.Create(options);
+            var cancellationTokenSource = new CancellationTokenSource();
+            var taskCompletionSource = new TaskCompletionSource();
+
+            AppDomain.CurrentDomain.ProcessExit += (e, s) =>
+            {
+                Trace.TraceInformation("Exiting process...");
+                cancellationTokenSource.Cancel();
+                taskCompletionSource.Task.Wait();
+            };
 
             parameterization.Validate();
-
-            await CopyOrchestration.CopyAsync(parameterization);
+            await CopyOrchestration.CopyAsync(parameterization, cancellationTokenSource.Token);
         }
 
         private static void ConfigureTrace(bool isVerbose)

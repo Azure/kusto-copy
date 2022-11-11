@@ -4,6 +4,8 @@ using Kusto.Data;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Orchestrations
 {
@@ -11,24 +13,38 @@ namespace KustoCopyConsole.Orchestrations
     {
         private readonly MainParameterization _parameterization;
 
-        public static async Task CopyAsync(MainParameterization parameterization)
+        public static async Task CopyAsync(
+            MainParameterization parameterization,
+            CancellationToken ct)
         {
             var connectionMaker = ConnectionMaker.Create(parameterization);
 
-            Console.WriteLine("Acquiring lock on folder...");
+            Trace.WriteLine("Acquiring lock on folder...");
             await using (var blobLock = await CreateLockAsync(
                 connectionMaker.LakeContainerClient,
                 connectionMaker.LakeFolderClient.Path))
             {
                 if (blobLock == null)
                 {
-                    Console.WriteLine("Can't acquire lock on folder");
+                    Trace.WriteLine("Can't acquire lock on folder");
                 }
                 else
                 {
+                    if (parameterization.Source != null)
+                    {
+                        var dbStatusTasks = parameterization.Source.Databases
+                            .Select(d => DatabaseStatus.RetrieveAsync(
+                                connectionMaker.LakeFolderClient,
+                                connectionMaker.LakeContainerClient,
+                                ct))
+                            .ToImmutableArray();
+
+                        await Task.WhenAll(dbStatusTasks);
+                    }
+
                     var orchestration = new CopyOrchestration(parameterization);
 
-                    await orchestration.RunAsync();
+                    await orchestration.RunAsync(ct);
                 }
             }
         }
@@ -49,7 +65,7 @@ namespace KustoCopyConsole.Orchestrations
             return await BlobLock.CreateAsync(lockBlob);
         }
 
-        private Task RunAsync()
+        private Task RunAsync(CancellationToken ct)
         {
             throw new NotImplementedException();
         }
