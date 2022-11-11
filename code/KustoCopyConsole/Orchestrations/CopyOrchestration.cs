@@ -15,16 +15,7 @@ namespace KustoCopyConsole.Orchestrations
 
         internal static async Task CopyAsync(MainParameterization parameterization)
         {
-            var lakeFolderBuilder =
-                new KustoConnectionStringBuilder(parameterization.LakeFolderConnectionString);
-            var sourceBuilder = new KustoConnectionStringBuilder(
-                parameterization.Source!.ClusterQueryConnectionString!);
-            var sourceKustoClient = new KustoClient(sourceBuilder);
-            var sourceQueuedClient = new KustoQueuedClient(
-                sourceKustoClient,
-                parameterization.Source!.ConcurrentQueryCount,
-                parameterization.Source!.ConcurrentExportCommandCount);
-
+            var connectionMaker = ConnectionMaker.Create(parameterization);
             var orchestration = new CopyOrchestration(parameterization);
 
             await orchestration.RunAsync();
