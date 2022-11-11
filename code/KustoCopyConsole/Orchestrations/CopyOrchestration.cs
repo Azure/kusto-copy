@@ -7,16 +7,11 @@ using KustoCopyConsole.Storage;
 
 namespace KustoCopyConsole.Orchestrations
 {
-    internal class CopyOrchestration
+    public class CopyOrchestration
     {
         private readonly MainParameterization _parameterization;
 
-        private CopyOrchestration(MainParameterization parameterization)
-        {
-            _parameterization = parameterization;
-        }
-
-        internal static async Task CopyAsync(MainParameterization parameterization)
+        public static async Task CopyAsync(MainParameterization parameterization)
         {
             var connectionMaker = ConnectionMaker.Create(parameterization);
 
@@ -36,6 +31,11 @@ namespace KustoCopyConsole.Orchestrations
                     await orchestration.RunAsync();
                 }
             }
+        }
+
+        private CopyOrchestration(MainParameterization parameterization)
+        {
+            _parameterization = parameterization;
         }
 
         private static async Task<IAsyncDisposable?> CreateLockAsync(

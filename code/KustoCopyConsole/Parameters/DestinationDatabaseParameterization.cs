@@ -4,6 +4,14 @@
     {
         public string? Name { get; set; }
 
-        public bool IsEnabled { get; set; } = true;
+        public string? SourceName { get; set; }
+
+        public void Validate()
+        {
+            if (string.IsNullOrWhiteSpace(Name))
+            {
+                throw new CopyException($"{nameof(Name)} isn't specified");
+            }
+        }
     }
 }

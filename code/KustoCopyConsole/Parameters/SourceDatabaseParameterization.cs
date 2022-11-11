@@ -8,8 +8,6 @@ namespace KustoCopyConsole.Parameters
 
         public DatabaseOverrideParameterization? DatabaseOverrides { get; set; }
 
-        public DestinationDatabaseParameterization? Destination { get; set; }
-
         public IImmutableList<string> TablesToInclude { get; set; } = ImmutableArray<string>.Empty;
 
         public IImmutableList<string> TablesToExclude { get; set; } = ImmutableArray<string>.Empty;
