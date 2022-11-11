@@ -55,12 +55,14 @@ namespace KustoCopyConsole.Parameters
                         TablesToExclude = options.TablesToExclude.ToImmutableArray()
                     }).ToImmutableArray()
                 },
-                Destination = new DestinationParameterization
+                Destination = !string.IsNullOrWhiteSpace(options.DestinationConnectionString)
+                ? new DestinationParameterization
                 {
                     ClusterQueryConnectionString = options.DestinationConnectionString,
                     ConcurrentQueryCount = options.ConcurrentQueryCount,
                     ConcurrentIngestionCount = options.ConcurrentIngestionCount
                 }
+                : null
             };
 
             return parameterization;

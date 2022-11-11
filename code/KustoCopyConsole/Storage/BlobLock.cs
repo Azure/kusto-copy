@@ -9,8 +9,13 @@ namespace KustoCopyConsole.Storage
 {
     internal class BlobLock : IAsyncDisposable
     {
+#if DEBUG
+        private static readonly TimeSpan DEFAULT_LEASE_DURATION = TimeSpan.FromSeconds(20);
+        private static readonly TimeSpan DEFAULT_LEASE_RENEWAL_PERIOD = TimeSpan.FromSeconds(15);
+#else
         private static readonly TimeSpan DEFAULT_LEASE_DURATION = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan DEFAULT_LEASE_RENEWAL_PERIOD = TimeSpan.FromSeconds(40);
+#endif
 
         private readonly BlobLeaseClient _leaseClient;
         private readonly System.Timers.Timer _timer;
@@ -23,7 +28,7 @@ namespace KustoCopyConsole.Storage
             _timer.Enabled = true;
         }
 
-        internal static async Task<IAsyncDisposable?> CreateAsync(BlobClient blobClient)
+        internal static async Task<IAsyncDisposable?> CreateAsync(BlobBaseClient blobClient)
         {
             var leaseClient = blobClient.GetBlobLeaseClient();
 
