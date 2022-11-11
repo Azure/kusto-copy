@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using Kusto.Data;
 using KustoCopyConsole.KustoQuery;
@@ -18,7 +19,8 @@ namespace KustoCopyConsole.Orchestrations
             var credentials = CreateCredentials(lakeFolderBuilder);
             var lakeFolderUri = new Uri(lakeFolderBuilder.DataSource);
             var lakeFolderClient = new DataLakeDirectoryClient(lakeFolderUri, credentials);
-            var lakeFolderBlobClient = new BlobClient(lakeFolderUri, credentials);
+            var lakeContainerClient = new BlobClient(lakeFolderUri, credentials)
+                .GetParentBlobContainerClient();
             var sourceQueuedClient = parameterization.Source != null
                 ? CreateKustoQueuedClient(
                     parameterization.Source!.ClusterQueryConnectionString!,
@@ -32,11 +34,24 @@ namespace KustoCopyConsole.Orchestrations
 
             return new ConnectionMaker(
                 lakeFolderClient,
-                lakeFolderBlobClient,
+                lakeContainerClient,
                 sourceQueuedClient,
                 destinationQueuedClient);
         }
 
+        private ConnectionMaker(
+            DataLakeDirectoryClient lakeFolderClient,
+            BlobContainerClient lakeContainerClient,
+            KustoQueuedClient? sourceQueuedClient,
+            KustoQueuedClient? destinationQueuedClient)
+        {
+            LakeFolderClient = lakeFolderClient;
+            LakeContainerClient = lakeContainerClient;
+            SourceQueuedClient = sourceQueuedClient;
+            DestinationQueuedClient = destinationQueuedClient;
+        }
+
+        #region Helpers
         private static KustoQueuedClient CreateKustoQueuedClient(
             string clusterQueryConnectionString,
             int concurrentQueryCount)
@@ -92,23 +107,12 @@ namespace KustoCopyConsole.Orchestrations
                     builder.ApplicationKey);
             }
         }
-
-        private ConnectionMaker(
-            DataLakeDirectoryClient lakeFolderClient,
-            BlobClient lakeFolderBlobClient,
-            KustoQueuedClient? sourceQueuedClient,
-            KustoQueuedClient? destinationQueuedClient)
-        {
-            LakeFolderClient = lakeFolderClient;
-            LakeFolderBlobClient = lakeFolderBlobClient;
-            SourceQueuedClient = sourceQueuedClient;
-            DestinationQueuedClient = destinationQueuedClient;
-        }
+        #endregion
         #endregion
 
         public DataLakeDirectoryClient LakeFolderClient { get; }
 
-        public BlobClient LakeFolderBlobClient { get; }
+        public BlobContainerClient LakeContainerClient { get; }
 
         public KustoQueuedClient? SourceQueuedClient { get; }
 

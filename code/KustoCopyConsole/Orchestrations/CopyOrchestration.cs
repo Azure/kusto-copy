@@ -21,8 +21,9 @@ namespace KustoCopyConsole.Orchestrations
             var connectionMaker = ConnectionMaker.Create(parameterization);
 
             Console.WriteLine("Acquiring lock on folder...");
-            await using (var blobLock =
-                await CreateLockAsync(connectionMaker.LakeFolderBlobClient))
+            await using (var blobLock = await CreateLockAsync(
+                connectionMaker.LakeContainerClient,
+                connectionMaker.LakeFolderClient.Path))
             {
                 if (blobLock == null)
                 {
@@ -37,10 +38,11 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private static async Task<IAsyncDisposable?> CreateLockAsync(BlobClient lakeFolderBlobClient)
+        private static async Task<IAsyncDisposable?> CreateLockAsync(
+            BlobContainerClient lakeContainerClient,
+            string folderPath)
         {
-            var containerClient = lakeFolderBlobClient.GetParentBlobContainerClient();
-            var lockBlob = containerClient.GetAppendBlobClient($"{lakeFolderBlobClient.Name}/lock");
+            var lockBlob = lakeContainerClient.GetAppendBlobClient($"{folderPath}/lock");
 
             await lockBlob.CreateIfNotExistsAsync();
 
