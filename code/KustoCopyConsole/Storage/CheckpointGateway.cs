@@ -93,19 +93,19 @@ namespace KustoCopyConsole.Storage
             Interlocked.Increment(ref _blockCount);
         }
 
-        public async Task<CheckpointGateway> MoveAsync(string destinationName, CancellationToken ct)
+        public async Task<CheckpointGateway> MoveOutOfTemporaryAsync(CancellationToken ct)
         {
             var currentFile =
                 _lakeFolderClient.GetFileClient(_blobClient.Uri.Segments.Last());
             var destinationFile =
-                _lakeFolderClient.GetFileClient(destinationName);
+                _lakeFolderClient.GetFileClient(CHECKPOINT_BLOB);
 
             await currentFile.RenameAsync(destinationFile.Path, cancellationToken: ct);
 
             return new CheckpointGateway(
                 _lakeFolderClient,
                 _blobClient.GetParentBlobContainerClient(),
-                destinationName,
+                CHECKPOINT_BLOB,
                 _blockCount);
         }
     }
