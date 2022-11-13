@@ -21,14 +21,19 @@ namespace KustoCopyConsole.Storage
         #region Inner Types
         private class StatusItemIndex
         {
-            private readonly IImmutableList<StatusItem> _items;
+            private readonly List<StatusItem> _iterationItems;
 
             public StatusItemIndex(IEnumerable<StatusItem> items)
             {
-                _items = items.ToImmutableArray();
+                _iterationItems = items
+                    .Where(i => i.Level == HierarchyLevel.Iteration)
+                    .OrderBy(i => i.IterationId)
+                    .ToList();
             }
 
-            public IEnumerable<StatusItem> AllItems => _items;
+            public IEnumerable<StatusItem> AllItems => _iterationItems;
+
+            public IImmutableList<StatusItem> Iterations => _iterationItems.ToImmutableArray();
         }
         #endregion
 
@@ -79,8 +84,12 @@ namespace KustoCopyConsole.Storage
             CheckpointGateway checkpointGateway,
             IEnumerable<StatusItem> statusItems)
         {
+            var latestItems = statusItems
+                .GroupBy(i => i.IterationId)
+                .Select(g => g.MaxBy(i => i.Timestamp)!);
+
             DbName = dbName;
-            _statusIndex = new StatusItemIndex(statusItems);
+            _statusIndex = new StatusItemIndex(latestItems);
             _checkpointGateway = checkpointGateway;
         }
         #endregion
@@ -88,6 +97,31 @@ namespace KustoCopyConsole.Storage
         public string DbName { get; }
 
         public Uri IndexBlobUri => _checkpointGateway.BlobUri;
+
+        public IImmutableList<StatusItem> GetIterations()
+        {
+            return _statusIndex.Iterations;
+        }
+
+        public async Task PersistNewItemsAsync(
+            IEnumerable<StatusItem> items,
+            CancellationToken ct)
+        {
+            if (items.Count() == 0)
+            {
+                throw new ArgumentException("Is empty", nameof(items));
+            }
+
+            if (_checkpointGateway.CanWrite)
+            {
+                await PersistItemsAsync(_checkpointGateway, items, false, ct);
+            }
+            else
+            {
+                await CompactAsync(ct);
+                await PersistNewItemsAsync(items, ct);
+            }
+        }
 
         private static IImmutableList<StatusItem> ParseCsv(byte[] buffer)
         {

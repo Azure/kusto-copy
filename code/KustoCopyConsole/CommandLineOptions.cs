@@ -13,6 +13,12 @@ namespace KustoCopyConsole
         [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
         public string? ParameterFilePath { get; set; }
 
+        [Option(
+            "continuous",
+            Required = false,
+            HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after first batch")]
+        public bool ContinuousRun { get; set; } = false;
+
         [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL or Kusto-style connection string")]
         public string? LakeFolderConnectionString { get; set; }
 
@@ -31,13 +37,13 @@ namespace KustoCopyConsole
         [Option("tables-exclude", Required = false, HelpText = "Tables to exclude", Default = new string[0])]
         public string[] TablesToExclude { get; set; } = new string[0];
 
-        [Option("concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
+        [Option("query-slots", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
         public int ConcurrentQueryCount { get; set; } = 1;
 
         [Option("export-slots", Required = false, HelpText = "# export slots to use on source cluster")]
         public int ConcurrentExportCommandCount { get; set; } = 2;
 
-        [Option("concurrent-query", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
+        [Option("ingestion-slots", Required = false, HelpText = "Number of concurrent ingestions on the clusters")]
         public int ConcurrentIngestionCount { get; set; } = 0;
     }
 }

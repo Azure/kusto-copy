@@ -9,6 +9,8 @@ namespace KustoCopyConsole.Parameters
 {
     public class MainParameterization
     {
+        public bool IsContinuousRun { get; set; }
+
         public string? LakeFolderConnectionString { get; set; }
 
         public SourceParameterization? Source { get; set; }
@@ -41,6 +43,7 @@ namespace KustoCopyConsole.Parameters
         {
             var parameterization = new MainParameterization
             {
+                IsContinuousRun = options.ContinuousRun,
                 LakeFolderConnectionString = options.LakeFolderConnectionString,
                 Source = new SourceParameterization
                 {

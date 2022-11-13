@@ -9,10 +9,10 @@ using KustoCopyConsole.Parameters;
 
 namespace KustoCopyConsole.Orchestrations
 {
-    public class ConnectionMaker
+    public class ConnectionsFactory
     {
         #region Constructors
-        public static ConnectionMaker Create(MainParameterization parameterization)
+        public static ConnectionsFactory Create(MainParameterization parameterization)
         {
             var lakeFolderBuilder =
                 new KustoConnectionStringBuilder(parameterization.LakeFolderConnectionString);
@@ -31,14 +31,14 @@ namespace KustoCopyConsole.Orchestrations
                     parameterization.Destination!.ConcurrentQueryCount)
                 : null;
 
-            return new ConnectionMaker(
+            return new ConnectionsFactory(
                 lakeFolderClient,
                 lakeContainerClient,
                 sourceQueuedClient,
                 destinationQueuedClient);
         }
 
-        private ConnectionMaker(
+        private ConnectionsFactory(
             DataLakeDirectoryClient lakeFolderClient,
             BlobContainerClient lakeContainerClient,
             KustoQueuedClient? sourceQueuedClient,

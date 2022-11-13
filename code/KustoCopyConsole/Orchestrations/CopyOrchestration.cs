@@ -21,12 +21,12 @@ namespace KustoCopyConsole.Orchestrations
             MainParameterization parameterization,
             CancellationToken ct)
         {
-            var connectionMaker = ConnectionMaker.Create(parameterization);
+            var connectionFactory = ConnectionsFactory.Create(parameterization);
 
             Trace.WriteLine("Acquiring lock on folder...");
             await using (var blobLock = await CreateLockAsync(
-                connectionMaker.LakeContainerClient,
-                connectionMaker.LakeFolderClient.Path))
+                connectionFactory.LakeContainerClient,
+                connectionFactory.LakeFolderClient.Path))
             {
                 if (blobLock == null)
                 {
@@ -39,8 +39,8 @@ namespace KustoCopyConsole.Orchestrations
                         var dbStatusTasks = parameterization.Source.Databases
                             .Select(d => DatabaseStatus.RetrieveAsync(
                                 d.Name!,
-                                connectionMaker.LakeFolderClient,
-                                connectionMaker.LakeContainerClient,
+                                connectionFactory.LakeFolderClient,
+                                connectionFactory.LakeContainerClient,
                                 ct))
                             .ToImmutableArray();
 
@@ -51,8 +51,8 @@ namespace KustoCopyConsole.Orchestrations
                             .ToImmutableArray();
                         var orchestration = new CopyOrchestration(
                             parameterization,
-                            connectionMaker.SourceQueuedClient!,
-                            connectionMaker.DestinationQueuedClient!,
+                            connectionFactory.SourceQueuedClient!,
+                            connectionFactory.DestinationQueuedClient!,
                             dbStatusList);
 
                         await orchestration.RunAsync(ct);
@@ -98,7 +98,8 @@ namespace KustoCopyConsole.Orchestrations
                     ct))
                 .ToImmutableArray();
             var planningTasks = _dbStatusList
-                .Select(dbStatus => PlanningOrchestration.PlanAsync(
+                .Select(dbStatus => DbPlanningOrchestration.PlanAsync(
+                    _parameterization.IsContinuousRun,
                     dbStatus,
                     _sourceClient,
                     ct))

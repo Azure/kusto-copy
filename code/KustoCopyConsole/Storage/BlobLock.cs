@@ -3,6 +3,7 @@ using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
+using System.Threading;
 using System.Timers;
 
 namespace KustoCopyConsole.Storage
@@ -11,7 +12,7 @@ namespace KustoCopyConsole.Storage
     {
 #if DEBUG
         private static readonly TimeSpan DEFAULT_LEASE_DURATION = TimeSpan.FromSeconds(20);
-        private static readonly TimeSpan DEFAULT_LEASE_RENEWAL_PERIOD = TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan DEFAULT_LEASE_RENEWAL_PERIOD = TimeSpan.FromSeconds(10);
 #else
         private static readonly TimeSpan DEFAULT_LEASE_DURATION = TimeSpan.FromSeconds(60);
         private static readonly TimeSpan DEFAULT_LEASE_RENEWAL_PERIOD = TimeSpan.FromSeconds(40);
@@ -53,6 +54,7 @@ namespace KustoCopyConsole.Storage
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
+            _timer.Dispose();
             await _leaseClient.ReleaseAsync();
         }
 
