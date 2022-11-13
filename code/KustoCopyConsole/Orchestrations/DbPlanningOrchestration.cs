@@ -39,27 +39,38 @@ namespace KustoCopyConsole.Orchestrations
         {
             do
             {
-                var iterations = _dbStatus.GetIterations();
-
-                if (!iterations.Any() || iterations.Last().State == StatusItemState.Done)
-                {
-                    var newIterationId = iterations.Any()
-                        ? iterations.Last().IterationId + 1
-                        : 0;
-                    var endCursors = await _sourceQueuedClient.ExecuteQueryAsync(
-                        new KustoPriority(),
-                        _dbStatus.DbName,
-                        "print cursor_current()",
-                        r => (string)r[0]);
-                    var endCursor = endCursors.First();
-                    var newIteration = StatusItem.CreateIteration(
-                        newIterationId,
-                        endCursor);
-
-                    await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
-                }
+                var currentIteration = await ComputeCurrentIterationAsync(ct);
             }
             while (_isContinuousRun);
+        }
+
+        private async Task<StatusItem> ComputeCurrentIterationAsync(CancellationToken ct)
+        {
+            var iterations = _dbStatus.GetIterations();
+
+            if (!iterations.Any() || iterations.Last().State == StatusItemState.Done)
+            {
+                var newIterationId = iterations.Any()
+                    ? iterations.Last().IterationId + 1
+                    : 0;
+                var endCursors = await _sourceQueuedClient.ExecuteQueryAsync(
+                    new KustoPriority(),
+                    _dbStatus.DbName,
+                    "print cursor_current()",
+                    r => (string)r[0]);
+                var endCursor = endCursors.First();
+                var newIteration = StatusItem.CreateIteration(
+                    newIterationId,
+                    endCursor);
+
+                await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
+
+                return newIteration;
+            }
+            else
+            {
+                return iterations.Last();
+            }
         }
     }
 }
