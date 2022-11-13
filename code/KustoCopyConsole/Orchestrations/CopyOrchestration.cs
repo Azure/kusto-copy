@@ -12,6 +12,7 @@ namespace KustoCopyConsole.Orchestrations
     public class CopyOrchestration
     {
         private readonly MainParameterization _parameterization;
+        private readonly KustoQueuedClient _sourceClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
         #region Bootstrap
@@ -47,7 +48,10 @@ namespace KustoCopyConsole.Orchestrations
                         var dbStatusList = dbStatusTasks
                             .Select(t => t.Result)
                             .ToImmutableArray();
-                        var orchestration = new CopyOrchestration(parameterization, dbStatusList);
+                        var orchestration = new CopyOrchestration(
+                            parameterization,
+                            connectionMaker.SourceQueuedClient!,
+                            dbStatusList);
 
                         await orchestration.RunAsync(ct);
                     }
@@ -72,16 +76,25 @@ namespace KustoCopyConsole.Orchestrations
 
         private CopyOrchestration(
             MainParameterization parameterization,
+            KustoQueuedClient sourceClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
+            _sourceClient = sourceClient;
             _dbStatusList = dbStatusList;
         }
         #endregion
 
-        private Task RunAsync(CancellationToken ct)
+        private async Task RunAsync(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var planningTasks = _dbStatusList
+                .Select(dbStatus => PlanningOrchestration.PlanAsync(
+                    dbStatus,
+                    _sourceClient,
+                    ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(planningTasks);
         }
     }
 }
