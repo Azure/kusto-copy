@@ -12,7 +12,9 @@ namespace KustoCopyConsole.Orchestrations
     public class CopyOrchestration
     {
         private readonly MainParameterization _parameterization;
+        private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
+        #region Bootstrap
         public static async Task CopyAsync(
             MainParameterization parameterization,
             CancellationToken ct)
@@ -41,18 +43,20 @@ namespace KustoCopyConsole.Orchestrations
                             .ToImmutableArray();
 
                         await Task.WhenAll(dbStatusTasks);
+
+                        var dbStatusList = dbStatusTasks
+                            .Select(t => t.Result)
+                            .ToImmutableArray();
+                        var orchestration = new CopyOrchestration(parameterization, dbStatusList);
+
+                        await orchestration.RunAsync(ct);
                     }
-
-                    var orchestration = new CopyOrchestration(parameterization);
-
-                    await orchestration.RunAsync(ct);
+                    else
+                    {
+                        throw new NotImplementedException();
+                    }
                 }
             }
-        }
-
-        private CopyOrchestration(MainParameterization parameterization)
-        {
-            _parameterization = parameterization;
         }
 
         private static async Task<IAsyncDisposable?> CreateLockAsync(
@@ -65,6 +69,15 @@ namespace KustoCopyConsole.Orchestrations
 
             return await BlobLock.CreateAsync(lockBlob);
         }
+
+        private CopyOrchestration(
+            MainParameterization parameterization,
+            IImmutableList<DatabaseStatus> dbStatusList)
+        {
+            _parameterization = parameterization;
+            _dbStatusList = dbStatusList;
+        }
+        #endregion
 
         private Task RunAsync(CancellationToken ct)
         {
