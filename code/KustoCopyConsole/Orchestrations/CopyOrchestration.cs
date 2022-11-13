@@ -97,15 +97,15 @@ namespace KustoCopyConsole.Orchestrations
                     _destinationClient,
                     ct))
                 .ToImmutableArray();
-            //var planningTasks = _dbStatusList
-            //    .Select(dbStatus => PlanningOrchestration.PlanAsync(
-            //        dbStatus,
-            //        _sourceClient,
-            //        ct))
-            //    .ToImmutableArray();
+            var planningTasks = _dbStatusList
+                .Select(dbStatus => PlanningOrchestration.PlanAsync(
+                    dbStatus,
+                    _sourceClient,
+                    ct))
+                .ToImmutableArray();
+            var allTasks = setupTasks.Concat(planningTasks);
 
-            await Task.WhenAll(setupTasks);
-            //await Task.WhenAll(planningTasks);
+            await Task.WhenAll(allTasks);
         }
     }
 }
