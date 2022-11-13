@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Storage
 
         #region Constructors
         public static async Task<DatabaseStatus> RetrieveAsync(
-            string? dbName,
+            string dbName,
             DataLakeDirectoryClient lakeFolderClient,
             BlobContainerClient lakeContainerClient,
             CancellationToken ct)
@@ -53,6 +53,7 @@ namespace KustoCopyConsole.Storage
                 await PersistItemsAsync(checkpointGateway, new StatusItem[0], true, ct);
 
                 return new DatabaseStatus(
+                    dbName,
                     checkpointGateway,
                     new StatusItem[0]);
             }
@@ -65,7 +66,7 @@ namespace KustoCopyConsole.Storage
                 Trace.TraceInformation("Rewrite checkpoint blob...");
 
                 var items = ParseCsv(buffer);
-                var databaseStatus = new DatabaseStatus(checkpointGateway, items);
+                var databaseStatus = new DatabaseStatus(dbName, checkpointGateway, items);
 
                 await databaseStatus.CompactAsync(ct);
 
@@ -74,13 +75,19 @@ namespace KustoCopyConsole.Storage
         }
 
         private DatabaseStatus(
+            string dbName,
             CheckpointGateway checkpointGateway,
             IEnumerable<StatusItem> statusItems)
         {
+            DbName = dbName;
             _statusIndex = new StatusItemIndex(statusItems);
             _checkpointGateway = checkpointGateway;
         }
         #endregion
+
+        public string DbName { get; }
+
+        public Uri IndexBlobUri => _checkpointGateway.BlobUri;
 
         private static IImmutableList<StatusItem> ParseCsv(byte[] buffer)
         {

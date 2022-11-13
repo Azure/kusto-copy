@@ -13,6 +13,7 @@ namespace KustoCopyConsole.Orchestrations
     {
         private readonly MainParameterization _parameterization;
         private readonly KustoQueuedClient _sourceClient;
+        private readonly KustoQueuedClient _destinationClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
         #region Bootstrap
@@ -37,7 +38,7 @@ namespace KustoCopyConsole.Orchestrations
                     {
                         var dbStatusTasks = parameterization.Source.Databases
                             .Select(d => DatabaseStatus.RetrieveAsync(
-                                d.Name,
+                                d.Name!,
                                 connectionMaker.LakeFolderClient,
                                 connectionMaker.LakeContainerClient,
                                 ct))
@@ -51,6 +52,7 @@ namespace KustoCopyConsole.Orchestrations
                         var orchestration = new CopyOrchestration(
                             parameterization,
                             connectionMaker.SourceQueuedClient!,
+                            connectionMaker.DestinationQueuedClient!,
                             dbStatusList);
 
                         await orchestration.RunAsync(ct);
@@ -77,24 +79,33 @@ namespace KustoCopyConsole.Orchestrations
         private CopyOrchestration(
             MainParameterization parameterization,
             KustoQueuedClient sourceClient,
+            KustoQueuedClient destinationClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
             _sourceClient = sourceClient;
+            _destinationClient = destinationClient;
             _dbStatusList = dbStatusList;
         }
         #endregion
 
         private async Task RunAsync(CancellationToken ct)
         {
-            var planningTasks = _dbStatusList
-                .Select(dbStatus => PlanningOrchestration.PlanAsync(
+            var setupTasks = _dbStatusList
+                .Select(dbStatus => DestinationDbSetupOrchestration.SetupAsync(
                     dbStatus,
-                    _sourceClient,
+                    _destinationClient,
                     ct))
                 .ToImmutableArray();
+            //var planningTasks = _dbStatusList
+            //    .Select(dbStatus => PlanningOrchestration.PlanAsync(
+            //        dbStatus,
+            //        _sourceClient,
+            //        ct))
+            //    .ToImmutableArray();
 
-            await Task.WhenAll(planningTasks);
+            await Task.WhenAll(setupTasks);
+            //await Task.WhenAll(planningTasks);
         }
     }
 }

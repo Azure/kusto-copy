@@ -23,6 +23,10 @@ namespace KustoCopyConsole.Concurrency
 
         public ExecutionQueue(int parallelRunCount)
         {
+            if(parallelRunCount <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(parallelRunCount));
+            }
             _parallelRunCount = parallelRunCount;
             _availableRunningSlots = _parallelRunCount;
         }

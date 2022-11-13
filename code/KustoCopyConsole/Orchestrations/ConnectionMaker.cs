@@ -76,8 +76,7 @@ namespace KustoCopyConsole.Orchestrations
             var sourceKustoClient = new KustoClient(NormalizeBuilder(sourceBuilder));
             var sourceQueuedClient = new KustoQueuedClient(
                 sourceKustoClient,
-                concurrentQueryCount,
-                0);
+                concurrentQueryCount);
 
             return sourceQueuedClient;
         }

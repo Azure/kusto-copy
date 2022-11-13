@@ -9,32 +9,21 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoPriority : IComparable<KustoPriority>
     {
-        private KustoPriority(
-            bool isWildCard,
-            bool isExportRelated,
-            DateTime ingestionTime)
+        public KustoPriority(
+            long? iterationId = null,
+            long? subIterationId = null)
         {
-            IsWildcard = isWildCard;
-            IsExportRelated = isExportRelated;
-            IngestionTime = ingestionTime;
+            if (iterationId == null && subIterationId != null)
+            {
+                throw new ArgumentOutOfRangeException(nameof(subIterationId));
+            }
+            IterationId = iterationId;
+            SubIterationId = subIterationId;
         }
 
-        public static KustoPriority QueryPriority(DateTime ingestionTime)
-        {
-            return new KustoPriority(false, false, ingestionTime);
-        }
+        public long? IterationId { get; }
 
-        public static KustoPriority WildcardPriority { get; } =
-            new KustoPriority(true, true, DateTime.MinValue);
-
-        public static KustoPriority ExportPriority { get; } =
-            new KustoPriority(false, true, DateTime.MinValue);
-
-        public bool IsWildcard { get; }
-
-        public bool IsExportRelated { get; }
-
-        public DateTime IngestionTime { get; }
+        public long? SubIterationId { get; }
 
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
         {
@@ -43,33 +32,43 @@ namespace KustoCopyConsole.KustoQuery
                 throw new ArgumentNullException(nameof(other));
             }
 
-            if (IsWildcard && other.IsWildcard)
+            return CompareHierarchicalCompare(
+                CompareLongs(IterationId, other.IterationId),
+                () => CompareLongs(SubIterationId, other.SubIterationId));
+        }
+
+        private static int CompareLongs(long? a, long? b)
+        {
+            return (a == null && b == null)
+                ? 0
+                : (a == null && b != null)
+                ? -1
+                : (a != null && b == null)
+                ? 1
+                : a!.Value.CompareTo(b!.Value);
+        }
+
+        private static int CompareHierarchicalCompare(
+            int initialCompareValue,
+            params Func<int>[] subsequentCompareValueEvaluators)
+        {
+            if (initialCompareValue == 0)
             {
                 return 0;
-            }
-            else if (IsWildcard && !other.IsWildcard)
-            {
-                return -1;
-            }
-            else if (!IsWildcard && other.IsWildcard)
-            {
-                return 1;
-            }
-            else if (IsExportRelated && other.IsExportRelated)
-            {
-                return 0;
-            }
-            else if (IsExportRelated && !other.IsExportRelated)
-            {
-                return -1;
-            }
-            else if (!IsExportRelated && other.IsExportRelated)
-            {
-                return 1;
             }
             else
             {
-                return -IngestionTime.CompareTo(other.IngestionTime);
+                foreach (var evaluator in subsequentCompareValueEvaluators)
+                {
+                    var value = evaluator();
+
+                    if (value != 0)
+                    {
+                        return value;
+                    }
+                }
+
+                return 0;
             }
         }
     }

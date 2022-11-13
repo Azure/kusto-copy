@@ -17,22 +17,16 @@ namespace KustoCopyConsole.KustoQuery
         #region Inner types
         private class InnerConfiguration
         {
-            public InnerConfiguration(
-                KustoClient kustoClient,
-                int concurrentQueryCount,
-                int concurrentExportCommandCount)
+            public InnerConfiguration(KustoClient kustoClient, int concurrentQueryCount)
             {
                 Client = kustoClient;
                 QueryExecutionQueue =
                     new PriorityExecutionQueue<KustoPriority>(concurrentQueryCount);
-                ExportCommandExecutionQueue = new ExecutionQueue(concurrentExportCommandCount);
             }
 
             public KustoClient Client { get; }
 
             public PriorityExecutionQueue<KustoPriority> QueryExecutionQueue { get; }
-
-            public ExecutionQueue ExportCommandExecutionQueue { get; }
         }
         #endregion
 
@@ -42,15 +36,9 @@ namespace KustoCopyConsole.KustoQuery
         private readonly InnerConfiguration _config;
         private readonly ClientRequestProperties _properties;
 
-        public KustoQueuedClient(
-            KustoClient kustoClient,
-            int concurrentQueryCount,
-            int concurrentExportCommandCount)
+        public KustoQueuedClient(KustoClient kustoClient, int concurrentQueryCount)
         {
-            _config = new InnerConfiguration(
-                kustoClient,
-                concurrentQueryCount,
-                concurrentExportCommandCount);
+            _config = new InnerConfiguration(kustoClient, concurrentQueryCount);
             _properties = new ClientRequestProperties();
         }
 
@@ -89,24 +77,14 @@ namespace KustoCopyConsole.KustoQuery
             string command,
             Func<IDataRecord, T> projection)
         {
-            if (!priority.IsExportRelated)
-            {
-                return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+            return await _config.QueryExecutionQueue.RequestRunAsync(
+                priority,
+                async () =>
                 {
                     return await _config
                     .Client
                     .ExecuteCommandAsync(database, command, projection);
                 });
-            }
-            else
-            {
-                return await _config.ExportCommandExecutionQueue.RequestRunAsync(async () =>
-                {
-                    return await _config
-                    .Client
-                    .ExecuteCommandAsync(database, command, projection);
-                });
-            }
         }
 
         public async Task<ImmutableArray<T>> ExecuteQueryAsync<T>(
