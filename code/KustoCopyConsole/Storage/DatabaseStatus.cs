@@ -60,10 +60,10 @@ namespace KustoCopyConsole.Storage
             {
                 get
                 {
-                    foreach(var iteration in _iterationIndex.Index.Values)
+                    foreach (var iteration in _iterationIndex.Index.Values)
                     {
                         yield return iteration.Parent;
-                        foreach(var subIteration in iteration.Children.Index.Values)
+                        foreach (var subIteration in iteration.Children.Index.Values)
                         {
                             yield return subIteration.Parent;
                             foreach (var recordBatch in subIteration.Children.Index.Values)
@@ -87,90 +87,96 @@ namespace KustoCopyConsole.Storage
                 }
             }
 
-            public void IndexNewItems(IEnumerable<StatusItem> items)
+            public void IndexNewItem(StatusItem item)
             {
-                var itemGroups = items
-                    .GroupBy(i => i.Level);
+                switch(item.Level)
+                {
+                    case HierarchyLevel.Iteration:
+                        IndexNewIteration(item);
+                        return;
+                    case HierarchyLevel.SubIteration:
+                        IndexNewSubIteration(item);
+                        return;
+                    case HierarchyLevel.RecordBatch:
+                        IndexNewRecordBatch(item);
+                        return;
 
-                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.Iteration))
+                    default:
+                        throw new NotSupportedException($"Level not supported:  '{item.Level}'");
+                }
+            }
+
+            private void IndexNewIteration(StatusItem item)
+            {
+                if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
                 {
-                    foreach (var item in group)
+                    iteration.Parent = item;
+                }
+                else
+                {
+                    if (!_iterationIndex.Index.TryAdd(
+                        item.IterationId,
+                        new HierarchicalIndex<SubIterationIndex>(item, new SubIterationIndex())))
                     {
-                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                        throw new InvalidOperationException(
+                            "Internal Index corruption at iteration level");
+                    }
+                }
+            }
+
+            private void IndexNewSubIteration(StatusItem item)
+            {
+                if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                {
+                    if (iteration.Children.Index.TryGetValue(
+                        item.SubIterationId!.Value,
+                        out var subIteration))
+                    {
+                        subIteration.Parent = item;
+                    }
+                    else
+                    {
+                        if (!iteration.Children.Index.TryAdd(
+                            item.SubIterationId!.Value,
+                            new HierarchicalIndex<RecordBatchIndex>(
+                                item,
+                                new RecordBatchIndex())))
                         {
-                            iteration.Parent = item;
-                        }
-                        else
-                        {
-                            if (!_iterationIndex.Index.TryAdd(
-                                item.IterationId,
-                                new HierarchicalIndex<SubIterationIndex>(item, new SubIterationIndex())))
-                            {
-                                throw new InvalidOperationException(
-                                    "Internal Index corruption at iteration level");
-                            }
+                            throw new InvalidOperationException(
+                                "Internal Index corruption at sub-iteration level");
                         }
                     }
                 }
-                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.SubIteration))
+                else
                 {
-                    foreach (var item in group)
+                    throw new NotSupportedException(
+                        "Can't insert a sub iteration where iteration doesn't exist");
+                }
+            }
+
+            private void IndexNewRecordBatch(StatusItem item)
+            {
+                if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                {
+                    if (iteration.Children.Index.TryGetValue(
+                        item.SubIterationId!.Value,
+                        out var subIteration))
                     {
-                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
-                        {
-                            if (iteration.Children.Index.TryGetValue(
-                                item.SubIterationId!.Value,
-                                out var subIteration))
-                            {
-                                subIteration.Parent = item;
-                            }
-                            else
-                            {
-                                if (!iteration.Children.Index.TryAdd(
-                                    item.SubIterationId!.Value,
-                                    new HierarchicalIndex<RecordBatchIndex>(
-                                        item,
-                                        new RecordBatchIndex())))
-                                {
-                                    throw new InvalidOperationException(
-                                        "Internal Index corruption at sub-iteration level");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            throw new NotSupportedException(
-                                "Can't insert a sub iteration where iteration doesn't exist");
-                        }
+                        subIteration.Children.Index.AddOrUpdate(
+                            item.RecordBatchId!.Value,
+                            (_) => item,
+                            (_, _) => item);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException(
+                            "Can't insert a record batch where sub iteration doesn't exist");
                     }
                 }
-                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.RecordBatch))
+                else
                 {
-                    foreach (var item in group)
-                    {
-                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
-                        {
-                            if (iteration.Children.Index.TryGetValue(
-                                item.SubIterationId!.Value,
-                                out var subIteration))
-                            {
-                                subIteration.Children.Index.AddOrUpdate(
-                                    item.RecordBatchId!.Value,
-                                    (_) => item,
-                                    (_, _) => item);
-                            }
-                            else
-                            {
-                                throw new NotSupportedException(
-                                    "Can't insert a record batch where sub iteration doesn't exist");
-                            }
-                        }
-                        else
-                        {
-                            throw new NotSupportedException(
-                                "Can't insert a sub iteration where iteration doesn't exist");
-                        }
-                    }
+                    throw new NotSupportedException(
+                        "Can't insert a sub iteration where iteration doesn't exist");
                 }
             }
         }
@@ -194,7 +200,7 @@ namespace KustoCopyConsole.Storage
             {
                 await checkpointGateway.CreateAsync(ct);
 
-                await PersistItemsAsync(checkpointGateway, new StatusItem[0], true, ct);
+                await PersistItemsAsync(checkpointGateway, new StatusItem[0], true, false, ct);
 
                 return new DatabaseStatus(
                     dbName,
@@ -228,7 +234,10 @@ namespace KustoCopyConsole.Storage
                 .Select(g => g.MaxBy(i => i.Timestamp)!);
 
             DbName = dbName;
-            _statusIndex.IndexNewItems(latestItems);
+            foreach (var item in latestItems)
+            {
+                _statusIndex.IndexNewItem(item);
+            }
             _checkpointGateway = checkpointGateway;
         }
         #endregion
@@ -253,14 +262,17 @@ namespace KustoCopyConsole.Storage
 
             if (_checkpointGateway.CanWrite)
             {
-                await PersistItemsAsync(_checkpointGateway, items, false, ct);
+                await PersistItemsAsync(_checkpointGateway, items, false, false, ct);
+                foreach(var item in items)
+                {
+                    _statusIndex.IndexNewItem(item);
+                }
             }
             else
             {
                 await CompactAsync(ct);
                 await PersistNewItemsAsync(items, ct);
             }
-            _statusIndex.IndexNewItems(items);
         }
 
         private static IImmutableList<StatusItem> ParseCsv(byte[] buffer)
@@ -294,6 +306,7 @@ namespace KustoCopyConsole.Storage
             CheckpointGateway checkpointGateway,
             IEnumerable<StatusItem> items,
             bool persistHeaders,
+            bool canWriteInMultipleBatch,
             CancellationToken ct)
         {
             const long MAX_LENGTH = 4000000;
@@ -321,12 +334,19 @@ namespace KustoCopyConsole.Storage
 
                     if (positionAfter > MAX_LENGTH)
                     {
-                        stream.SetLength(positionBefore);
-                        stream.Flush();
-                        await checkpointGateway.WriteAsync(stream.ToArray(), ct);
-                        stream.SetLength(0);
-                        csv.WriteRecord(item);
-                        csv.NextRecord();
+                        if (canWriteInMultipleBatch)
+                        {
+                            stream.SetLength(positionBefore);
+                            stream.Flush();
+                            await checkpointGateway.WriteAsync(stream.ToArray(), ct);
+                            stream.SetLength(0);
+                            csv.WriteRecord(item);
+                            csv.NextRecord();
+                        }
+                        else
+                        {
+                            throw new NotSupportedException("Too much data to write at once");
+                        }
                     }
                 }
                 csv.Flush();
@@ -344,7 +364,7 @@ namespace KustoCopyConsole.Storage
             var tempCheckpointGateway =
                 await _checkpointGateway.GetTemporaryCheckpointGatewayAsync(ct);
 
-            await PersistItemsAsync(tempCheckpointGateway, _statusIndex.AllItems, true, ct);
+            await PersistItemsAsync(tempCheckpointGateway, _statusIndex.AllItems, true, true, ct);
             _checkpointGateway = await tempCheckpointGateway.MoveOutOfTemporaryAsync(ct);
         }
     }

@@ -83,7 +83,7 @@ namespace KustoCopyConsole.Orchestrations
                     null);
 
                 await _dbStatus.PersistNewItemsAsync(
-                    new[] { newSubIteration, newIteration },
+                    new[] { newIteration, newSubIteration },
                     ct);
 
                 return newIteration;
