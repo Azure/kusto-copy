@@ -67,20 +67,21 @@ namespace KustoCopyConsole.Orchestrations
                 var newIterationId = iterations.Any()
                     ? iterations.Last().IterationId + 1
                     : 1;
-                var endCursorsTask = _sourceQueuedClient.ExecuteQueryAsync(
+                var infoTask = _sourceQueuedClient.ExecuteQueryAsync(
                     new KustoPriority(),
                     _dbStatus.DbName,
-                    "print cursor_current()",
-                    r => (string)r[0]);
-                var endCursor = (await endCursorsTask).First();
+                    "print Cursor=cursor_current(), Time=now()",
+                    r => new
+                    {
+                        Cursor = (string)r["Cursor"],
+                        Time = (DateTime)r["Time"]
+                    });
+                var info = (await infoTask).First();
                 var newIteration = StatusItem.CreateIteration(
                     newIterationId,
-                    endCursor);
-                var newSubIteration = StatusItem.CreateSubIteration(
-                    newIterationId,
-                    1,
-                    null,
-                    null);
+                    info.Cursor,
+                    info.Time);
+                var newSubIteration = StatusItem.CreateSubIteration(newIterationId, 1);
 
                 await _dbStatus.PersistNewItemsAsync(
                     new[] { newIteration, newSubIteration },

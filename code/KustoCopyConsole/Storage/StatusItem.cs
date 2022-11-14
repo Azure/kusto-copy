@@ -24,8 +24,9 @@ namespace KustoCopyConsole.Storage
                 });
 
         public static string ExternalTableSchema =>
-            $"{nameof(IterationId)}:long, {nameof(EndCursor)}:string, {nameof(SubIterationId)}:long, "
-            + $"{nameof(StartIngestionTime)}:datetime, {nameof(EndIngestionTime)}:datetime, "
+            $"{nameof(IterationId)}:long, {nameof(EndCursor)}:string, "
+            + $"{nameof(StartIteration)}:datetime, {nameof(EndIteration)}:datetime, "
+            + $"{nameof(SubIterationId)}:long, "
             + $"{nameof(TableName)}:string, {nameof(RecordBatchId)}:long, "
             + $"{nameof(State)}:string, {nameof(Timestamp)}:datetime, {nameof(InternalState)}:dynamic";
 
@@ -82,12 +83,16 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         #region Constructors
-        public static StatusItem CreateIteration(long iterationId, string endCursor)
+        public static StatusItem CreateIteration(
+            long iterationId,
+            string endCursor,
+            DateTime startIteration)
         {
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 EndCursor = endCursor,
+                StartIteration = startIteration,
                 State = StatusItemState.Initial,
                 Timestamp = DateTime.UtcNow
             };
@@ -97,16 +102,12 @@ namespace KustoCopyConsole.Storage
 
         public static StatusItem CreateSubIteration(
             long iterationId,
-            long subIterationId,
-            DateTime? startIngestionTime,
-            DateTime? endIngestionTime)
+            long subIterationId)
         {
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
-                StartIngestionTime = startIngestionTime,
-                EndIngestionTime = endIngestionTime,
                 State = StatusItemState.Initial,
                 Timestamp = DateTime.UtcNow
             };
@@ -137,7 +138,11 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         [Ignore]
-        public HierarchyLevel Level => HierarchyLevel.Iteration;
+        public HierarchyLevel Level => RecordBatchId != null
+            ? HierarchyLevel.RecordBatch
+            : SubIterationId != null
+            ? HierarchyLevel.SubIteration
+            : HierarchyLevel.Iteration;
 
         #region Data properties
         #region Iteration
@@ -148,29 +153,27 @@ namespace KustoCopyConsole.Storage
         /// <summary>End cursor of the iteration.</summary>
         [Index(1)]
         public string EndCursor { get; set; } = string.Empty;
+
+        /// <summary>Start time for iteration.</summary>
+        [Index(2)]
+        public DateTime? StartIteration { get; set; }
+
+        /// <summary>end time for iteration.</summary>
+        [Index(3)]
+        public DateTime? EndIteration { get; set; }
         #endregion
 
         #region Sub Iteration
         /// <summary>Identifier of the sub iteration.</summary>
-        [Index(2)]
-        public long? SubIterationId { get; set; }
-
-        /// <summary>Start ingestion time (inclusive) for the sub iteration.</summary>
-        [Index(3)]
-        public DateTime? StartIngestionTime { get; set; }
-
-        /// <summary>End ingestion time (exclusive) for the sub iteration.</summary>
         [Index(4)]
-        public DateTime? EndIngestionTime { get; set; }
-        #endregion
-
-        #region Table
-        /// <summary>Table Name.</summary>
-        [Index(5)]
-        public string TableName { get; set; } = string.Empty;
+        public long? SubIterationId { get; set; }
         #endregion
 
         #region Record Batch
+        /// <summary>Table Name.</summary>
+        [Index(5)]
+        public string TableName { get; set; } = string.Empty;
+
         /// <summary>Identifier of the record batch.</summary>
         [Index(6)]
         public long? RecordBatchId { get; set; }

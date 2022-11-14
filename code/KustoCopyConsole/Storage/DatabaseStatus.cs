@@ -89,7 +89,7 @@ namespace KustoCopyConsole.Storage
 
             public void IndexNewItem(StatusItem item)
             {
-                switch(item.Level)
+                switch (item.Level)
                 {
                     case HierarchyLevel.Iteration:
                         IndexNewIteration(item);
@@ -230,8 +230,13 @@ namespace KustoCopyConsole.Storage
             IEnumerable<StatusItem> statusItems)
         {
             var latestItems = statusItems
-                .GroupBy(i => i.IterationId)
-                .Select(g => g.MaxBy(i => i.Timestamp)!);
+                .Zip(Enumerable.Range(0, statusItems.Count()), (item, i) => new
+                {
+                    Item = item,
+                    RowId = i
+                })
+                .GroupBy(i => (i.Item.IterationId, i.Item.SubIterationId, i.Item.TableName, i.Item.RecordBatchId))
+                .Select(g => g.MaxBy(i => i.RowId)!.Item);
 
             DbName = dbName;
             foreach (var item in latestItems)
@@ -263,7 +268,7 @@ namespace KustoCopyConsole.Storage
             if (_checkpointGateway.CanWrite)
             {
                 await PersistItemsAsync(_checkpointGateway, items, false, false, ct);
-                foreach(var item in items)
+                foreach (var item in items)
                 {
                     _statusIndex.IndexNewItem(item);
                 }
