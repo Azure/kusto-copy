@@ -32,7 +32,12 @@ with(format='csv', ignoreFirstRecord=true)
     {nameof(StatusItem.SubIterationId)},
     {nameof(StatusItem.TableName)},
     {nameof(StatusItem.RecordBatchId)}
-| order by {nameof(StatusItem.IterationId)} asc
+| where {nameof(StatusItem.State)} != ""{StatusItemState.Deleted}""
+| order by
+    {nameof(StatusItem.IterationId)} asc,
+    {nameof(StatusItem.SubIterationId)} asc,
+    {nameof(StatusItem.TableName)} asc,
+    {nameof(StatusItem.RecordBatchId)} asc
 | project {columnListText}
 }}";
 

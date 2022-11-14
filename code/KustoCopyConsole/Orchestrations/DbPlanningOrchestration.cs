@@ -53,7 +53,6 @@ namespace KustoCopyConsole.Orchestrations
                 //    ".show tables | project TableName",
                 //    r => (string)r[0]);
                 //var tableNames = ComputeTableNames(await tableNamesTask);
-
             }
             while (_isContinuousRun);
         }

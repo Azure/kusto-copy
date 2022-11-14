@@ -10,6 +10,7 @@ namespace KustoCopyConsole.Storage
     public enum StatusItemState
     {
         Initial,
-        Done
+        Done,
+        Deleted
     }
 }
