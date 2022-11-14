@@ -1,6 +1,7 @@
 ﻿using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Orchestrations
 {
@@ -46,6 +47,13 @@ namespace KustoCopyConsole.Orchestrations
             do
             {
                 var currentIteration = await ComputeCurrentIterationAsync(ct);
+                //var tableNamesTask = _sourceQueuedClient.ExecuteQueryAsync(
+                //    new KustoPriority(),
+                //    _dbStatus.DbName,
+                //    ".show tables | project TableName",
+                //    r => (string)r[0]);
+                //var tableNames = ComputeTableNames(await tableNamesTask);
+
             }
             while (_isContinuousRun);
         }
@@ -57,31 +65,60 @@ namespace KustoCopyConsole.Orchestrations
             if (!iterations.Any() || iterations.Last().State == StatusItemState.Done)
             {
                 var newIterationId = iterations.Any()
-                    ? iterations.Last().IterationId!.Value + 1
+                    ? iterations.Last().IterationId + 1
                     : 1;
-                var endCursors = await _sourceQueuedClient.ExecuteQueryAsync(
+                var endCursorsTask = _sourceQueuedClient.ExecuteQueryAsync(
                     new KustoPriority(),
                     _dbStatus.DbName,
                     "print cursor_current()",
                     r => (string)r[0]);
-                var endCursor = endCursors.First();
+                var endCursor = (await endCursorsTask).First();
                 var newIteration = StatusItem.CreateIteration(
                     newIterationId,
                     endCursor);
                 var newSubIteration = StatusItem.CreateSubIteration(
                     newIterationId,
-                    endCursor,
                     1,
                     null,
                     null);
 
-                await _dbStatus.PersistNewItemsAsync(new[] { newIteration, newSubIteration }, ct);
+                await _dbStatus.PersistNewItemsAsync(
+                    new[] { newSubIteration, newIteration },
+                    ct);
 
                 return newIteration;
             }
             else
             {
                 return iterations.Last();
+            }
+        }
+
+        private IImmutableList<string> ComputeTableNames(
+            IImmutableList<string> existingTableNames)
+        {
+            if (!_dbParameterization.TablesToInclude.Any()
+                && !_dbParameterization.TablesToExclude.Any())
+            {
+                return existingTableNames;
+            }
+            else if (_dbParameterization.TablesToInclude.Any()
+                && !_dbParameterization.TablesToExclude.Any())
+            {
+                var intersectionTableNames = _dbParameterization.TablesToInclude
+                    .Intersect(existingTableNames)
+                    .ToImmutableArray();
+
+                return intersectionTableNames;
+            }
+            else
+            {
+
+                var exclusionTableNames = existingTableNames
+                    .Except(_dbParameterization.TablesToExclude)
+                    .ToImmutableArray();
+
+                return exclusionTableNames;
             }
         }
     }

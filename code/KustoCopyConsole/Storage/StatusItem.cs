@@ -97,7 +97,6 @@ namespace KustoCopyConsole.Storage
 
         public static StatusItem CreateSubIteration(
             long iterationId,
-            string endCursor,
             long subIterationId,
             DateTime? startIngestionTime,
             DateTime? endIngestionTime)
@@ -106,9 +105,25 @@ namespace KustoCopyConsole.Storage
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
-                EndCursor = endCursor,
                 StartIngestionTime = startIngestionTime,
                 EndIngestionTime = endIngestionTime,
+                State = StatusItemState.Initial,
+                Timestamp = DateTime.UtcNow
+            };
+
+            return item;
+        }
+
+        public static StatusItem CreateTable(
+            long iterationId,
+            long subIterationId,
+            string tableName)
+        {
+            var item = new StatusItem
+            {
+                IterationId = iterationId,
+                SubIterationId = subIterationId,
+                TableName = tableName,
                 State = StatusItemState.Initial,
                 Timestamp = DateTime.UtcNow
             };
@@ -128,7 +143,7 @@ namespace KustoCopyConsole.Storage
         #region Iteration
         /// <summary>Identifier of the iteration.</summary>
         [Index(0)]
-        public long? IterationId { get; set; }
+        public long IterationId { get; set; }
 
         /// <summary>End cursor of the iteration.</summary>
         [Index(1)]

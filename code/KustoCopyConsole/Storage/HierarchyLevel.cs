@@ -4,7 +4,6 @@
     {
         Iteration,
         SubIteration,
-        Table,
         RecordBatch
     }
 }

@@ -21,23 +21,162 @@ namespace KustoCopyConsole.Storage
         #region Inner Types
         private class StatusItemIndex
         {
-            private readonly List<StatusItem> _iterationItems;
-
-            public StatusItemIndex(IEnumerable<StatusItem> items)
+            #region Inner Types
+            private class RecordBatchIndex
             {
-                _iterationItems = items
-                    .Where(i => i.Level == HierarchyLevel.Iteration)
-                    .OrderBy(i => i.IterationId)
-                    .ToList();
+                public ConcurrentDictionary<long, StatusItem> Index { get; } =
+                    new ConcurrentDictionary<long, StatusItem>();
             }
 
-            public IEnumerable<StatusItem> AllItems => _iterationItems;
+            private class HierarchicalIndex<INDEX>
+            {
+                public HierarchicalIndex(StatusItem parent, INDEX children)
+                {
+                    Parent = parent;
+                    Children = children;
+                }
 
-            public IImmutableList<StatusItem> Iterations => _iterationItems.ToImmutableArray();
+                public StatusItem Parent { get; set; }
+
+                public INDEX Children { get; }
+            }
+
+            private class SubIterationIndex
+            {
+                public ConcurrentDictionary<long, HierarchicalIndex<RecordBatchIndex>> Index { get; } =
+                    new ConcurrentDictionary<long, HierarchicalIndex<RecordBatchIndex>>();
+            }
+
+            private class IterationIndex
+            {
+                public ConcurrentDictionary<long, HierarchicalIndex<SubIterationIndex>> Index { get; } =
+                    new ConcurrentDictionary<long, HierarchicalIndex<SubIterationIndex>>();
+            }
+            #endregion
+
+            private readonly IterationIndex _iterationIndex = new IterationIndex();
+
+            public IEnumerable<StatusItem> AllItems
+            {
+                get
+                {
+                    foreach(var iteration in _iterationIndex.Index.Values)
+                    {
+                        yield return iteration.Parent;
+                        foreach(var subIteration in iteration.Children.Index.Values)
+                        {
+                            yield return subIteration.Parent;
+                            foreach (var recordBatch in subIteration.Children.Index.Values)
+                            {
+                                yield return recordBatch;
+                            }
+                        }
+                    }
+                }
+            }
+
+            public IImmutableList<StatusItem> Iterations
+            {
+                get
+                {
+                    var iterations = _iterationIndex.Index.Values
+                        .Select(i => i.Parent)
+                        .ToImmutableArray();
+
+                    return iterations;
+                }
+            }
+
+            public void IndexNewItems(IEnumerable<StatusItem> items)
+            {
+                var itemGroups = items
+                    .GroupBy(i => i.Level);
+
+                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.Iteration))
+                {
+                    foreach (var item in group)
+                    {
+                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                        {
+                            iteration.Parent = item;
+                        }
+                        else
+                        {
+                            if (!_iterationIndex.Index.TryAdd(
+                                item.IterationId,
+                                new HierarchicalIndex<SubIterationIndex>(item, new SubIterationIndex())))
+                            {
+                                throw new InvalidOperationException(
+                                    "Internal Index corruption at iteration level");
+                            }
+                        }
+                    }
+                }
+                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.SubIteration))
+                {
+                    foreach (var item in group)
+                    {
+                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                        {
+                            if (iteration.Children.Index.TryGetValue(
+                                item.SubIterationId!.Value,
+                                out var subIteration))
+                            {
+                                subIteration.Parent = item;
+                            }
+                            else
+                            {
+                                if (!iteration.Children.Index.TryAdd(
+                                    item.SubIterationId!.Value,
+                                    new HierarchicalIndex<RecordBatchIndex>(
+                                        item,
+                                        new RecordBatchIndex())))
+                                {
+                                    throw new InvalidOperationException(
+                                        "Internal Index corruption at sub-iteration level");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            throw new NotSupportedException(
+                                "Can't insert a sub iteration where iteration doesn't exist");
+                        }
+                    }
+                }
+                foreach (var group in itemGroups.Where(g => g.Key == HierarchyLevel.RecordBatch))
+                {
+                    foreach (var item in group)
+                    {
+                        if (_iterationIndex.Index.TryGetValue(item.IterationId, out var iteration))
+                        {
+                            if (iteration.Children.Index.TryGetValue(
+                                item.SubIterationId!.Value,
+                                out var subIteration))
+                            {
+                                subIteration.Children.Index.AddOrUpdate(
+                                    item.RecordBatchId!.Value,
+                                    (_) => item,
+                                    (_, _) => item);
+                            }
+                            else
+                            {
+                                throw new NotSupportedException(
+                                    "Can't insert a record batch where sub iteration doesn't exist");
+                            }
+                        }
+                        else
+                        {
+                            throw new NotSupportedException(
+                                "Can't insert a sub iteration where iteration doesn't exist");
+                        }
+                    }
+                }
+            }
         }
         #endregion
 
-        private readonly StatusItemIndex _statusIndex;
+        private readonly StatusItemIndex _statusIndex = new StatusItemIndex();
         private CheckpointGateway _checkpointGateway;
 
         #region Constructors
@@ -89,7 +228,7 @@ namespace KustoCopyConsole.Storage
                 .Select(g => g.MaxBy(i => i.Timestamp)!);
 
             DbName = dbName;
-            _statusIndex = new StatusItemIndex(latestItems);
+            _statusIndex.IndexNewItems(latestItems);
             _checkpointGateway = checkpointGateway;
         }
         #endregion
@@ -121,6 +260,7 @@ namespace KustoCopyConsole.Storage
                 await CompactAsync(ct);
                 await PersistNewItemsAsync(items, ct);
             }
+            _statusIndex.IndexNewItems(items);
         }
 
         private static IImmutableList<StatusItem> ParseCsv(byte[] buffer)
