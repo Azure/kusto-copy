@@ -46,18 +46,15 @@ namespace KustoCopyConsole.Orchestrations
         {
             do
             {
-                var currentIteration = await ComputeCurrentIterationAsync(ct);
-                //var tableNamesTask = _sourceQueuedClient.ExecuteQueryAsync(
-                //    new KustoPriority(),
-                //    _dbStatus.DbName,
-                //    ".show tables | project TableName",
-                //    r => (string)r[0]);
-                //var tableNames = ComputeTableNames(await tableNamesTask);
+                var currentIteration = await ComputeUnfinishedIterationAsync(ct);
+                var tableNames = await ComputeTableNamesAsync();
+                var planningTasks = tableNames
+                    .Select(t => TablePlanningOrchestration.PlanAsync());
             }
             while (_isContinuousRun);
         }
 
-        private async Task<StatusItem> ComputeCurrentIterationAsync(CancellationToken ct)
+        private async Task<StatusItem> ComputeUnfinishedIterationAsync(CancellationToken ct)
         {
             var iterations = _dbStatus.GetIterations();
 
@@ -94,9 +91,14 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private IImmutableList<string> ComputeTableNames(
-            IImmutableList<string> existingTableNames)
+        private async Task<IImmutableList<string>> ComputeTableNamesAsync()
         {
+            var existingTableNames = await _sourceQueuedClient.ExecuteQueryAsync(
+                new KustoPriority(),
+                _dbStatus.DbName,
+                ".show tables | project TableName",
+                r => (string)r[0]);
+
             if (!_dbParameterization.TablesToInclude.Any()
                 && !_dbParameterization.TablesToExclude.Any())
             {
