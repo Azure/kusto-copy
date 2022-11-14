@@ -22,11 +22,13 @@ namespace KustoCopyConsole.Orchestrations
             var lakeContainerClient = GetLakeContainerClient(lakeFolderUri, credentials);
             var sourceQueuedClient = parameterization.Source != null
                 ? CreateKustoQueuedClient(
+                    credentials,
                     parameterization.Source!.ClusterQueryConnectionString!,
                     parameterization.Source!.ConcurrentQueryCount)
                 : null;
             var destinationQueuedClient = parameterization.Destination != null
                 ? CreateKustoQueuedClient(
+                    credentials,
                     parameterization.Destination!.ClusterQueryConnectionString!,
                     parameterization.Destination!.ConcurrentQueryCount)
                 : null;
@@ -69,30 +71,18 @@ namespace KustoCopyConsole.Orchestrations
         }
 
         private static KustoQueuedClient CreateKustoQueuedClient(
+            TokenCredential credentials,
             string clusterQueryConnectionString,
             int concurrentQueryCount)
         {
             var sourceBuilder = new KustoConnectionStringBuilder(clusterQueryConnectionString);
-            var sourceKustoClient = new KustoClient(NormalizeBuilder(sourceBuilder));
+            var sourceKustoClient = new KustoClient(
+                sourceBuilder.WithAadAzureTokenCredentialsAuthentication(credentials));
             var sourceQueuedClient = new KustoQueuedClient(
                 sourceKustoClient,
                 concurrentQueryCount);
 
             return sourceQueuedClient;
-        }
-
-        private static KustoConnectionStringBuilder NormalizeBuilder(
-            KustoConnectionStringBuilder builder)
-        {
-            if (string.IsNullOrWhiteSpace(builder.ApplicationClientId))
-            {
-                return builder.WithAadAzureTokenCredentialsAuthentication(
-                    new DefaultAzureCredential());
-            }
-            else
-            {
-                return builder;
-            }
         }
 
         private static TokenCredential CreateCredentials(KustoConnectionStringBuilder builder)
