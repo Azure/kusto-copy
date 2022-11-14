@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.KustoQuery;
+using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 
 namespace KustoCopyConsole.Orchestrations
@@ -6,18 +7,21 @@ namespace KustoCopyConsole.Orchestrations
     public class DbPlanningOrchestration
     {
         private readonly bool _isContinuousRun;
+        private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoQueuedClient _sourceQueuedClient;
 
         #region Constructor
         public static async Task PlanAsync(
             bool isContinuousRun,
+            SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
             CancellationToken ct)
         {
             var orchestration = new DbPlanningOrchestration(
                 isContinuousRun,
+                dbParameterization,
                 dbStatus,
                 sourceQueuedClient);
 
@@ -26,10 +30,12 @@ namespace KustoCopyConsole.Orchestrations
 
         private DbPlanningOrchestration(
             bool isContinuousRun,
+            SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient)
         {
             _isContinuousRun = isContinuousRun;
+            _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
         }
@@ -62,8 +68,14 @@ namespace KustoCopyConsole.Orchestrations
                 var newIteration = StatusItem.CreateIteration(
                     newIterationId,
                     endCursor);
+                var newSubIteration = StatusItem.CreateSubIteration(
+                    newIterationId,
+                    endCursor,
+                    1,
+                    null,
+                    null);
 
-                await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
+                await _dbStatus.PersistNewItemsAsync(new[] { newIteration, newSubIteration }, ct);
 
                 return newIteration;
             }

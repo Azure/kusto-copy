@@ -25,7 +25,11 @@ externaldata({StatusItem.ExternalTableSchema})
    '{dbStatus.IndexBlobUri};impersonate'
 ]
 with(format='csv', ignoreFirstRecord=true)
-| summarize arg_max({nameof(StatusItem.Timestamp)}, *) by {nameof(StatusItem.IterationId)}
+| summarize arg_max({nameof(StatusItem.Timestamp)}, *) by
+    {nameof(StatusItem.IterationId)},
+    {nameof(StatusItem.SubIterationId)},
+    {nameof(StatusItem.TableName)},
+    {nameof(StatusItem.RecordBatchId)}
 | order by {nameof(StatusItem.IterationId)} asc
 | project {columnListText}
 }}";

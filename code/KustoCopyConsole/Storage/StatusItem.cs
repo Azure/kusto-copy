@@ -95,6 +95,27 @@ namespace KustoCopyConsole.Storage
             return item;
         }
 
+        public static StatusItem CreateSubIteration(
+            long iterationId,
+            string endCursor,
+            long subIterationId,
+            DateTime? startIngestionTime,
+            DateTime? endIngestionTime)
+        {
+            var item = new StatusItem
+            {
+                IterationId = iterationId,
+                SubIterationId = subIterationId,
+                EndCursor = endCursor,
+                StartIngestionTime = startIngestionTime,
+                EndIngestionTime = endIngestionTime,
+                State = StatusItemState.Initial,
+                Timestamp = DateTime.UtcNow
+            };
+
+            return item;
+        }
+
         public StatusItem()
         {
         }
@@ -131,7 +152,7 @@ namespace KustoCopyConsole.Storage
         #region Table
         /// <summary>Table Name.</summary>
         [Index(5)]
-        public string TableName { get; set; }
+        public string TableName { get; set; } = string.Empty;
         #endregion
 
         #region Record Batch
