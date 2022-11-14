@@ -159,8 +159,15 @@ namespace KustoCopyConsole
                 taskCompletionSource.Task.Wait();
             };
 
-            parameterization.Validate();
-            await CopyOrchestration.CopyAsync(parameterization, cancellationTokenSource.Token);
+            try
+            {
+                parameterization.Validate();
+                await CopyOrchestration.CopyAsync(parameterization, cancellationTokenSource.Token);
+            }
+            finally
+            {
+                taskCompletionSource.SetResult();
+            }
         }
 
         private static void ConfigureTrace(bool isVerbose)
