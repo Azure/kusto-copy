@@ -128,7 +128,7 @@ namespace KustoCopyConsole.Storage
         #region Iteration
         /// <summary>Identifier of the iteration.</summary>
         [Index(0)]
-        public long IterationId { get; set; }
+        public long? IterationId { get; set; }
 
         /// <summary>End cursor of the iteration.</summary>
         [Index(1)]
@@ -138,7 +138,7 @@ namespace KustoCopyConsole.Storage
         #region Sub Iteration
         /// <summary>Identifier of the sub iteration.</summary>
         [Index(2)]
-        public long SubIterationId { get; set; }
+        public long? SubIterationId { get; set; }
 
         /// <summary>Start ingestion time (inclusive) for the sub iteration.</summary>
         [Index(3)]
@@ -158,7 +158,7 @@ namespace KustoCopyConsole.Storage
         #region Record Batch
         /// <summary>Identifier of the record batch.</summary>
         [Index(6)]
-        public long RecordBatchId { get; set; }
+        public long? RecordBatchId { get; set; }
         #endregion
 
         /// <summary>State of the item.</summary>

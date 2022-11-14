@@ -57,7 +57,7 @@ namespace KustoCopyConsole.Orchestrations
             if (!iterations.Any() || iterations.Last().State == StatusItemState.Done)
             {
                 var newIterationId = iterations.Any()
-                    ? iterations.Last().IterationId + 1
+                    ? iterations.Last().IterationId!.Value + 1
                     : 1;
                 var endCursors = await _sourceQueuedClient.ExecuteQueryAsync(
                     new KustoPriority(),
