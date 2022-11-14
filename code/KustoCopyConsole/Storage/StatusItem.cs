@@ -27,7 +27,7 @@ namespace KustoCopyConsole.Storage
             $"{nameof(IterationId)}:long, {nameof(EndCursor)}:string, "
             + $"{nameof(StartIteration)}:datetime, {nameof(EndIteration)}:datetime, "
             + $"{nameof(SubIterationId)}:long, "
-            + $"{nameof(TableName)}:string, {nameof(RecordBatchId)}:long, "
+            + $"{nameof(RecordBatchId)}:long, {nameof(TableName)}:string, "
             + $"{nameof(State)}:string, {nameof(Timestamp)}:datetime, {nameof(InternalState)}:dynamic";
 
         #region Inner types
@@ -170,13 +170,13 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         #region Record Batch
-        /// <summary>Table Name.</summary>
-        [Index(5)]
-        public string TableName { get; set; } = string.Empty;
-
         /// <summary>Identifier of the record batch.</summary>
-        [Index(6)]
+        [Index(5)]
         public long? RecordBatchId { get; set; }
+
+        /// <summary>Table Name.</summary>
+        [Index(6)]
+        public string TableName { get; set; } = string.Empty;
         #endregion
 
         /// <summary>State of the item.</summary>
