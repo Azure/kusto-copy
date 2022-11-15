@@ -102,14 +102,26 @@ namespace KustoCopyConsole.Storage
 
         public static StatusItem CreateSubIteration(
             long iterationId,
-            long subIterationId)
+            long subIterationId,
+            DateTime startIngestionTime,
+            DateTime endIngestionTime,
+            string? stagingTableSuffix)
         {
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
                 State = StatusItemState.Initial,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                InternalState = new InternalState
+                {
+                    SubIterationState = new SubIterationState
+                    {
+                        StartIngestionTime = startIngestionTime,
+                        EndIngestionTime = endIngestionTime,
+                        StagingTableSuffix = stagingTableSuffix
+                    },
+                }
             };
 
             return item;

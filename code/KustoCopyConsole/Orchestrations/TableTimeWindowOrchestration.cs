@@ -6,7 +6,6 @@ namespace KustoCopyConsole.Orchestrations
     public class TableTimeWindowOrchestration
     {
         #region Inner Types
-        private record TotalBracket(long Cardinality, DateTime? Min, DateTime? Max);
         #endregion
 
         private readonly KustoPriority _kustoPriority;
@@ -16,10 +15,8 @@ namespace KustoCopyConsole.Orchestrations
         private readonly long _tableSizeCap;
         private readonly KustoQueuedClient _sourceQueuedClient;
 
-        public record TimeWindow(long Cardinality, DateTime? StartTime, DateTime? EndTime);
-
         #region Constructors
-        public static async Task<IImmutableList<TimeWindow>> ComputeWindowsAsync(
+        public static async Task<IImmutableList<TimeWindowCount>> ComputeWindowsAsync(
             KustoPriority kustoPriority,
             CursorWindow cursorWindow,
             DateTime? startTime,
@@ -65,35 +62,24 @@ namespace KustoCopyConsole.Orchestrations
         }
         #endregion
 
-        private async Task<IImmutableList<TimeWindow>> ComputeWindowsAsync(CancellationToken ct)
+        private async Task<IImmutableList<TimeWindowCount>> ComputeWindowsAsync(
+            CancellationToken ct)
         {
-            var totalBracket = await ComputeTotalBracketAsync();
+            var totalBracket = await ComputeBracketAsync();
 
-            if (totalBracket.Min == null && totalBracket.Max == null)
-            {
-                return ImmutableArray<TimeWindow>.Empty.Add(
-                    new TimeWindow(totalBracket.Cardinality, null, null));
-            }
-            else if (totalBracket.Min == null || totalBracket.Max == null)
+            if (totalBracket.Cardinality > _tableSizeCap)
             {
                 throw new NotImplementedException();
             }
             else
             {
-                if (totalBracket.Cardinality > _tableSizeCap)
-                {
-                    throw new NotImplementedException();
-                }
-                else
-                {
-                    var windows = await FanOutByDaysAsync();
+                var windows = await FanOutByDaysAsync();
 
-                    return windows;
-                }
+                return windows;
             }
         }
 
-        private async Task<IImmutableList<TimeWindow>> FanOutByDaysAsync()
+        private async Task<IImmutableList<TimeWindowCount>> FanOutByDaysAsync()
         {
             var startTimeDeclare = _startTime == null
                 ? string.Empty
@@ -108,18 +94,18 @@ namespace KustoCopyConsole.Orchestrations
 {_startTimePredicate}
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
+| where isnotnull(ingestion_time())
 | summarize Cardinality=count() by StartTime=bin(ingestion_time(), 1d)
-| extend EndTime = ingestion_time()+1d
+| extend EndTime = StartTime+1d
 ",
-                r => new TimeWindow(
-                    (long)r["Cardinality"],
-                    r["StartTime"].To<DateTime>(),
-                    r["EndTime"].To<DateTime>()));
+                r => new TimeWindowCount(
+                    new TimeWindow((DateTime)r["StartTime"], (DateTime)r["EndTime"]),
+                    (long)r["Cardinality"]));
 
             return windows;
         }
 
-        private async Task<TotalBracket> ComputeTotalBracketAsync()
+        private async Task<TimeWindowCount> ComputeBracketAsync()
         {
             var startTimeDeclare = _startTime == null
                 ? string.Empty
@@ -127,21 +113,34 @@ namespace KustoCopyConsole.Orchestrations
             var sourceQueuedClient = _startTime == null
                 ? _sourceQueuedClient
                 : _sourceQueuedClient.SetParameter("StartTime", _startTime.Value);
-            var totalBrackets = await sourceQueuedClient.ExecuteQueryAsync(
+            var bracketList = await sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
                 $@"
 {_startTimePredicate}
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
+| where isnotnull(ingestion_time())
 | summarize Cardinality = count(), Min = min(ingestion_time()), Max = max(ingestion_time())
 ",
-                r => new TotalBracket(
-                    (long)r["Cardinality"],
-                    r["Min"].To<DateTime>(),
-                    r["Max"].To<DateTime>()));
+                r => new
+                {
+                    Cardinality = (long)r["Cardinality"],
+                    Min =r["Min"].To<DateTime>(),
+                    Max = r["Max"].To<DateTime>()
+                });
+            var bracket = bracketList.First();
+            //new TimeWindowCount(
+            //        new TimeWindow((DateTime)r["Min"], (DateTime)r["Max"]),
+            //        )
 
-            return totalBrackets.First();
+            return bracket.Cardinality == 0
+                ? new TimeWindowCount(
+                    new TimeWindow(DateTime.MinValue, DateTime.MaxValue),
+                    bracket.Cardinality)
+                : new TimeWindowCount(
+                    new TimeWindow(bracket.Min!.Value, bracket.Max!.Value),
+                    bracket.Cardinality);
         }
     }
 }

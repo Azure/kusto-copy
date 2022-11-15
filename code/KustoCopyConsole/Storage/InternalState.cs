@@ -2,5 +2,6 @@
 {
     public class InternalState
     {
+        public SubIterationState? SubIterationState { get; set; }
     }
 }

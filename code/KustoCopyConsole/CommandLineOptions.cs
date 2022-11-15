@@ -32,10 +32,10 @@ namespace KustoCopyConsole
         public string? Db { get; set; }
 
         [Option("tables-include", Required = false, HelpText = "Tables to include", Default = new string[0])]
-        public string[] TablesToInclude { get; set; } = new string[0];
+        public IEnumerable<string> TablesToInclude { get; set; } = new string[0];
 
         [Option("tables-exclude", Required = false, HelpText = "Tables to exclude", Default = new string[0])]
-        public string[] TablesToExclude { get; set; } = new string[0];
+        public IEnumerable<string> TablesToExclude { get; set; } = new string[0];
 
         [Option("query-slots", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
         public int ConcurrentQueryCount { get; set; } = 1;

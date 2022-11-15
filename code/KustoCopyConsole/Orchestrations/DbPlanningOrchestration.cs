@@ -3,12 +3,16 @@ using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace KustoCopyConsole.Orchestrations
 {
     public class DbPlanningOrchestration
     {
         #region Inner Types
+        private record TableTimeWindowCounts(
+            string TableName,
+            IImmutableList<TimeWindowCount> TimeWindowCounts);
         #endregion
 
         private const long TABLE_SIZE_CAP = 1000000000;
@@ -77,15 +81,75 @@ namespace KustoCopyConsole.Orchestrations
                 await Task.WhenAll(timeWindowsTasks.Select(t => t.Task));
 
                 var timeWindowsPerTable = timeWindowsTasks
-                    .ToImmutableDictionary(t => t.TableName, t => t.Task.Result);
-                var subIteration = await CreateSubIterationAsync();
+                    .Select(t => new TableTimeWindowCounts(
+                        t.TableName,
+                        t.Task.Result))
+                    .ToImmutableArray();
+                var subIteration = await CreateSubIterationAsync(
+                    currentIterationId,
+                    1,
+                    timeWindowsPerTable,
+                    ct);
             }
             while (_isContinuousRun);
         }
 
-        private Task<StatusItem> CreateSubIterationAsync()
+        private async Task<StatusItem> CreateSubIterationAsync(
+            long iterationId,
+            long subIterationId,
+            IImmutableList<TableTimeWindowCounts> tableTimeWindowCounts,
+            CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var groupedByStartTime = tableTimeWindowCounts
+                .SelectMany(t => t.TimeWindowCounts.Select(w => new
+                {
+                    TableName = t.TableName,
+                    TimeWindowCount = w
+                }))
+                .GroupBy(i => i.TimeWindowCount.TimeWindow.StartTime)
+                .Select(g => new
+                {
+                    StartTime = g.Key,
+                    TotalCardinality = g.Sum(i => i.TimeWindowCount.Cardinality),
+                    Items = g
+                });
+            var orderedGroupedByStartTime = iterationId == 1
+                ? groupedByStartTime.OrderByDescending(g => g.StartTime)
+                : groupedByStartTime.OrderBy(g => g.StartTime);
+            var groupsToScan = orderedGroupedByStartTime.ToImmutableArray();
+            var groupCountToKeep = 0;
+            long totalCardinality = 0;
+
+            for (int i = 0; i < groupsToScan.Length; i++)
+            {
+                var group = groupsToScan[i];
+
+                if (i == 0
+                    || totalCardinality + group.TotalCardinality > TABLE_SIZE_CAP)
+                {
+                    ++groupCountToKeep;
+                    totalCardinality += group.TotalCardinality;
+                }
+                else
+                {   //  We don't want the sub iteration to exceed # of rows
+                    break;
+                }
+            }
+
+            var groupsToRetain = groupsToScan.Take(groupCountToKeep);
+            var subIteration = StatusItem.CreateSubIteration(
+                iterationId,
+                subIterationId,
+                groupsToRetain
+                .Min(g => g.StartTime),
+                groupsToRetain
+                .SelectMany(g => g.Items)
+                .Max(i => i.TimeWindowCount.TimeWindow.EndTime),
+                DateTime.UtcNow.Ticks.ToString("x8"));
+
+            await _dbStatus.PersistNewItemsAsync(new[] { subIteration }, ct);
+
+            return subIteration;
         }
 
         private CursorWindow GetLatestCursorWindow()
@@ -135,11 +199,8 @@ namespace KustoCopyConsole.Orchestrations
                     newIterationId,
                     info.Cursor,
                     info.Time);
-                var newSubIteration = StatusItem.CreateSubIteration(newIterationId, 1);
 
-                await _dbStatus.PersistNewItemsAsync(
-                    new[] { newIteration, newSubIteration },
-                    ct);
+                await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
 
                 return newIteration.IterationId;
             }
