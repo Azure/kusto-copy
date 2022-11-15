@@ -5,22 +5,22 @@ namespace KustoCopyConsole.Orchestrations
 {
     public class TablePlanningOrchestration
     {
-        private readonly long _iterationId;
         private readonly string _tableName;
+        private readonly StatusItem _subIteration;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoQueuedClient _sourceQueuedClient;
 
         #region Constructors
         public static async Task PlanAsync(
-            long iterationId,
             string tableName,
+            StatusItem subIteration,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
             CancellationToken ct)
         {
             var orchestration = new TablePlanningOrchestration(
-                iterationId,
                 tableName,
+                subIteration,
                 dbStatus,
                 sourceQueuedClient);
 
@@ -28,13 +28,13 @@ namespace KustoCopyConsole.Orchestrations
         }
 
         private TablePlanningOrchestration(
-            long iterationId,
             string tableName,
+            StatusItem subIteration,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient)
         {
-            _iterationId = iterationId;
             _tableName = tableName;
+            _subIteration = subIteration;
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
         }

@@ -87,6 +87,19 @@ namespace KustoCopyConsole.Storage
                 }
             }
 
+            public IImmutableList<StatusItem> GetSubIterations(long iterationId)
+            {
+                var items = _iterationIndex
+                    .Index[iterationId]
+                    .Children
+                    .Index
+                    .Values
+                    .Select(v => v.Parent)
+                    .ToImmutableArray();
+
+                return items;
+            }
+
             public void IndexNewItem(StatusItem item)
             {
                 switch (item.Level)
@@ -254,6 +267,11 @@ namespace KustoCopyConsole.Storage
         public IImmutableList<StatusItem> GetIterations()
         {
             return _statusIndex.Iterations;
+        }
+
+        public IImmutableList<StatusItem> GetSubIterations(long iterationId)
+        {
+            return _statusIndex.GetSubIterations(iterationId);
         }
 
         public async Task PersistNewItemsAsync(

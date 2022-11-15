@@ -56,27 +56,52 @@ namespace KustoCopyConsole.Orchestrations
         {
             do
             {
-                var currentIterationId = await ComputeUnfinishedIterationAsync(ct);
-                var cursorWindow = GetLatestCursorWindow();
                 var tableNames = await ComputeTableNamesAsync();
+                var subIteration = await ComputeUnfinishedSubIterationAsync(tableNames, ct);
+                var planningTasks = tableNames
+                    .Select(t => TablePlanningOrchestration.PlanAsync(
+                        t,
+                        subIteration,
+                        _dbStatus,
+                        _sourceQueuedClient,
+                        ct)).ToImmutableArray();
+
+                await Task.WhenAll(planningTasks);
+            }
+            while (_isContinuousRun);
+        }
+
+        private async Task<StatusItem> ComputeUnfinishedSubIterationAsync(
+            IImmutableList<string> tableNames,
+            CancellationToken ct)
+        {
+            var iterationId = await ComputeUnfinishedIterationAsync(ct);
+            var subIterations = _dbStatus
+                .GetSubIterations(iterationId)
+                .Where(i => i.State == StatusItemState.Initial);
+
+            if (subIterations.Any())
+            {
+                return subIterations.First();
+            }
+            else
+            {
+                var subIterationId = subIterations.Any()
+                    ? subIterations.Max(i => i.SubIterationId!) + 1
+                    : 1;
+                var cursorWindow = GetLatestCursorWindow();
+                //  Find time window for each table to establish sub iteration
                 var timeWindowsTasks = tableNames.Select(t => new
                 {
                     TableName = t,
                     Task = TableTimeWindowOrchestration.ComputeWindowsAsync(
-                        new KustoPriority(currentIterationId, 1, _dbStatus.DbName, t),
+                        new KustoPriority(iterationId, subIterationId, _dbStatus.DbName, t),
                         cursorWindow,
                         null,
                         TABLE_SIZE_CAP,
                         _sourceQueuedClient,
                         ct)
                 }).ToImmutableArray();
-                //var planningTasks = tableNames
-                //    .Select(t => TablePlanningOrchestration.PlanAsync(
-                //        currentIteration.IterationId,
-                //        t,
-                //        _dbStatus,
-                //        _sourceQueuedClient,
-                //        ct));
 
                 await Task.WhenAll(timeWindowsTasks.Select(t => t.Task));
 
@@ -86,12 +111,13 @@ namespace KustoCopyConsole.Orchestrations
                         t.Task.Result))
                     .ToImmutableArray();
                 var subIteration = await CreateSubIterationAsync(
-                    currentIterationId,
+                    iterationId,
                     1,
                     timeWindowsPerTable,
                     ct);
+
+                return subIteration;
             }
-            while (_isContinuousRun);
         }
 
         private async Task<StatusItem> CreateSubIterationAsync(
