@@ -2,11 +2,14 @@
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace KustoCopyConsole.Orchestrations
 {
     public class DbPlanningOrchestration
     {
+        private const long TABLE_SIZE_CAP = 1000000000;
+
         private readonly bool _isContinuousRun;
         private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
@@ -46,15 +49,59 @@ namespace KustoCopyConsole.Orchestrations
         {
             do
             {
-                var currentIteration = await ComputeUnfinishedIterationAsync(ct);
+                var currentIterationId = await ComputeUnfinishedIterationAsync(ct);
+                var cursorWindow = GetLatestCursorWindow();
                 var tableNames = await ComputeTableNamesAsync();
-                var planningTasks = tableNames
-                    .Select(t => TablePlanningOrchestration.PlanAsync());
+                var timeWindowsTasks = tableNames.Select(t => new
+                {
+                    TableName = t,
+                    Task = TableTimeWindowOrchestration.ComputeWindowsAsync(
+                        t,
+                        cursorWindow,
+                        null,
+                        currentIterationId == 1,
+                        TABLE_SIZE_CAP,
+                        _sourceQueuedClient,
+                        ct)
+                }).ToImmutableArray();
+                //var planningTasks = tableNames
+                //    .Select(t => TablePlanningOrchestration.PlanAsync(
+                //        currentIteration.IterationId,
+                //        t,
+                //        _dbStatus,
+                //        _sourceQueuedClient,
+                //        ct));
+
+                await Task.WhenAll(timeWindowsTasks.Select(t => t.Task));
             }
             while (_isContinuousRun);
         }
 
-        private async Task<StatusItem> ComputeUnfinishedIterationAsync(CancellationToken ct)
+        private CursorWindow GetLatestCursorWindow()
+        {
+            var iterations = _dbStatus.GetIterations();
+
+            if (!iterations.Any())
+            {
+                throw new InvalidOperationException("There should be an iteration available");
+            }
+            else
+            {
+                if (iterations.Count() == 1)
+                {
+                    return new CursorWindow(null, iterations.First().EndCursor);
+                }
+                else
+                {
+                    var lastIteration = iterations.Last();
+                    var previousIteration = iterations.Take(iterations.Count() - 1).Last();
+
+                    return new CursorWindow(previousIteration.EndCursor, lastIteration.EndCursor);
+                }
+            }
+        }
+
+        private async Task<long> ComputeUnfinishedIterationAsync(CancellationToken ct)
         {
             var iterations = _dbStatus.GetIterations();
 
@@ -83,11 +130,11 @@ namespace KustoCopyConsole.Orchestrations
                     new[] { newIteration, newSubIteration },
                     ct);
 
-                return newIteration;
+                return newIteration.IterationId;
             }
             else
             {
-                return iterations.Last();
+                return iterations.Last().IterationId;
             }
         }
 
