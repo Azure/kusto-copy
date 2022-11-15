@@ -11,7 +11,9 @@ namespace KustoCopyConsole.KustoQuery
     {
         public KustoPriority(
             long? iterationId = null,
-            long? subIterationId = null)
+            long? subIterationId = null,
+            string? databaseName = null,
+            string? tableName = null)
         {
             if (iterationId == null && subIterationId != null)
             {
@@ -19,11 +21,17 @@ namespace KustoCopyConsole.KustoQuery
             }
             IterationId = iterationId;
             SubIterationId = subIterationId;
+            DatabaseName = databaseName;
+            TableName = tableName;
         }
 
         public long? IterationId { get; }
 
         public long? SubIterationId { get; }
+        
+        public string? DatabaseName { get; }
+        
+        public string? TableName { get; }
 
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
         {
@@ -34,7 +42,20 @@ namespace KustoCopyConsole.KustoQuery
 
             return CompareHierarchicalCompare(
                 CompareLongs(IterationId, other.IterationId),
-                () => CompareLongs(SubIterationId, other.SubIterationId));
+                () => CompareLongs(SubIterationId, other.SubIterationId),
+                () => CompareStrings(DatabaseName, other.DatabaseName),
+                () => CompareStrings(TableName, other.TableName));
+        }
+
+        private int CompareStrings(string? a, string? b)
+        {
+            return (a == null && b == null)
+                ? 0
+                : (a == null && b != null)
+                ? -1
+                : (a != null && b == null)
+                ? 1
+                : a!.CompareTo(b!);
         }
 
         private static int CompareLongs(long? a, long? b)

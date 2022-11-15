@@ -8,6 +8,9 @@ namespace KustoCopyConsole.Orchestrations
 {
     public class DbPlanningOrchestration
     {
+        #region Inner Types
+        #endregion
+
         private const long TABLE_SIZE_CAP = 1000000000;
 
         private readonly bool _isContinuousRun;
@@ -56,10 +59,9 @@ namespace KustoCopyConsole.Orchestrations
                 {
                     TableName = t,
                     Task = TableTimeWindowOrchestration.ComputeWindowsAsync(
-                        t,
+                        new KustoPriority(currentIterationId, 1, _dbStatus.DbName, t),
                         cursorWindow,
                         null,
-                        currentIterationId == 1,
                         TABLE_SIZE_CAP,
                         _sourceQueuedClient,
                         ct)
@@ -73,8 +75,17 @@ namespace KustoCopyConsole.Orchestrations
                 //        ct));
 
                 await Task.WhenAll(timeWindowsTasks.Select(t => t.Task));
+
+                var timeWindowsPerTable = timeWindowsTasks
+                    .ToImmutableDictionary(t => t.TableName, t => t.Task.Result);
+                var subIteration = await CreateSubIterationAsync();
             }
             while (_isContinuousRun);
+        }
+
+        private Task<StatusItem> CreateSubIterationAsync()
+        {
+            throw new NotImplementedException();
         }
 
         private CursorWindow GetLatestCursorWindow()
