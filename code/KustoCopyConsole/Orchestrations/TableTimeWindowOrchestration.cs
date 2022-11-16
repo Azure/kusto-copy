@@ -10,8 +10,10 @@ namespace KustoCopyConsole.Orchestrations
 
         private readonly KustoPriority _kustoPriority;
         private readonly string _cursorWindowPredicate;
-        private readonly string _startTimePredicate;
-        private readonly DateTime? _startTime;
+        private readonly string _subIterationStartTimePredicate;
+        private readonly string _subIterationEndTimePredicate;
+        private readonly DateTime? _subIterationStartTime;
+        private readonly DateTime? _subIterationEndTime;
         private readonly long _tableSizeCap;
         private readonly KustoQueuedClient _sourceQueuedClient;
 
@@ -19,7 +21,8 @@ namespace KustoCopyConsole.Orchestrations
         public static async Task<IImmutableList<TimeWindowCount>> ComputeWindowsAsync(
             KustoPriority kustoPriority,
             CursorWindow cursorWindow,
-            DateTime? startTime,
+            DateTime? subIterationStartTime,
+            DateTime? subIterationEndTime,
             long tableSizeCap,
             KustoQueuedClient sourceQueuedClient,
             CancellationToken ct)
@@ -27,7 +30,8 @@ namespace KustoCopyConsole.Orchestrations
             var orchestration = new TableTimeWindowOrchestration(
                 kustoPriority,
                 cursorWindow,
-                startTime,
+                subIterationStartTime,
+                subIterationEndTime,
                 tableSizeCap,
                 sourceQueuedClient);
             var windows = await orchestration.ComputeWindowsAsync(ct);
@@ -38,18 +42,21 @@ namespace KustoCopyConsole.Orchestrations
         private TableTimeWindowOrchestration(
             KustoPriority kustoPriority,
             CursorWindow cursorWindow,
-            DateTime? startTime,
+            DateTime? subIterationStartTime,
+            DateTime? subIterationEndTime,
             long tableSizeCap,
             KustoQueuedClient sourceQueuedClient)
         {
             _kustoPriority = kustoPriority;
             _cursorWindowPredicate = cursorWindow.ToCursorKustoPredicate();
-            _startTimePredicate = _startTime == null
+            _subIterationStartTimePredicate = subIterationStartTime == null
                 ? string.Empty
-                : _kustoPriority.IterationId == 1
-                ? $"| where ingestion_time() < StartTime"
-                : $"| where ingestion_time() > StartTime";
-            _startTime = startTime;
+                : "| where StartTime > SubIterationStartTime";
+            _subIterationEndTimePredicate = subIterationEndTime == null
+                ? string.Empty
+                : "| where StartTime < SubIterationEndTime";
+            _subIterationStartTime = subIterationStartTime;
+            _subIterationEndTime = subIterationEndTime;
             _tableSizeCap = tableSizeCap;
             _sourceQueuedClient = sourceQueuedClient;
         }
@@ -78,18 +85,32 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task<IImmutableList<TimeWindowCount>> FanOutByDaysAsync()
         {
-            var startTimeDeclare = _startTime == null
+            var startTimeDeclare = _subIterationStartTime == null
                 ? string.Empty
                 : "declare query_parameters(StartTime:datetime);";
-            var sourceQueuedClient = _startTime == null
+            var sourceQueuedClient = _sourceQueuedClient;
+
+            sourceQueuedClient = _subIterationStartTime == null
                 ? _sourceQueuedClient
-                : _sourceQueuedClient.SetParameter("StartTime", _startTime.Value);
+                : _sourceQueuedClient.SetParameter(
+                    "SubIterationStartTime",
+                    _subIterationStartTime.Value);
+            sourceQueuedClient = _subIterationEndTime == null
+                ? _sourceQueuedClient
+                : _sourceQueuedClient.SetParameter(
+                    "SubIterationEndTime",
+                    _subIterationEndTime.Value);
             var queryText = $@"
-{_startTimePredicate}
+declare query_parameters(
+    SubIterationStartTime:datetime=datetime(null),
+    SubIterationEndTime:datetime=datetime(null));
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
-| where isnotnull(ingestion_time())
-| summarize Cardinality=count() by StartTime=bin(ingestion_time(), 1d)
+| project StartTime=bin(ingestion_time(), 1d)
+{_subIterationStartTimePredicate}
+{_subIterationEndTimePredicate}
+| where isnotnull(StartTime)
+| summarize Cardinality=count() by StartTime
 | extend EndTime = StartTime+1d
 ";
             var windows = await sourceQueuedClient.ExecuteQueryAsync(
@@ -105,17 +126,17 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task<TimeWindowCount> ComputeBracketAsync()
         {
-            var startTimeDeclare = _startTime == null
+            var startTimeDeclare = _subIterationStartTime == null
                 ? string.Empty
                 : "declare query_parameters(StartTime:datetime);";
-            var sourceQueuedClient = _startTime == null
+            var sourceQueuedClient = _subIterationStartTime == null
                 ? _sourceQueuedClient
-                : _sourceQueuedClient.SetParameter("StartTime", _startTime.Value);
+                : _sourceQueuedClient.SetParameter("StartTime", _subIterationStartTime.Value);
             var bracketList = await sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
                 $@"
-{_startTimePredicate}
+{_subIterationStartTimePredicate}
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
 | where isnotnull(ingestion_time())

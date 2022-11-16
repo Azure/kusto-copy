@@ -219,6 +219,29 @@ namespace KustoCopyConsole.Storage
         [TypeConverter(typeof(InternalStateConverter))]
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
+
+        public StatusItem UpdateState(StatusItemState applied)
+        {
+            var clone = Clone(clone =>
+            {
+                clone.State = applied;
+                clone.Timestamp = DateTime.UtcNow;
+            });
+
+            return clone;
+        }
+
+        public StatusItem Clone(Action<StatusItem>? action = null)
+        {
+            var clone = (StatusItem)MemberwiseClone();
+
+            if (action != null)
+            {
+                action(clone);
+            }
+
+            return clone;
+        }
     }
 
     [JsonSerializable(typeof(InternalState))]

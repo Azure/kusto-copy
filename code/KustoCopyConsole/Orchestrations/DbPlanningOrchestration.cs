@@ -13,6 +13,8 @@ namespace KustoCopyConsole.Orchestrations
         private record TableTimeWindowCounts(
             string TableName,
             IImmutableList<TimeWindowCount> TimeWindowCounts);
+
+        private record SubIterationTimeFilter(DateTime? StartTime, DateTime? EndTime);
         #endregion
 
         private const long TABLE_SIZE_CAP = 1000000000;
@@ -56,43 +58,76 @@ namespace KustoCopyConsole.Orchestrations
         {
             do
             {
-                var tableNames = await ComputeTableNamesAsync();
-                var subIteration = await ComputeUnfinishedSubIterationAsync(tableNames, ct);
-                long currentRecordBatchId = 0;
-                var planningTasks = tableNames
-                    .Select(t => TablePlanningOrchestration.PlanAsync(
-                        new KustoPriority(
-                            subIteration.IterationId,
-                            subIteration.SubIterationId!.Value,
-                            _dbStatus.DbName,
-                            t),
-                        subIteration,
-                        GetLatestCursorWindow(subIteration.IterationId),
-                        _dbStatus,
-                        _sourceQueuedClient,
-                        () => Interlocked.Increment(ref currentRecordBatchId),
-                        ct)).ToImmutableArray();
+                var iteration = await ComputeUnfinishedIterationAsync(ct);
 
-                await Task.WhenAll(planningTasks);
+                while (true)
+                {
+                    var tableNames = await ComputeTableNamesAsync();
+                    var subIteration = await ComputeUnfinishedSubIterationAsync(
+                        iteration.IterationId,
+                        tableNames,
+                        ct);
+
+                    if (subIteration != null)
+                    {
+                        await PlanSubIterationAsync(tableNames, subIteration, ct);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                await _dbStatus.PersistNewItemsAsync(
+                    new[] { iteration.UpdateState(StatusItemState.Planned) },
+                    ct);
             }
             while (_isContinuousRun);
         }
 
-        private async Task<StatusItem> ComputeUnfinishedSubIterationAsync(
+        private async Task PlanSubIterationAsync(
+            IImmutableList<string> tableNames,
+            StatusItem? subIteration,
+            CancellationToken ct)
+        {
+            long currentRecordBatchId = 0;
+            var tablePlanningTasks = tableNames
+                .Select(t => TablePlanningOrchestration.PlanAsync(
+                    new KustoPriority(
+                        subIteration.IterationId,
+                        subIteration.SubIterationId!.Value,
+                        _dbStatus.DbName,
+                        t),
+                    subIteration,
+                    GetLatestCursorWindow(subIteration.IterationId),
+                    _dbStatus,
+                    _sourceQueuedClient,
+                    () => Interlocked.Increment(ref currentRecordBatchId),
+                    ct)).ToImmutableArray();
+
+            await Task.WhenAll(tablePlanningTasks);
+
+            await _dbStatus.PersistNewItemsAsync(
+                new[] { subIteration.UpdateState(StatusItemState.Planned) },
+                ct);
+        }
+
+        private async Task<StatusItem?> ComputeUnfinishedSubIterationAsync(
+            long iterationId,
             IImmutableList<string> tableNames,
             CancellationToken ct)
         {
-            var iterationId = await ComputeUnfinishedIterationAsync(ct);
             var subIterations = _dbStatus
-                .GetSubIterations(iterationId)
+                .GetSubIterations(iterationId);
+            var unfinishedSubIterations = subIterations
                 .Where(i => i.State == StatusItemState.Initial);
 
-            if (subIterations.Any())
+            if (unfinishedSubIterations.Any())
             {
-                return subIterations.First();
+                return unfinishedSubIterations.First();
             }
             else
             {
+                var subIterationTimeFilter = GetNewSubIterationTimeFilter(subIterations);
                 var subIterationId = subIterations.Any()
                     ? subIterations.Max(i => i.SubIterationId!) + 1
                     : 1;
@@ -104,7 +139,8 @@ namespace KustoCopyConsole.Orchestrations
                     Task = TableTimeWindowOrchestration.ComputeWindowsAsync(
                         new KustoPriority(iterationId, subIterationId, _dbStatus.DbName, t),
                         cursorWindow,
-                        null,
+                        subIterationTimeFilter.StartTime,
+                        subIterationTimeFilter.EndTime,
                         TABLE_SIZE_CAP,
                         _sourceQueuedClient,
                         ct)
@@ -127,7 +163,33 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private async Task<StatusItem> CreateSubIterationAsync(
+        private SubIterationTimeFilter GetNewSubIterationTimeFilter(
+            IImmutableList<StatusItem> subIterations)
+        {
+            if (subIterations.Any())
+            {
+                if (subIterations.First().IterationId == 1)
+                {
+                    var endTime = subIterations.Min(
+                        s => s.InternalState.SubIterationState!.StartIngestionTime);
+
+                    return new SubIterationTimeFilter(null, endTime);
+                }
+                else
+                {
+                    var startTime = subIterations.Max(
+                        s => s.InternalState.SubIterationState!.EndIngestionTime);
+
+                    return new SubIterationTimeFilter(startTime, null);
+                }
+            }
+            else
+            {
+                return new SubIterationTimeFilter(null, null);
+            }
+        }
+
+        private async Task<StatusItem?> CreateSubIterationAsync(
             long iterationId,
             long subIterationId,
             IImmutableList<TableTimeWindowCounts> tableTimeWindowCounts,
@@ -170,19 +232,27 @@ namespace KustoCopyConsole.Orchestrations
             }
 
             var groupsToRetain = groupsToScan.Take(groupCountToKeep);
-            var subIteration = StatusItem.CreateSubIteration(
-                iterationId,
-                subIterationId,
-                groupsToRetain
-                .Min(g => g.StartTime),
-                groupsToRetain
-                .SelectMany(g => g.Items)
-                .Max(i => i.TimeWindowCount.TimeWindow.EndTime),
-                DateTime.UtcNow.Ticks.ToString("x8"));
 
-            await _dbStatus.PersistNewItemsAsync(new[] { subIteration }, ct);
+            if (groupsToRetain.Any())
+            {
+                var subIteration = StatusItem.CreateSubIteration(
+                    iterationId,
+                    subIterationId,
+                    groupsToRetain
+                    .Min(g => g.StartTime),
+                    groupsToRetain
+                    .SelectMany(g => g.Items)
+                    .Max(i => i.TimeWindowCount.TimeWindow.EndTime),
+                    DateTime.UtcNow.Ticks.ToString("x8"));
 
-            return subIteration;
+                await _dbStatus.PersistNewItemsAsync(new[] { subIteration }, ct);
+
+                return subIteration;
+            }
+            else
+            {
+                return null;
+            }
         }
 
         private CursorWindow GetLatestCursorWindow(long iterationId)
@@ -201,11 +271,11 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private async Task<long> ComputeUnfinishedIterationAsync(CancellationToken ct)
+        private async Task<StatusItem> ComputeUnfinishedIterationAsync(CancellationToken ct)
         {
             var iterations = _dbStatus.GetIterations();
 
-            if (!iterations.Any() || iterations.Last().State == StatusItemState.Done)
+            if (!iterations.Any() || iterations.Last().State != StatusItemState.Initial)
             {
                 var newIterationId = iterations.Any()
                     ? iterations.Last().IterationId + 1
@@ -227,11 +297,11 @@ namespace KustoCopyConsole.Orchestrations
 
                 await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
 
-                return newIteration.IterationId;
+                return newIteration;
             }
             else
             {
-                return iterations.Last().IterationId;
+                return iterations.Last();
             }
         }
 
