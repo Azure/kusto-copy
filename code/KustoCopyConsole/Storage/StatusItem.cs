@@ -130,6 +130,7 @@ namespace KustoCopyConsole.Storage
         public static StatusItem CreateRecordBatch(
             long iterationId,
             long subIterationId,
+            long recordBatchId,
             string tableName,
             IEnumerable<TimeInterval> ingestionTimes,
             DateTime creationTime,
@@ -139,6 +140,7 @@ namespace KustoCopyConsole.Storage
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
+                RecordBatchId = recordBatchId,
                 TableName = tableName,
                 State = StatusItemState.Initial,
                 Timestamp = DateTime.UtcNow,

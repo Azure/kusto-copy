@@ -23,6 +23,7 @@ namespace KustoCopyConsole.Orchestrations
         private readonly string _cursorWindowPredicate;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly Func<long> _recordBatchIdProvider;
 
         #region Constructors
         public static async Task PlanAsync(
@@ -31,6 +32,7 @@ namespace KustoCopyConsole.Orchestrations
             CursorWindow cursorWindow,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
+            Func<long> recordBatchIdProvider,
             CancellationToken ct)
         {
             var orchestration = new TablePlanningOrchestration(
@@ -38,7 +40,8 @@ namespace KustoCopyConsole.Orchestrations
                 subIteration,
                 cursorWindow,
                 dbStatus,
-                sourceQueuedClient);
+                sourceQueuedClient,
+                recordBatchIdProvider);
 
             await orchestration.RunAsync(ct);
         }
@@ -48,13 +51,15 @@ namespace KustoCopyConsole.Orchestrations
             StatusItem subIteration,
             CursorWindow cursorWindow,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient)
+            KustoQueuedClient sourceQueuedClient,
+            Func<long> recordBatchIdProvider)
         {
             _kustoPriority = kustoPriority;
             _subIteration = subIteration;
             _cursorWindowPredicate = cursorWindow.ToCursorKustoPredicate();
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
+            _recordBatchIdProvider = recordBatchIdProvider;
         }
         #endregion
 
@@ -105,6 +110,7 @@ namespace KustoCopyConsole.Orchestrations
                             .Select(g => StatusItem.CreateRecordBatch(
                                 _subIteration.IterationId,
                                 _subIteration.SubIterationId!.Value,
+                                _recordBatchIdProvider(),
                                 _kustoPriority.TableName!,
                                 g.Select(p => new TimeInterval
                                 {
@@ -115,11 +121,15 @@ namespace KustoCopyConsole.Orchestrations
                                 g.Sum(p => p.RecordCount)));
 
                         await _dbStatus.PersistNewItemsAsync(recordBatches, ct);
+                        if (protoRecordBatches.Count() < RECORD_BATCH_SIZE)
+                        {
+                            return;
+                        }
                     }
                 }
                 else
                 {
-                    break;
+                    return;
                 }
             }
             while (true);

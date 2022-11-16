@@ -58,6 +58,7 @@ namespace KustoCopyConsole.Orchestrations
             {
                 var tableNames = await ComputeTableNamesAsync();
                 var subIteration = await ComputeUnfinishedSubIterationAsync(tableNames, ct);
+                long currentRecordBatchId = 0;
                 var planningTasks = tableNames
                     .Select(t => TablePlanningOrchestration.PlanAsync(
                         new KustoPriority(
@@ -69,6 +70,7 @@ namespace KustoCopyConsole.Orchestrations
                         GetLatestCursorWindow(subIteration.IterationId),
                         _dbStatus,
                         _sourceQueuedClient,
+                        () => Interlocked.Increment(ref currentRecordBatchId),
                         ct)).ToImmutableArray();
 
                 await Task.WhenAll(planningTasks);
