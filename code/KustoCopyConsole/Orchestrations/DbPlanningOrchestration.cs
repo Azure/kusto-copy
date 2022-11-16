@@ -105,7 +105,6 @@ namespace KustoCopyConsole.Orchestrations
                     ct)).ToImmutableArray();
 
             await Task.WhenAll(tablePlanningTasks);
-
             await _dbStatus.PersistNewItemsAsync(
                 new[] { subIteration.UpdateState(StatusItemState.Planned) },
                 ct);
