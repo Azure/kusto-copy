@@ -148,9 +148,12 @@ namespace KustoCopyConsole.Storage
                 {
                     RecordBatchState = new RecordBatchState
                     {
-                        IngestionTimes = ingestionTimes.ToImmutableArray(),
-                        CreationTime = creationTime,
-                        RecordCount = recordCount
+                        PlanRecordBatchState = new PlanRecordBatchState
+                        {
+                            IngestionTimes = ingestionTimes.ToImmutableArray(),
+                            CreationTime = creationTime,
+                            RecordCount = recordCount
+                        }
                     }
                 }
             };

@@ -158,7 +158,7 @@ namespace KustoCopyConsole.Orchestrations
                 var group = groupsToScan[i];
 
                 if (i == 0
-                    || totalCardinality + group.TotalCardinality > TABLE_SIZE_CAP)
+                    || totalCardinality + group.TotalCardinality < TABLE_SIZE_CAP)
                 {
                     ++groupCountToKeep;
                     totalCardinality += group.TotalCardinality;

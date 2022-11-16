@@ -73,17 +73,17 @@ namespace KustoCopyConsole.Orchestrations
                 //  Clip out the bracket considering existing batches
                 var startTime = batches
                     .SelectMany(b =>
-                    b.InternalState.RecordBatchState!.IngestionTimes.Select(t => t.EndTime))
+                    b.InternalState.RecordBatchState!.PlanRecordBatchState!.IngestionTimes.Select(t => t.EndTime))
                     .Append(_subIteration.InternalState.SubIterationState!.StartIngestionTime!.Value)
                     .Max();
                 var endTime = batches
                     .SelectMany(b =>
-                    b.InternalState.RecordBatchState!.IngestionTimes.Select(t => t.StartTime))
+                    b.InternalState.RecordBatchState!.PlanRecordBatchState!.IngestionTimes.Select(t => t.StartTime))
                     .Append(_subIteration.InternalState.SubIterationState!.EndIngestionTime!.Value)
                     .Min();
                 var includeStartTime = startTime
                     == _subIteration.InternalState.SubIterationState!.StartIngestionTime!.Value;
-                var includeEndTime = startTime
+                var includeEndTime = endTime
                     == _subIteration.InternalState.SubIterationState!.EndIngestionTime!.Value;
                 var protoRecordBatches = await LoadProtoRecordBatchAsync(
                     new TimeWindow(startTime, endTime),
@@ -118,7 +118,8 @@ namespace KustoCopyConsole.Orchestrations
                                     EndTime = p.IngestionTimeInterval.EndTime
                                 }),
                                 extentMap[g.Key],
-                                g.Sum(p => p.RecordCount)));
+                                g.Sum(p => p.RecordCount)))
+                            .ToImmutableArray();
 
                         await _dbStatus.PersistNewItemsAsync(recordBatches, ct);
                         if (protoRecordBatches.Count() < RECORD_BATCH_SIZE)
@@ -168,16 +169,13 @@ namespace KustoCopyConsole.Orchestrations
                 .SetParameter("StartTime", timeWindow.StartTime)
                 .SetParameter("EndTime", timeWindow.EndTime);
             var startTimeOperator = includeStartTime ? ">=" : ">";
-            var endTimeOperator = includeEndTime ? "<=" : "<";
-            var protoBatches = await sourceQueuedClient.ExecuteQueryAsync(
-                _kustoPriority,
-                _kustoPriority.DatabaseName!,
-                $@"
+            var queryText = $@"
 declare query_parameters(StartTime:datetime, EndTime:datetime);
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
 | where ingestion_time() {startTimeOperator} StartTime
-| where ingestion_time() {endTimeOperator} EndTime
+//  End time is always excluded
+| where ingestion_time() < EndTime
 | summarize Cardinality=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
 | order by IngestionTime asc
 | extend IsNewExtentId = iif(prev(ExtentId)==ExtentId, false, true)
@@ -188,7 +186,11 @@ declare query_parameters(StartTime:datetime, EndTime:datetime);
 | where IsNewExtentId
 | project MinIngestionTime, MaxIngestionTime, tostring(ExtentId), Cardinality
 | take {RECORD_BATCH_SIZE}
-",
+";
+            var protoBatches = await sourceQueuedClient.ExecuteQueryAsync(
+                _kustoPriority,
+                _kustoPriority.DatabaseName!,
+                queryText,
                 r => new ProtoRecordBatch(
                     new TimeWindow(
                         (DateTime)r["MinIngestionTime"],

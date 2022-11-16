@@ -64,11 +64,15 @@ namespace KustoCopyConsole.Orchestrations
             {
                 throw new NotImplementedException();
             }
-            else
+            else if (totalBracket.Cardinality > 0)
             {
                 var windows = await FanOutByDaysAsync();
 
                 return windows;
+            }
+            else
+            {
+                return ImmutableArray<TimeWindowCount>.Empty;
             }
         }
 
@@ -80,17 +84,18 @@ namespace KustoCopyConsole.Orchestrations
             var sourceQueuedClient = _startTime == null
                 ? _sourceQueuedClient
                 : _sourceQueuedClient.SetParameter("StartTime", _startTime.Value);
-            var windows = await sourceQueuedClient.ExecuteQueryAsync(
-                _kustoPriority,
-                _kustoPriority.DatabaseName!,
-                $@"
+            var queryText = $@"
 {_startTimePredicate}
 ['{_kustoPriority.TableName}']
 {_cursorWindowPredicate}
 | where isnotnull(ingestion_time())
 | summarize Cardinality=count() by StartTime=bin(ingestion_time(), 1d)
 | extend EndTime = StartTime+1d
-",
+";
+            var windows = await sourceQueuedClient.ExecuteQueryAsync(
+                _kustoPriority,
+                _kustoPriority.DatabaseName!,
+                queryText,
                 r => new TimeWindowCount(
                     new TimeWindow((DateTime)r["StartTime"], (DateTime)r["EndTime"]),
                     (long)r["Cardinality"]));
@@ -119,13 +124,10 @@ namespace KustoCopyConsole.Orchestrations
                 r => new
                 {
                     Cardinality = (long)r["Cardinality"],
-                    Min =r["Min"].To<DateTime>(),
+                    Min = r["Min"].To<DateTime>(),
                     Max = r["Max"].To<DateTime>()
                 });
             var bracket = bracketList.First();
-            //new TimeWindowCount(
-            //        new TimeWindow((DateTime)r["Min"], (DateTime)r["Max"]),
-            //        )
 
             return bracket.Cardinality == 0
                 ? new TimeWindowCount(
