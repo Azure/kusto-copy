@@ -127,10 +127,13 @@ namespace KustoCopyConsole.Storage
             return item;
         }
 
-        public static StatusItem CreateTable(
+        public static StatusItem CreateRecordBatch(
             long iterationId,
             long subIterationId,
-            string tableName)
+            string tableName,
+            IEnumerable<TimeInterval> ingestionTimes,
+            DateTime creationTime,
+            long recordCount)
         {
             var item = new StatusItem
             {
@@ -138,7 +141,16 @@ namespace KustoCopyConsole.Storage
                 SubIterationId = subIterationId,
                 TableName = tableName,
                 State = StatusItemState.Initial,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                InternalState = new InternalState
+                {
+                    RecordBatchState = new RecordBatchState
+                    {
+                        IngestionTimes = ingestionTimes.ToImmutableArray(),
+                        CreationTime = creationTime,
+                        RecordCount = recordCount
+                    }
+                }
             };
 
             return item;

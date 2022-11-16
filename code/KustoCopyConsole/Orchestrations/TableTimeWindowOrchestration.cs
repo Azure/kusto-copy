@@ -43,14 +43,7 @@ namespace KustoCopyConsole.Orchestrations
             KustoQueuedClient sourceQueuedClient)
         {
             _kustoPriority = kustoPriority;
-            _cursorWindowPredicate =
-                cursorWindow.startCursor == null && cursorWindow.endCursor == null
-                ? string.Empty
-                : cursorWindow.startCursor == null
-                ? $"| where cursor_before_or_at('{cursorWindow.endCursor}')"
-                : @$"
-| where cursor_before_or_at('{cursorWindow.endCursor}')
-| where cursor_after('{cursorWindow.startCursor}')";
+            _cursorWindowPredicate = cursorWindow.ToCursorKustoPredicate();
             _startTimePredicate = _startTime == null
                 ? string.Empty
                 : _kustoPriority.IterationId == 1

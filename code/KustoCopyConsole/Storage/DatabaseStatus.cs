@@ -87,6 +87,18 @@ namespace KustoCopyConsole.Storage
                 }
             }
 
+            public StatusItem GetIteration(long iterationId)
+            {
+                if (_iterationIndex.Index.TryGetValue(iterationId, out var subIterationIndex))
+                {
+                    return subIterationIndex.Parent;
+                }
+                else
+                {
+                    throw new ArgumentOutOfRangeException($"Can't find iteration '{iterationId}'");
+                }
+            }
+
             public IImmutableList<StatusItem> GetSubIterations(long iterationId)
             {
                 var items = _iterationIndex
@@ -95,6 +107,22 @@ namespace KustoCopyConsole.Storage
                     .Index
                     .Values
                     .Select(v => v.Parent)
+                    .ToImmutableArray();
+
+                return items;
+            }
+
+            public IImmutableList<StatusItem> GetRecordBatches(
+                long iterationId,
+                long subIterationId)
+            {
+                var items = _iterationIndex
+                    .Index[iterationId]
+                    .Children
+                    .Index[subIterationId]
+                    .Children
+                    .Index
+                    .Values
                     .ToImmutableArray();
 
                 return items;
@@ -269,9 +297,19 @@ namespace KustoCopyConsole.Storage
             return _statusIndex.Iterations;
         }
 
+        public StatusItem GetIteration(long iterationId)
+        {
+            return _statusIndex.GetIteration(iterationId);
+        }
+
         public IImmutableList<StatusItem> GetSubIterations(long iterationId)
         {
             return _statusIndex.GetSubIterations(iterationId);
+        }
+
+        public IImmutableList<StatusItem> GetRecordBatches(long iterationId, long subIterationId)
+        {
+            return _statusIndex.GetRecordBatches(iterationId, subIterationId);
         }
 
         public async Task PersistNewItemsAsync(

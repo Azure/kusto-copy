@@ -60,8 +60,13 @@ namespace KustoCopyConsole.Orchestrations
                 var subIteration = await ComputeUnfinishedSubIterationAsync(tableNames, ct);
                 var planningTasks = tableNames
                     .Select(t => TablePlanningOrchestration.PlanAsync(
-                        t,
+                        new KustoPriority(
+                            subIteration.IterationId,
+                            subIteration.SubIterationId!.Value,
+                            _dbStatus.DbName,
+                            t),
                         subIteration,
+                        GetLatestCursorWindow(subIteration.IterationId),
                         _dbStatus,
                         _sourceQueuedClient,
                         ct)).ToImmutableArray();
@@ -89,7 +94,7 @@ namespace KustoCopyConsole.Orchestrations
                 var subIterationId = subIterations.Any()
                     ? subIterations.Max(i => i.SubIterationId!) + 1
                     : 1;
-                var cursorWindow = GetLatestCursorWindow();
+                var cursorWindow = GetLatestCursorWindow(iterationId);
                 //  Find time window for each table to establish sub iteration
                 var timeWindowsTasks = tableNames.Select(t => new
                 {
@@ -178,27 +183,19 @@ namespace KustoCopyConsole.Orchestrations
             return subIteration;
         }
 
-        private CursorWindow GetLatestCursorWindow()
+        private CursorWindow GetLatestCursorWindow(long iterationId)
         {
-            var iterations = _dbStatus.GetIterations();
+            var iteration = _dbStatus.GetIteration(iterationId);
 
-            if (!iterations.Any())
+            if (iterationId == 1)
             {
-                throw new InvalidOperationException("There should be an iteration available");
+                return new CursorWindow(null, iteration.EndCursor);
             }
             else
             {
-                if (iterations.Count() == 1)
-                {
-                    return new CursorWindow(null, iterations.First().EndCursor);
-                }
-                else
-                {
-                    var lastIteration = iterations.Last();
-                    var previousIteration = iterations.Take(iterations.Count() - 1).Last();
+                var previousIteration = _dbStatus.GetIteration(iterationId - 1);
 
-                    return new CursorWindow(previousIteration.EndCursor, lastIteration.EndCursor);
-                }
+                return new CursorWindow(previousIteration.EndCursor, previousIteration.EndCursor);
             }
         }
 
