@@ -86,7 +86,7 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task PlanSubIterationAsync(
             IImmutableList<string> tableNames,
-            StatusItem? subIteration,
+            StatusItem subIteration,
             CancellationToken ct)
         {
             long currentRecordBatchId = 0;
