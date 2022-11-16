@@ -142,7 +142,7 @@ namespace KustoCopyConsole.Storage
                 SubIterationId = subIterationId,
                 RecordBatchId = recordBatchId,
                 TableName = tableName,
-                State = StatusItemState.Initial,
+                State = StatusItemState.Planned,
                 Timestamp = DateTime.UtcNow,
                 InternalState = new InternalState
                 {
