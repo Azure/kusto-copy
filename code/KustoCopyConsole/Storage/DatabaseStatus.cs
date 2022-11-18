@@ -128,6 +128,21 @@ namespace KustoCopyConsole.Storage
                 return items;
             }
 
+            public StatusItem GetRecordBatch(
+                long iterationId,
+                long subIterationId,
+                long recordBatchId)
+            {
+                var item = _iterationIndex
+                    .Index[iterationId]
+                    .Children
+                    .Index[subIterationId]
+                    .Children
+                    .Index[recordBatchId];
+
+                return item;
+            }
+
             public void IndexNewItem(StatusItem item)
             {
                 switch (item.Level)
@@ -280,13 +295,22 @@ namespace KustoCopyConsole.Storage
                 .Select(g => g.MaxBy(i => i.RowId)!.Item);
 
             DbName = dbName;
+            _checkpointGateway = checkpointGateway;
             foreach (var item in latestItems)
             {
-                _statusIndex.IndexNewItem(item);
+                ProcessNewItem(item);
             }
-            _checkpointGateway = checkpointGateway;
         }
         #endregion
+
+        /// <summary>Add / update on any type of iterations.</summary>
+        public event EventHandler? IterationActivity;
+
+        /// <summary>Add / update on any type of sub iterations.</summary>
+        public event EventHandler? SubIterationActivity;
+
+        /// <summary>Add / update on batch record in planned state.</summary>
+        public event EventHandler? PlannedRecordActivity;
 
         public string DbName { get; }
 
@@ -312,6 +336,11 @@ namespace KustoCopyConsole.Storage
             return _statusIndex.GetRecordBatches(iterationId, subIterationId);
         }
 
+        public StatusItem GetRecordBatch(long iterationId, long subIterationId, long recordBatchId)
+        {
+            return _statusIndex.GetRecordBatch(iterationId, subIterationId, recordBatchId);
+        }
+
         public async Task PersistNewItemsAsync(
             IEnumerable<StatusItem> items,
             CancellationToken ct)
@@ -326,13 +355,54 @@ namespace KustoCopyConsole.Storage
                 await PersistItemsAsync(_checkpointGateway, items, false, false, ct);
                 foreach (var item in items)
                 {
-                    _statusIndex.IndexNewItem(item);
+                    ProcessNewItem(item);
                 }
             }
             else
             {
                 await CompactAsync(ct);
                 await PersistNewItemsAsync(items, ct);
+            }
+        }
+
+        private void ProcessNewItem(StatusItem item)
+        {
+            _statusIndex.IndexNewItem(item);
+            if (item.Level == HierarchyLevel.Iteration)
+            {
+                OnIterationActivity();
+            }
+            if (item.Level == HierarchyLevel.SubIteration)
+            {
+                OnSubIterationActivity();
+            }
+            if (item.Level == HierarchyLevel.RecordBatch && item.State == StatusItemState.Planned)
+            {
+                OnPlannedRecordActivity();
+            }
+        }
+
+        private void OnIterationActivity()
+        {
+            if (IterationActivity != null)
+            {
+                IterationActivity(this, EventArgs.Empty);
+            }
+        }
+
+        private void OnSubIterationActivity()
+        {
+            if (SubIterationActivity != null)
+            {
+                SubIterationActivity(this, EventArgs.Empty);
+            }
+        }
+
+        private void OnPlannedRecordActivity()
+        {
+            if (PlannedRecordActivity != null)
+            {
+                PlannedRecordActivity(this, EventArgs.Empty);
             }
         }
 

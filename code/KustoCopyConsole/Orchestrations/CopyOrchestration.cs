@@ -107,7 +107,18 @@ namespace KustoCopyConsole.Orchestrations
                     _sourceClient,
                     ct))
                 .ToImmutableArray();
-            var allTasks = setupTasks.Concat(planningTasks);
+            var exportingTasks = _dbStatusList
+                .Select(dbStatus => DbExportingOrchestration.ExportAsync(
+                    _parameterization.IsContinuousRun,
+                    Task.WhenAll(planningTasks),
+                    dbParameterizationIndex[dbStatus.DbName],
+                    dbStatus,
+                    _sourceClient,
+                    ct))
+                .ToImmutableArray();
+            var allTasks = setupTasks
+                .Concat(planningTasks)
+                .Concat(exportingTasks);
 
             await Task.WhenAll(allTasks);
         }
