@@ -153,13 +153,15 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private async Task ExportRecordAsync(StatusItem recordBatch, CancellationToken ct)
+        private async Task ExportRecordAsync(StatusItem record, CancellationToken ct)
         {
-            await _dbStatus.PersistNewItemsAsync(
-                new[] { recordBatch.UpdateState(StatusItemState.Exported) },
+            await RecordBatchExportingOrchestration.ExportAsync(
+                record,
+                _dbStatus,
+                _sourceQueuedClient,
                 ct);
 
-            if (!_processingRecordMap.TryRemove(recordBatch.RecordBatchId!.Value, out var _))
+            if (!_processingRecordMap.TryRemove(record.RecordBatchId!.Value, out var _))
             {
                 throw new NotSupportedException("Processing record should have been in map");
             }
