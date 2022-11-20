@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.KustoQuery;
+﻿using Azure.Storage.Files.DataLake;
+using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Concurrent;
@@ -23,6 +24,7 @@ namespace KustoCopyConsole.Orchestrations
         private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly DataLakeDirectoryClient _folderClient;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
         private readonly ConcurrentQueue<Task> _unobservedTasksQueue = new ConcurrentQueue<Task>();
@@ -35,6 +37,7 @@ namespace KustoCopyConsole.Orchestrations
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
+            DataLakeDirectoryClient folderClient,
             CancellationToken ct)
         {
             var orchestration = new DbExportingOrchestration(
@@ -42,7 +45,8 @@ namespace KustoCopyConsole.Orchestrations
                 planningTask,
                 dbParameterization,
                 dbStatus,
-                sourceQueuedClient);
+                sourceQueuedClient,
+                folderClient);
 
             await orchestration.RunAsync(ct);
         }
@@ -52,13 +56,15 @@ namespace KustoCopyConsole.Orchestrations
             Task planningTask,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient)
+            KustoQueuedClient sourceQueuedClient,
+            DataLakeDirectoryClient folderClient)
         {
             _isContinuousRun = isContinuousRun;
             _planningTask = planningTask;
             _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
+            _folderClient = folderClient;
             _dbStatus.IterationActivity += (sender, e) =>
             {
                 _awaitingActivitiesSource.TrySetResult();
@@ -159,6 +165,9 @@ namespace KustoCopyConsole.Orchestrations
                 record,
                 _dbStatus,
                 _sourceQueuedClient,
+                _folderClient
+                .GetSubDirectoryClient(record.TableName)
+                .GetSubDirectoryClient(record.RecordBatchId.ToString()),
                 ct);
 
             if (!_processingRecordMap.TryRemove(record.RecordBatchId!.Value, out var _))

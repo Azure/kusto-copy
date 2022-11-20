@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.KustoQuery;
+﻿using Azure.Storage.Files.DataLake;
+using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 
@@ -10,18 +11,21 @@ namespace KustoCopyConsole.Orchestrations
         private readonly long _recordBatchId;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly DataLakeDirectoryClient _folderClient;
 
         #region Constructors
         public static async Task ExportAsync(
             StatusItem record,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
+            DataLakeDirectoryClient folderClient,
             CancellationToken ct)
         {
             var orchestrator = new RecordBatchExportingOrchestration(
                 record,
                 dbStatus,
-                sourceQueuedClient);
+                sourceQueuedClient,
+                folderClient);
 
             await orchestrator.RunAsync(ct);
         }
@@ -29,7 +33,8 @@ namespace KustoCopyConsole.Orchestrations
         private RecordBatchExportingOrchestration(
             StatusItem record,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient)
+            KustoQueuedClient sourceQueuedClient,
+            DataLakeDirectoryClient folderClient)
         {
             _priority = new KustoPriority(
                 record.IterationId,
@@ -39,6 +44,7 @@ namespace KustoCopyConsole.Orchestrations
             _recordBatchId = record.RecordBatchId!.Value;
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
+            _folderClient = folderClient;
         }
         #endregion
 

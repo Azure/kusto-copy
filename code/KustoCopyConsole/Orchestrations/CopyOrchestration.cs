@@ -1,5 +1,6 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Files.DataLake;
 using Kusto.Data;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
@@ -14,6 +15,7 @@ namespace KustoCopyConsole.Orchestrations
         private readonly MainParameterization _parameterization;
         private readonly KustoQueuedClient _sourceClient;
         private readonly KustoQueuedClient _destinationClient;
+        private readonly DataLakeDirectoryClient _lakeFolderClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
         #region Bootstrap
@@ -53,6 +55,7 @@ namespace KustoCopyConsole.Orchestrations
                             parameterization,
                             connectionFactory.SourceQueuedClient!,
                             connectionFactory.DestinationQueuedClient!,
+                            connectionFactory.LakeFolderClient,
                             dbStatusList);
 
                         await orchestration.RunAsync(ct);
@@ -80,11 +83,13 @@ namespace KustoCopyConsole.Orchestrations
             MainParameterization parameterization,
             KustoQueuedClient sourceClient,
             KustoQueuedClient destinationClient,
+            DataLakeDirectoryClient lakeFolderClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
             _sourceClient = sourceClient;
             _destinationClient = destinationClient;
+            _lakeFolderClient = lakeFolderClient;
             _dbStatusList = dbStatusList;
         }
         #endregion
@@ -114,6 +119,7 @@ namespace KustoCopyConsole.Orchestrations
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
                     _sourceClient,
+                    _lakeFolderClient.GetSubDirectoryClient(dbStatus.DbName),
                     ct))
                 .ToImmutableArray();
             var allTasks = setupTasks
