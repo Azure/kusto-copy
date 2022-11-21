@@ -162,7 +162,9 @@ namespace KustoCopyConsole
             try
             {
                 parameterization.Validate();
-                await CopyOrchestration.CopyAsync(parameterization, cancellationTokenSource.Token);
+                await CopyOrchestration.CopyAsync(
+                    parameterization,
+                    cancellationTokenSource.Token);
             }
             finally
             {

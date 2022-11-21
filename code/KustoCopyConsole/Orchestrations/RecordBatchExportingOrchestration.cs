@@ -50,7 +50,10 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task RunAsync(CancellationToken ct)
         {
+            var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken:ct);
             var preSchema = await FetchSchemaAsync(ct);
+
+            await deleteFolderTask;
             throw new NotImplementedException();
             //await _dbStatus.PersistNewItemsAsync(
             //    new[] { recordBatch.UpdateState(StatusItemState.Exported) },

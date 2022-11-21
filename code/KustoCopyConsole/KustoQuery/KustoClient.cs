@@ -28,7 +28,7 @@ namespace KustoCopyConsole.KustoQuery
 
         public KustoClient(KustoConnectionStringBuilder builder)
         {
-            var commandProvider = KustoClientFactory.CreateCslCmAdminProvider(builder);
+            var commandProvider = KustoClientFactory.CreateCslAdminProvider(builder);
             var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
             _hostName = builder.Hostname;
