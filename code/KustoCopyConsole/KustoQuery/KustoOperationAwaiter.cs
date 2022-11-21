@@ -59,7 +59,7 @@ namespace KustoCopyConsole.KustoQuery
 | where State != '{IN_PROGRESS_STATE}'";
                     var operationDetails = await _kustoClient
                         .ExecuteCommandAsync(
-                        KustoPriority.ExportPriority,
+                        KustoPriority.HighestPriority,
                         _databaseName,
                         commandText,
                         r => new

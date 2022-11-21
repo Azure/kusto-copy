@@ -1,7 +1,9 @@
 ﻿using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,7 +15,10 @@ namespace KustoCopyConsole.KustoQuery
         private readonly KustoQueuedClient _kustoClient;
         private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
 
-        public KustoExportQueue(KustoQueuedClient kustoClient, int concurrentExportCommandCount)
+        public KustoExportQueue(
+            KustoQueuedClient kustoClient,
+            KustoOperationAwaiter kustoOperationAwaiter,
+            int concurrentExportCommandCount)
         {
             _kustoClient = kustoClient;
             _executionQueue.ParallelRunCount = concurrentExportCommandCount;
@@ -21,19 +26,13 @@ namespace KustoCopyConsole.KustoQuery
 
         public bool HasAvailability => _executionQueue.HasAvailability;
 
-        public async Task RequestRunAsync(Func<Task> actionAsync)
+        public async Task ExportAsync(
+            KustoPriority priority,
+            IEnumerable<TimeInterval> ingestionTimes,
+            DateTime creationTime,
+            long expectedRecordCount)
         {
-            await RequestRunAsync(async () =>
-            {
-                await actionAsync();
-
-                return 0;
-            });
-        }
-
-        public async Task<T> RequestRunAsync<T>(Func<Task<T>> functionAsync)
-        {
-            return await _executionQueue.RequestRunAsync(functionAsync);
+            await Task.CompletedTask;
         }
     }
 }

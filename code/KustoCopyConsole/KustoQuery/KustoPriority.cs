@@ -25,6 +25,8 @@ namespace KustoCopyConsole.KustoQuery
             TableName = tableName;
         }
 
+        public static KustoPriority HighestPriority { get; } = new KustoPriority();
+
         public long? IterationId { get; }
 
         public long? SubIterationId { get; }

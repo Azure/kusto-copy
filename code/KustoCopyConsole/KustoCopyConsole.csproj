@@ -17,14 +17,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="KustoQuery\KustoOperationAwaiter.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="KustoQuery\KustoOperationAwaiter.cs" />
-  </ItemGroup>
-  
-  <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.8.0" />
     <PackageReference Include="Azure.Storage.Files.DataLake" Version="12.12.1" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
