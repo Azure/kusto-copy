@@ -52,7 +52,7 @@ namespace KustoCopyConsole.KustoQuery
             var outputs = await _awaiter.RunAsynchronousOperationAsync(
                 operationsIds.First(),
                 r=>new ExportOutput(
-                    (string)r["Path"],
+                    new Uri((string)r["Path"]),
                     (long)r["NumRecords"],
                     (long)r["SizeInBytes"]));
 

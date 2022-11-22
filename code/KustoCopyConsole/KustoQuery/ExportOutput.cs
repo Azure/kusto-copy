@@ -6,5 +6,5 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.KustoQuery
 {
-    public record ExportOutput(string Path, long RecordCount, long SizeInBytes);
+    public record ExportOutput(Uri Path, long RecordCount, long SizeInBytes);
 }

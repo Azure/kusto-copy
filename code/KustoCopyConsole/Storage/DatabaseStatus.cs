@@ -315,6 +315,8 @@ namespace KustoCopyConsole.Storage
         public string DbName { get; }
 
         public Uri IndexBlobUri => _checkpointGateway.BlobUri;
+        
+        public DataLakeDirectoryClient IndexFolderClient => _checkpointGateway.FolderClient;
 
         public IImmutableList<StatusItem> GetIterations()
         {

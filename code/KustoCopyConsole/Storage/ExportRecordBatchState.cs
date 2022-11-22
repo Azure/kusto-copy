@@ -10,7 +10,6 @@ namespace KustoCopyConsole.Storage
         public IImmutableList<Uri> BlobPaths { get; set; }
             = ImmutableArray<Uri>.Empty;
 
-        public IImmutableList<Uri> ExtentIds { get; set; }
-            = ImmutableArray<Uri>.Empty;
+        public long RecordCount { get; set; }
     }
 }

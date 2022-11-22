@@ -108,7 +108,6 @@ namespace KustoCopyConsole.Orchestrations
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
                     _sourceExportQueue,
-                    _lakeFolderClient.GetSubDirectoryClient(dbStatus.DbName),
                     ct))
                 .ToImmutableArray();
             var allTasks = setupTasks

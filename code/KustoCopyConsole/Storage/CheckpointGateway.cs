@@ -43,6 +43,8 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         public Uri BlobUri => _blobClient.Uri;
+        
+        public DataLakeDirectoryClient FolderClient => _lakeFolderClient;
 
         public bool CanWrite => _blockCount < 50000;
 

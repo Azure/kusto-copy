@@ -50,7 +50,7 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task RunAsync(CancellationToken ct)
         {
-            var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken:ct);
+            var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken: ct);
             var preSchema = await FetchSchemaAsync(ct);
             var recordBatch = _dbStatus.GetRecordBatch(
                 _priority.IterationId!.Value,
@@ -59,16 +59,33 @@ namespace KustoCopyConsole.Orchestrations
             var planState = recordBatch.InternalState.RecordBatchState!.PlanRecordBatchState!;
 
             await deleteFolderTask;
-            await _exportQueue.ExportAsync(
+
+            var exportOutputs = await _exportQueue.ExportAsync(
                 _priority,
                 _folderClient.Uri,
                 planState.IngestionTimes,
                 planState.CreationTime!.Value,
                 planState.RecordCount!.Value);
-            throw new NotImplementedException();
-            //await _dbStatus.PersistNewItemsAsync(
-            //    new[] { recordBatch.UpdateState(StatusItemState.Exported) },
-            //    ct);
+            var postSchema = await FetchSchemaAsync(ct);
+
+            if (preSchema.SequenceEqual(postSchema))
+            {
+                var newRecordBatch = recordBatch.UpdateState(StatusItemState.Exported);
+
+                newRecordBatch.InternalState!.RecordBatchState!.ExportRecordBatchState =
+                    new ExportRecordBatchState
+                    {
+                        TableColumns = preSchema,
+                        BlobPaths = exportOutputs.Select(e => e.Path).ToImmutableList(),
+                        RecordCount = exportOutputs.Sum(e => e.RecordCount)
+                    };
+
+                await _dbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
+            }
+            else
+            {   //  Retry as the schema change while exporting table
+                await RunAsync(ct);
+            }
         }
 
         private async Task<IImmutableList<TableColumn>> FetchSchemaAsync(CancellationToken ct)

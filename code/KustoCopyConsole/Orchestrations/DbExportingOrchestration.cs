@@ -24,7 +24,6 @@ namespace KustoCopyConsole.Orchestrations
         private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
         private readonly KustoExportQueue _sourceExportQueue;
-        private readonly DataLakeDirectoryClient _folderClient;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
         private readonly ConcurrentQueue<Task> _unobservedTasksQueue = new ConcurrentQueue<Task>();
@@ -37,7 +36,6 @@ namespace KustoCopyConsole.Orchestrations
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoExportQueue sourceExportQueue,
-            DataLakeDirectoryClient folderClient,
             CancellationToken ct)
         {
             var orchestration = new DbExportingOrchestration(
@@ -45,8 +43,7 @@ namespace KustoCopyConsole.Orchestrations
                 planningTask,
                 dbParameterization,
                 dbStatus,
-                sourceExportQueue,
-                folderClient);
+                sourceExportQueue);
 
             await orchestration.RunAsync(ct);
         }
@@ -56,15 +53,13 @@ namespace KustoCopyConsole.Orchestrations
             Task planningTask,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoExportQueue sourceExportQueue,
-            DataLakeDirectoryClient folderClient)
+            KustoExportQueue sourceExportQueue)
         {
             _isContinuousRun = isContinuousRun;
             _planningTask = planningTask;
             _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
             _sourceExportQueue = sourceExportQueue;
-            _folderClient = folderClient;
             _dbStatus.IterationActivity += (sender, e) =>
             {
                 _awaitingActivitiesSource.TrySetResult();
@@ -165,9 +160,10 @@ namespace KustoCopyConsole.Orchestrations
                 record,
                 _dbStatus,
                 _sourceExportQueue,
-                _folderClient
+                _dbStatus
+                .IndexFolderClient
                 .GetSubDirectoryClient(record.TableName)
-                .GetSubDirectoryClient(record.RecordBatchId.ToString()),
+                .GetSubDirectoryClient(record.RecordBatchId!.Value.ToString("D20")),
                 ct);
 
             if (!_processingRecordMap.TryRemove(record.RecordBatchId!.Value, out var _))
