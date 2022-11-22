@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Orchestrations
     public class CopyOrchestration
     {
         private readonly MainParameterization _parameterization;
-        private readonly KustoQueuedClient _sourceClient;
+        private readonly KustoExportQueue _sourceExportQueue;
         private readonly KustoQueuedClient _destinationClient;
         private readonly DataLakeDirectoryClient _lakeFolderClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
@@ -53,7 +53,7 @@ namespace KustoCopyConsole.Orchestrations
                             .ToImmutableArray();
                         var orchestration = new CopyOrchestration(
                             parameterization,
-                            connectionFactory.SourceQueuedClient!,
+                            connectionFactory.SourceExportQueue!,
                             connectionFactory.DestinationQueuedClient!,
                             connectionFactory.LakeFolderClient,
                             dbStatusList);
@@ -68,26 +68,15 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private static async Task<IAsyncDisposable?> CreateLockAsync(
-            BlobContainerClient lakeContainerClient,
-            string folderPath)
-        {
-            var lockBlob = lakeContainerClient.GetAppendBlobClient($"{folderPath}/lock");
-
-            await lockBlob.CreateIfNotExistsAsync();
-
-            return await BlobLock.CreateAsync(lockBlob);
-        }
-
         private CopyOrchestration(
             MainParameterization parameterization,
-            KustoQueuedClient sourceClient,
+            KustoExportQueue sourceExportQueue,
             KustoQueuedClient destinationClient,
             DataLakeDirectoryClient lakeFolderClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
-            _sourceClient = sourceClient;
+            _sourceExportQueue = sourceExportQueue;
             _destinationClient = destinationClient;
             _lakeFolderClient = lakeFolderClient;
             _dbStatusList = dbStatusList;
@@ -109,7 +98,7 @@ namespace KustoCopyConsole.Orchestrations
                     _parameterization.IsContinuousRun,
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
-                    _sourceClient,
+                    _sourceExportQueue,
                     ct))
                 .ToImmutableArray();
             var exportingTasks = _dbStatusList
@@ -118,7 +107,7 @@ namespace KustoCopyConsole.Orchestrations
                     Task.WhenAll(planningTasks),
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
-                    _sourceClient,
+                    _sourceExportQueue,
                     _lakeFolderClient.GetSubDirectoryClient(dbStatus.DbName),
                     ct))
                 .ToImmutableArray();
@@ -127,6 +116,17 @@ namespace KustoCopyConsole.Orchestrations
                 .Concat(exportingTasks);
 
             await Task.WhenAll(allTasks);
+        }
+
+        private static async Task<IAsyncDisposable?> CreateLockAsync(
+            BlobContainerClient lakeContainerClient,
+            string folderPath)
+        {
+            var lockBlob = lakeContainerClient.GetAppendBlobClient($"{folderPath}/lock");
+
+            await lockBlob.CreateIfNotExistsAsync();
+
+            return await BlobLock.CreateAsync(lockBlob);
         }
     }
 }

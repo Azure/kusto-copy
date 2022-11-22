@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Orchestrations
         private readonly Task _planningTask;
         private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
-        private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly KustoExportQueue _sourceExportQueue;
         private readonly DataLakeDirectoryClient _folderClient;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Orchestrations
             Task planningTask,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
+            KustoExportQueue sourceExportQueue,
             DataLakeDirectoryClient folderClient,
             CancellationToken ct)
         {
@@ -45,7 +45,7 @@ namespace KustoCopyConsole.Orchestrations
                 planningTask,
                 dbParameterization,
                 dbStatus,
-                sourceQueuedClient,
+                sourceExportQueue,
                 folderClient);
 
             await orchestration.RunAsync(ct);
@@ -56,14 +56,14 @@ namespace KustoCopyConsole.Orchestrations
             Task planningTask,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
+            KustoExportQueue sourceExportQueue,
             DataLakeDirectoryClient folderClient)
         {
             _isContinuousRun = isContinuousRun;
             _planningTask = planningTask;
             _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
-            _sourceQueuedClient = sourceQueuedClient;
+            _sourceExportQueue = sourceExportQueue;
             _folderClient = folderClient;
             _dbStatus.IterationActivity += (sender, e) =>
             {
@@ -164,7 +164,7 @@ namespace KustoCopyConsole.Orchestrations
             await RecordBatchExportingOrchestration.ExportAsync(
                 record,
                 _dbStatus,
-                _sourceQueuedClient,
+                _sourceExportQueue,
                 _folderClient
                 .GetSubDirectoryClient(record.TableName)
                 .GetSubDirectoryClient(record.RecordBatchId.ToString()),

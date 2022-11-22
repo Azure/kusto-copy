@@ -12,7 +12,6 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoExportQueue
     {
-        private readonly KustoQueuedClient _kustoClient;
         private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
 
         public KustoExportQueue(
@@ -20,9 +19,11 @@ namespace KustoCopyConsole.KustoQuery
             KustoOperationAwaiter kustoOperationAwaiter,
             int concurrentExportCommandCount)
         {
-            _kustoClient = kustoClient;
+            Client = kustoClient;
             _executionQueue.ParallelRunCount = concurrentExportCommandCount;
         }
+
+        public KustoQueuedClient Client { get; }
 
         public bool HasAvailability => _executionQueue.HasAvailability;
 

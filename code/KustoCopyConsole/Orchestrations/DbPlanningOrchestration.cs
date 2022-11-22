@@ -22,21 +22,21 @@ namespace KustoCopyConsole.Orchestrations
         private readonly bool _isContinuousRun;
         private readonly SourceDatabaseParameterization _dbParameterization;
         private readonly DatabaseStatus _dbStatus;
-        private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly KustoExportQueue _sourceExportQueue;
 
         #region Constructor
         public static async Task PlanAsync(
             bool isContinuousRun,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
+            KustoExportQueue sourceExportQueue,
             CancellationToken ct)
         {
             var orchestration = new DbPlanningOrchestration(
                 isContinuousRun,
                 dbParameterization,
                 dbStatus,
-                sourceQueuedClient);
+                sourceExportQueue);
 
             await orchestration.RunAsync(ct);
         }
@@ -45,12 +45,12 @@ namespace KustoCopyConsole.Orchestrations
             bool isContinuousRun,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient)
+            KustoExportQueue sourceExportQueue)
         {
             _isContinuousRun = isContinuousRun;
             _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
-            _sourceQueuedClient = sourceQueuedClient;
+            _sourceExportQueue = sourceExportQueue;
         }
         #endregion
 
@@ -100,7 +100,7 @@ namespace KustoCopyConsole.Orchestrations
                     subIteration,
                     GetLatestCursorWindow(subIteration.IterationId),
                     _dbStatus,
-                    _sourceQueuedClient,
+                    _sourceExportQueue.Client,
                     () => Interlocked.Increment(ref currentRecordBatchId),
                     ct)).ToImmutableArray();
 
@@ -141,7 +141,7 @@ namespace KustoCopyConsole.Orchestrations
                         subIterationTimeFilter.StartTime,
                         subIterationTimeFilter.EndTime,
                         TABLE_SIZE_CAP,
-                        _sourceQueuedClient,
+                        _sourceExportQueue.Client,
                         ct)
                 }).ToImmutableArray();
 
@@ -279,8 +279,8 @@ namespace KustoCopyConsole.Orchestrations
                 var newIterationId = iterations.Any()
                     ? iterations.Last().IterationId + 1
                     : 1;
-                var infoTask = _sourceQueuedClient.ExecuteQueryAsync(
-                    new KustoPriority(),
+                var infoTask = _sourceExportQueue.Client.ExecuteQueryAsync(
+                    KustoPriority.HighestPriority,
                     _dbStatus.DbName,
                     "print Cursor=cursor_current(), Time=now()",
                     r => new
@@ -306,7 +306,7 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task<IImmutableList<string>> ComputeTableNamesAsync()
         {
-            var existingTableNames = await _sourceQueuedClient.ExecuteQueryAsync(
+            var existingTableNames = await _sourceExportQueue.Client.ExecuteQueryAsync(
                 new KustoPriority(),
                 _dbStatus.DbName,
                 ".show tables | project TableName",

@@ -10,21 +10,21 @@ namespace KustoCopyConsole.Orchestrations
         private readonly KustoPriority _priority;
         private readonly long _recordBatchId;
         private readonly DatabaseStatus _dbStatus;
-        private readonly KustoQueuedClient _sourceQueuedClient;
+        private readonly KustoExportQueue _kustoExportQueue;
         private readonly DataLakeDirectoryClient _folderClient;
 
         #region Constructors
         public static async Task ExportAsync(
             StatusItem record,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
+            KustoExportQueue kustoExportQueue,
             DataLakeDirectoryClient folderClient,
             CancellationToken ct)
         {
             var orchestrator = new RecordBatchExportingOrchestration(
                 record,
                 dbStatus,
-                sourceQueuedClient,
+                kustoExportQueue,
                 folderClient);
 
             await orchestrator.RunAsync(ct);
@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Orchestrations
         private RecordBatchExportingOrchestration(
             StatusItem record,
             DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
+            KustoExportQueue kustoExportQueue,
             DataLakeDirectoryClient folderClient)
         {
             _priority = new KustoPriority(
@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Orchestrations
                 record.TableName);
             _recordBatchId = record.RecordBatchId!.Value;
             _dbStatus = dbStatus;
-            _sourceQueuedClient = sourceQueuedClient;
+            _kustoExportQueue = kustoExportQueue;
             _folderClient = folderClient;
         }
         #endregion
@@ -68,7 +68,7 @@ namespace KustoCopyConsole.Orchestrations
 | mv-expand Column=Schema.OrderedColumns
 | project Name=tostring(Column.Name), CslType=tostring(Column.CslType)
 ";
-            var columns = await _sourceQueuedClient.ExecuteQueryAsync(
+            var columns = await _kustoExportQueue.Client.ExecuteQueryAsync(
                 _priority,
                 _priority.DatabaseName!,
                 queryText,

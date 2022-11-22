@@ -20,11 +20,12 @@ namespace KustoCopyConsole.Orchestrations
             var lakeFolderUri = new Uri(lakeFolderBuilder.DataSource);
             var lakeFolderClient = new DataLakeDirectoryClient(lakeFolderUri, credentials);
             var lakeContainerClient = GetLakeContainerClient(lakeFolderUri, credentials);
-            var sourceQueuedClient = parameterization.Source != null
-                ? CreateKustoQueuedClient(
+            var sourceExportQueue = parameterization.Source != null
+                ? CreateKustoExportQueue(
                     credentials,
                     parameterization.Source!.ClusterQueryConnectionString!,
-                    parameterization.Source!.ConcurrentQueryCount)
+                    parameterization.Source!.ConcurrentQueryCount,
+                    parameterization.Source!.ConcurrentExportCommandCount)
                 : null;
             var destinationQueuedClient = parameterization.Destination != null
                 ? CreateKustoQueuedClient(
@@ -36,19 +37,19 @@ namespace KustoCopyConsole.Orchestrations
             return new ConnectionsFactory(
                 lakeFolderClient,
                 lakeContainerClient,
-                sourceQueuedClient,
+                sourceExportQueue,
                 destinationQueuedClient);
         }
 
         private ConnectionsFactory(
             DataLakeDirectoryClient lakeFolderClient,
             BlobContainerClient lakeContainerClient,
-            KustoQueuedClient? sourceQueuedClient,
+            KustoExportQueue? sourceExportQueue,
             KustoQueuedClient? destinationQueuedClient)
         {
             LakeFolderClient = lakeFolderClient;
             LakeContainerClient = lakeContainerClient;
-            SourceQueuedClient = sourceQueuedClient;
+            SourceExportQueue = sourceExportQueue;
             DestinationQueuedClient = destinationQueuedClient;
         }
 
@@ -85,6 +86,25 @@ namespace KustoCopyConsole.Orchestrations
             return sourceQueuedClient;
         }
 
+        private static KustoExportQueue CreateKustoExportQueue(
+            TokenCredential credentials,
+            string clusterQueryConnectionString,
+            int concurrentQueryCount,
+            int concurrentExportCommandCount)
+        {
+            var queuedClient = CreateKustoQueuedClient(
+                credentials,
+                clusterQueryConnectionString,
+                concurrentQueryCount);
+            var awaiter = new KustoOperationAwaiter(queuedClient);
+            var exportQueue = new KustoExportQueue(
+                queuedClient,
+                awaiter,
+                concurrentExportCommandCount);
+
+            return exportQueue;
+        }
+
         private static TokenCredential CreateCredentials(KustoConnectionStringBuilder builder)
         {
             if (string.IsNullOrWhiteSpace(builder.ApplicationClientId))
@@ -119,7 +139,7 @@ namespace KustoCopyConsole.Orchestrations
 
         public BlobContainerClient LakeContainerClient { get; }
 
-        public KustoQueuedClient? SourceQueuedClient { get; }
+        public KustoExportQueue? SourceExportQueue { get; }
 
         public KustoQueuedClient? DestinationQueuedClient { get; }
     }

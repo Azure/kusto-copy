@@ -26,23 +26,20 @@ namespace KustoCopyConsole.KustoQuery
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
         private readonly KustoQueuedClient _kustoClient;
-        private readonly string _databaseName;
         private readonly SingletonExecution _singletonExecution = new SingletonExecution();
         private readonly ConcurrentDictionary<Guid, OperationState> _operations =
             new ConcurrentDictionary<Guid, OperationState>();
 
-        public KustoOperationAwaiter(KustoQueuedClient kustoClient, string databaseName)
+        public KustoOperationAwaiter(KustoQueuedClient kustoClient)
         {
             _kustoClient = kustoClient;
-            _databaseName = databaseName;
         }
 
-        public async Task WaitForOperationCompletionAsync(Guid operationId)
+        public async Task WaitForOperationCompletionAsync(string databaseName, Guid operationId)
         {
             var thisOperationState = new OperationState();
 
             _operations.TryAdd(operationId, thisOperationState);
-
             do
             {
                 await _singletonExecution.SingleRunAsync(async () =>
@@ -60,7 +57,7 @@ namespace KustoCopyConsole.KustoQuery
                     var operationDetails = await _kustoClient
                         .ExecuteCommandAsync(
                         KustoPriority.HighestPriority,
-                        _databaseName,
+                        databaseName,
                         commandText,
                         r => new
                         {
