@@ -309,8 +309,8 @@ namespace KustoCopyConsole.Storage
         /// <summary>Add / update on any type of sub iterations.</summary>
         public event EventHandler? SubIterationActivity;
 
-        /// <summary>Add / update on batch record in planned state.</summary>
-        public event EventHandler? PlannedRecordActivity;
+        /// <summary>Add / update on batch records.</summary>
+        public event EventHandler? BatchRecordActivity;
 
         public string DbName { get; }
 
@@ -378,9 +378,9 @@ namespace KustoCopyConsole.Storage
             {
                 OnSubIterationActivity();
             }
-            if (item.Level == HierarchyLevel.RecordBatch && item.State == StatusItemState.Planned)
+            if (item.Level == HierarchyLevel.RecordBatch)
             {
-                OnPlannedRecordActivity();
+                OnBatchRecordActivity();
             }
         }
 
@@ -400,11 +400,11 @@ namespace KustoCopyConsole.Storage
             }
         }
 
-        private void OnPlannedRecordActivity()
+        private void OnBatchRecordActivity()
         {
-            if (PlannedRecordActivity != null)
+            if (BatchRecordActivity != null)
             {
-                PlannedRecordActivity(this, EventArgs.Empty);
+                BatchRecordActivity(this, EventArgs.Empty);
             }
         }
 

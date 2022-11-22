@@ -26,7 +26,8 @@ namespace KustoCopyConsole.Orchestrations
         private readonly KustoExportQueue _sourceExportQueue;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
-        private readonly ConcurrentQueue<Task> _unobservedTasksQueue = new ConcurrentQueue<Task>();
+        private readonly ConcurrentQueue<Task> _unobservedTasksQueue =
+            new ConcurrentQueue<Task>();
         private TaskCompletionSource _awaitingActivitiesSource = new TaskCompletionSource();
 
         #region Constructor
@@ -68,7 +69,7 @@ namespace KustoCopyConsole.Orchestrations
             {
                 _awaitingActivitiesSource.TrySetResult();
             };
-            _dbStatus.PlannedRecordActivity += (sender, e) =>
+            _dbStatus.BatchRecordActivity += (sender, e) =>
             {
                 _awaitingActivitiesSource.TrySetResult();
             };
@@ -82,7 +83,6 @@ namespace KustoCopyConsole.Orchestrations
                 || HasUnexportedIterations())
             {   //  Reset task source
                 await ObserveTasksAsync();
-                _awaitingActivitiesSource = new TaskCompletionSource();
 
                 var iterations = _dbStatus.GetIterations()
                     .Where(i => i.State == StatusItemState.Initial
@@ -111,9 +111,10 @@ namespace KustoCopyConsole.Orchestrations
                         }
                     }
                 }
-                await MarkIterationsAsExportedAsync(ct);
                 //  Wait for activity to continue
                 await _awaitingActivitiesSource.Task;
+                _awaitingActivitiesSource = new TaskCompletionSource();
+                await MarkIterationsAsExportedAsync(ct);
             }
         }
 
