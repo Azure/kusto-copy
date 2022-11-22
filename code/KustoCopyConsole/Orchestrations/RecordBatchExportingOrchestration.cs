@@ -61,6 +61,7 @@ namespace KustoCopyConsole.Orchestrations
             await deleteFolderTask;
             await _exportQueue.ExportAsync(
                 _priority,
+                _folderClient.Uri,
                 planState.IngestionTimes,
                 planState.CreationTime!.Value,
                 planState.RecordCount!.Value);

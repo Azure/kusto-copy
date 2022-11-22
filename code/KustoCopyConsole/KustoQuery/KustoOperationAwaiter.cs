@@ -1,7 +1,10 @@
-﻿using KustoCopyConsole.Concurrency;
+﻿using Kusto.Cloud.Platform.Utils;
+using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -35,10 +38,54 @@ namespace KustoCopyConsole.KustoQuery
             _kustoClient = kustoClient;
         }
 
-        public async Task WaitForOperationCompletionAsync(string databaseName, Guid operationId)
+        public async Task<IImmutableList<T>> RunAsynchronousOperationAsync<T>(
+            Guid operationId,
+            Func<IDataRecord, T> projection)
         {
             var thisOperationState = new OperationState();
 
+            await WaitForOperationToCompleteAsync(operationId, thisOperationState);
+            if (!_operations.Remove(operationId, out _))
+            {
+                throw new InvalidOperationException("Operation ID wasn't present");
+            }
+            else if (thisOperationState.State == FAILED_STATE)
+            {
+                throw new CopyException(
+                    $"Operation {operationId} failed with message:  "
+                    + $"'{thisOperationState.Status}'");
+            }
+            else if (thisOperationState.State == THROTTLED_STATE)
+            {
+                throw new CopyException(
+                    $"Operation {operationId} has been throttled with message:  "
+                    + $"'{thisOperationState.Status}'");
+            }
+            else
+            {
+                return await FetchOperationDetailsAsync(operationId, projection);
+            }
+        }
+
+        private async Task<IImmutableList<T>> FetchOperationDetailsAsync<T>(
+            Guid operationId,
+            Func<IDataRecord, T> projection)
+        {
+            var commandText = $".show operation {operationId} details";
+            var operationDetails = await _kustoClient
+                .ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                string.Empty,
+                commandText,
+                r => projection(r));
+
+            return operationDetails;
+        }
+
+        private async Task WaitForOperationToCompleteAsync(
+            Guid operationId,
+            OperationState thisOperationState)
+        {
             _operations.TryAdd(operationId, thisOperationState);
             do
             {
@@ -50,14 +97,13 @@ namespace KustoCopyConsole.KustoQuery
                         ", ",
                         _operations.Keys.Select(id => $"'{id}'"));
                     var commandText = @$"
-.show operations
-({operationIdList})
+.show operations ({operationIdList})
 | project OperationId, State, Status
 | where State != '{IN_PROGRESS_STATE}'";
-                    var operationDetails = await _kustoClient
+                    var operationInfo = await _kustoClient
                         .ExecuteCommandAsync(
                         KustoPriority.HighestPriority,
-                        databaseName,
+                        string.Empty,
                         commandText,
                         r => new
                         {
@@ -66,34 +112,16 @@ namespace KustoCopyConsole.KustoQuery
                             Status = (string)r["Status"]
                         });
 
-                    foreach (var detail in operationDetails)
+                    foreach (var info in operationInfo)
                     {
-                        var operationState = _operations[detail.OperationId];
+                        var operationState = _operations[info.OperationId];
 
-                        operationState.State = detail.State;
-                        operationState.Status = detail.Status;
+                        operationState.State = info.State;
+                        operationState.Status = info.Status;
                     }
                 });
             }
             while (thisOperationState.State == IN_PROGRESS_STATE);
-
-            if (!_operations.Remove(operationId, out _))
-            {
-                throw new InvalidOperationException("Operation ID wasn't present");
-            }
-
-            if (thisOperationState.State == FAILED_STATE)
-            {
-                throw new CopyException(
-                    $"Operation {operationId} failed with message:  "
-                    + $"'{thisOperationState.Status}'");
-            }
-            if (thisOperationState.State == THROTTLED_STATE)
-            {
-                throw new CopyException(
-                    $"Operation {operationId} has been throttled with message:  "
-                    + $"'{thisOperationState.Status}'");
-            }
         }
     }
 }

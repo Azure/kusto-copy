@@ -18,17 +18,22 @@ namespace KustoCopyConsole.Concurrency
 
         /// <summary>
         /// Wait for "current" execution to complete (if any are ongoing).
-        /// If the caller can be the next execution, it executes the action, otherwise returns.
+        /// If the caller can be the next execution, it executes the action,
+        /// otherwise it returns after the current executed.
         /// </summary>
         /// <param name="asyncAction"></param>
-        /// <returns></returns>
-        public async Task SingleRunAsync(Func<Task> asyncAction)
+        /// <returns>
+        /// <c>true</c> iif the action passed was executed, <c>false</c> otherwise.
+        /// </returns>
+        public async Task<bool> SingleRunAsync(Func<Task> asyncAction)
         {
             var oldSource = _source;
 
             if (_source.Task.Status != TaskStatus.RanToCompletion)
             {
                 await _source.Task;
+
+                return false;
             }
             else
             {
@@ -41,10 +46,14 @@ namespace KustoCopyConsole.Concurrency
                     await asyncAction();
                     //  Release other threads
                     newSource.SetResult();
+
+                    return true;
                 }
                 else
                 {   //  Some other thread won, just wait and return
                     await alternateSource.Task;
+
+                    return false;
                 }
             }
         }

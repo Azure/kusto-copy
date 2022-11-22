@@ -13,6 +13,7 @@ namespace KustoCopyConsole.KustoQuery
     public class KustoExportQueue
     {
         private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
+        private readonly KustoOperationAwaiter _awaiter;
 
         public KustoExportQueue(
             KustoQueuedClient kustoClient,
@@ -20,6 +21,7 @@ namespace KustoCopyConsole.KustoQuery
             int concurrentExportCommandCount)
         {
             Client = kustoClient;
+            _awaiter = kustoOperationAwaiter;
             _executionQueue.ParallelRunCount = concurrentExportCommandCount;
         }
 
@@ -27,15 +29,34 @@ namespace KustoCopyConsole.KustoQuery
 
         public bool HasAvailability => _executionQueue.HasAvailability;
 
-        public async Task ExportAsync(
+        public async Task<IImmutableList<ExportOutput>> ExportAsync(
             KustoPriority priority,
+            Uri folderUri,
             IEnumerable<TimeInterval> ingestionTimes,
             DateTime creationTime,
             long expectedRecordCount)
         {
-            await Task.CompletedTask;
+            var commandText = $@".export async 
+  compressed
+  to csv (
+    h@'{folderUri};impersonate'
+  ) 
+  <|
+  ['{priority.TableName}']
+";
+            var operationsIds = await Client.ExecuteCommandAsync(
+                priority,
+                priority.DatabaseName!,
+                commandText,
+                r => (Guid)r["OperationId"]);
+            var outputs = await _awaiter.RunAsynchronousOperationAsync(
+                operationsIds.First(),
+                r=>new ExportOutput(
+                    (string)r["Path"],
+                    (long)r["NumRecords"],
+                    (long)r["SizeInBytes"]));
 
-            throw new NotImplementedException();
+            return outputs;
         }
     }
 }
