@@ -98,7 +98,7 @@ namespace KustoCopyConsole.Orchestrations
                     _parameterization.IsContinuousRun,
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
-                    _sourceExportQueue,
+                    _sourceExportQueue.Client,
                     ct))
                 .ToImmutableArray();
             var exportingTasks = _dbStatusList
@@ -109,19 +109,18 @@ namespace KustoCopyConsole.Orchestrations
                     _sourceExportQueue,
                     ct))
                 .ToImmutableArray();
-            //var stagingTasks = _dbStatusList
-            //    .Select(dbStatus => DbStagingOrchestration.ExportAsync(
-            //        _parameterization.IsContinuousRun,
-            //        Task.WhenAll(exportingTasks),
-            //        dbParameterizationIndex[dbStatus.DbName],
-            //        dbStatus,
-            //        _sourceExportQueue,
-            //        ct))
-            //    .ToImmutableArray();
+            var stagingTasks = _dbStatusList
+                .Select(dbStatus => DbStagingOrchestration.StageAsync(
+                    _parameterization.IsContinuousRun,
+                    Task.WhenAll(exportingTasks),
+                    dbStatus,
+                    _sourceExportQueue.Client,
+                    ct))
+                .ToImmutableArray();
             var allTasks = setupTasks
                 .Concat(planningTasks)
-                .Concat(exportingTasks);
-                //.Concat(stagingTasks);
+                .Concat(exportingTasks)
+                .Concat(stagingTasks);
 
             await Task.WhenAll(allTasks);
         }

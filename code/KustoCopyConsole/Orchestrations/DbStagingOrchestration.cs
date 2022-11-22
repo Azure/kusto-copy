@@ -1,5 +1,4 @@
-﻿using Azure.Storage.Files.DataLake;
-using KustoCopyConsole.KustoQuery;
+﻿using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Concurrent;
@@ -7,34 +6,34 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Orchestrations
 {
-    public class DbExportingOrchestration : DependantOrchestrationBase
+    internal class DbStagingOrchestration : DependantOrchestrationBase
     {
-        private readonly KustoExportQueue _sourceExportQueue;
+        private readonly KustoQueuedClient _queuedClient;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
 
         #region Constructor
-        public static async Task ExportAsync(
+        public static async Task StageAsync(
             bool isContinuousRun,
             Task planningTask,
             DatabaseStatus dbStatus,
-            KustoExportQueue sourceExportQueue,
+            KustoQueuedClient queuedClient,
             CancellationToken ct)
         {
-            var orchestration = new DbExportingOrchestration(
+            var orchestration = new DbStagingOrchestration(
                 isContinuousRun,
                 planningTask,
                 dbStatus,
-                sourceExportQueue);
+                queuedClient);
 
             await orchestration.RunAsync(ct);
         }
 
-        private DbExportingOrchestration(
+        private DbStagingOrchestration(
             bool isContinuousRun,
             Task planningTask,
             DatabaseStatus dbStatus,
-            KustoExportQueue sourceExportQueue)
+            KustoQueuedClient queuedClient)
             : base(
                   StatusItemState.Planned,
                   StatusItemState.Exported,
@@ -42,54 +41,51 @@ namespace KustoCopyConsole.Orchestrations
                   planningTask,
                   dbStatus)
         {
-            _sourceExportQueue = sourceExportQueue;
+            _queuedClient = queuedClient;
         }
         #endregion
 
         protected override void QueueActivities(CancellationToken ct)
         {
-            var plannedRecordBatches = DbStatus.GetIterations()
-                .Where(i => i.State <= StatusItemState.Planned)
+            var exportedRecordBatches = DbStatus.GetIterations()
+                .Where(i => i.State <= StatusItemState.Exported)
                 .SelectMany(i => DbStatus.GetSubIterations(i.IterationId))
                 .SelectMany(s => DbStatus.GetRecordBatches(
                     s.IterationId,
                     s.SubIterationId!.Value))
-                .Where(r => r.State == StatusItemState.Planned)
+                .Where(r => r.State == StatusItemState.Exported)
                 .Where(r => !_processingRecordMap.ContainsKey(r.RecordBatchId!.Value))
                 .OrderBy(i => i.IterationId)
                 .ThenBy(i => i.SubIterationId)
                 .ThenBy(i => i.RecordBatchId);
 
-            QueueRecordBatchesForExport(plannedRecordBatches, ct);
+            QueueRecordBatchesForStaging(exportedRecordBatches, ct);
         }
 
-        private void QueueRecordBatchesForExport(
+        private void QueueRecordBatchesForStaging(
             IEnumerable<StatusItem> recordBatches,
             CancellationToken ct)
         {
             foreach (var record in recordBatches)
             {
                 _processingRecordMap[record.RecordBatchId!.Value] = record;
-                EnqueueUnobservedTask(ExportRecordBatchAsync(record, ct), ct);
+                EnqueueUnobservedTask(StageRecordBatchAsync(record, ct), ct);
             }
         }
 
-        private async Task ExportRecordBatchAsync(StatusItem recordBatch, CancellationToken ct)
+        private async Task StageRecordBatchAsync(StatusItem recordBatch, CancellationToken ct)
         {
-            await RecordBatchExportingOrchestration.ExportAsync(
-                recordBatch,
-                DbStatus,
-                _sourceExportQueue,
-                DbStatus
-                .IndexFolderClient
-                .GetSubDirectoryClient(recordBatch.TableName)
-                .GetSubDirectoryClient(recordBatch.RecordBatchId!.Value.ToString("D20")),
-                ct);
+            await IngestRecordBatchAsync(recordBatch, ct);
 
             if (!_processingRecordMap.TryRemove(recordBatch.RecordBatchId!.Value, out var _))
             {
                 throw new NotSupportedException("Processing record should have been in map");
             }
+        }
+
+        private Task IngestRecordBatchAsync(StatusItem recordBatch, CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
     }
 }

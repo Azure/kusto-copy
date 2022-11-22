@@ -44,6 +44,6 @@ namespace KustoCopyConsole
         public int ConcurrentExportCommandCount { get; set; } = 2;
 
         [Option("ingestion-slots", Required = false, HelpText = "Number of concurrent ingestions on the clusters")]
-        public int ConcurrentIngestionCount { get; set; } = 0;
+        public int ConcurrentIngestionCount { get; set; } = 2;
     }
 }
