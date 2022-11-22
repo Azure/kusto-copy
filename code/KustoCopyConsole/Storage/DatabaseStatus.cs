@@ -303,14 +303,8 @@ namespace KustoCopyConsole.Storage
         }
         #endregion
 
-        /// <summary>Add / update on any type of iterations.</summary>
-        public event EventHandler? IterationActivity;
-
-        /// <summary>Add / update on any type of sub iterations.</summary>
-        public event EventHandler? SubIterationActivity;
-
-        /// <summary>Add / update on batch records.</summary>
-        public event EventHandler? BatchRecordActivity;
+        /// <summary>Add / update of status.</summary>
+        public event EventHandler? StatusChanged;
 
         public string DbName { get; }
 
@@ -370,41 +364,14 @@ namespace KustoCopyConsole.Storage
         private void ProcessNewItem(StatusItem item)
         {
             _statusIndex.IndexNewItem(item);
-            if (item.Level == HierarchyLevel.Iteration)
-            {
-                OnIterationActivity();
-            }
-            if (item.Level == HierarchyLevel.SubIteration)
-            {
-                OnSubIterationActivity();
-            }
-            if (item.Level == HierarchyLevel.RecordBatch)
-            {
-                OnBatchRecordActivity();
-            }
+            OnStatusChanged();
         }
 
-        private void OnIterationActivity()
+        private void OnStatusChanged()
         {
-            if (IterationActivity != null)
+            if (StatusChanged != null)
             {
-                IterationActivity(this, EventArgs.Empty);
-            }
-        }
-
-        private void OnSubIterationActivity()
-        {
-            if (SubIterationActivity != null)
-            {
-                SubIterationActivity(this, EventArgs.Empty);
-            }
-        }
-
-        private void OnBatchRecordActivity()
-        {
-            if (BatchRecordActivity != null)
-            {
-                BatchRecordActivity(this, EventArgs.Empty);
+                StatusChanged(this, EventArgs.Empty);
             }
         }
 

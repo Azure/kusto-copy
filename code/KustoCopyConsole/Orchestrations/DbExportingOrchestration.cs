@@ -61,15 +61,7 @@ namespace KustoCopyConsole.Orchestrations
             _dbParameterization = dbParameterization;
             _dbStatus = dbStatus;
             _sourceExportQueue = sourceExportQueue;
-            _dbStatus.IterationActivity += (sender, e) =>
-            {
-                _awaitingActivitiesSource.TrySetResult();
-            };
-            _dbStatus.SubIterationActivity += (sender, e) =>
-            {
-                _awaitingActivitiesSource.TrySetResult();
-            };
-            _dbStatus.BatchRecordActivity += (sender, e) =>
+            _dbStatus.StatusChanged += (sender, e) =>
             {
                 _awaitingActivitiesSource.TrySetResult();
             };
