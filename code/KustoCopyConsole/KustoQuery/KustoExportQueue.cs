@@ -34,6 +34,8 @@ namespace KustoCopyConsole.KustoQuery
             long expectedRecordCount)
         {
             await Task.CompletedTask;
+
+            throw new NotImplementedException();
         }
     }
 }

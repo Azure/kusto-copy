@@ -10,7 +10,7 @@ namespace KustoCopyConsole.Orchestrations
         private readonly KustoPriority _priority;
         private readonly long _recordBatchId;
         private readonly DatabaseStatus _dbStatus;
-        private readonly KustoExportQueue _kustoExportQueue;
+        private readonly KustoExportQueue _exportQueue;
         private readonly DataLakeDirectoryClient _folderClient;
 
         #region Constructors
@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Orchestrations
                 record.TableName);
             _recordBatchId = record.RecordBatchId!.Value;
             _dbStatus = dbStatus;
-            _kustoExportQueue = kustoExportQueue;
+            _exportQueue = kustoExportQueue;
             _folderClient = folderClient;
         }
         #endregion
@@ -52,8 +52,18 @@ namespace KustoCopyConsole.Orchestrations
         {
             var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken:ct);
             var preSchema = await FetchSchemaAsync(ct);
+            var recordBatch = _dbStatus.GetRecordBatch(
+                _priority.IterationId!.Value,
+                _priority.SubIterationId!.Value,
+                _recordBatchId);
+            var planState = recordBatch.InternalState.RecordBatchState!.PlanRecordBatchState!;
 
             await deleteFolderTask;
+            await _exportQueue.ExportAsync(
+                _priority,
+                planState.IngestionTimes,
+                planState.CreationTime!.Value,
+                planState.RecordCount!.Value);
             throw new NotImplementedException();
             //await _dbStatus.PersistNewItemsAsync(
             //    new[] { recordBatch.UpdateState(StatusItemState.Exported) },
@@ -68,7 +78,7 @@ namespace KustoCopyConsole.Orchestrations
 | mv-expand Column=Schema.OrderedColumns
 | project Name=tostring(Column.Name), CslType=tostring(Column.CslType)
 ";
-            var columns = await _kustoExportQueue.Client.ExecuteQueryAsync(
+            var columns = await _exportQueue.Client.ExecuteQueryAsync(
                 _priority,
                 _priority.DatabaseName!,
                 queryText,
