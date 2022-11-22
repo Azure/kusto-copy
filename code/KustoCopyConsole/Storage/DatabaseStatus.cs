@@ -337,6 +337,55 @@ namespace KustoCopyConsole.Storage
             return _statusIndex.GetRecordBatch(iterationId, subIterationId, recordBatchId);
         }
 
+        public async Task RollupStatesAsync(
+            StatusItemState from,
+            StatusItemState to,
+            CancellationToken ct)
+        {
+            var itemsToUpdate = new List<StatusItem>();
+            var subIterations = GetIterations()
+                .Where(i => i.State <= from)
+                .SelectMany(i => GetSubIterations(i.IterationId))
+                .Where(s => s.State == from);
+
+            //  Detect sub iterations where all records are in "from"
+            foreach (var subIteration in subIterations)
+            {
+                var allRecords = GetRecordBatches(
+                    subIteration.IterationId,
+                    subIteration.SubIterationId!.Value);
+
+                if (!allRecords.Any(r => r.State < to))
+                {
+                    itemsToUpdate.Add(subIteration.UpdateState(to));
+                }
+            }
+
+            var iterations = GetIterations()
+                .Where(i => i.State == from);
+
+            //  Detect iterations where all sub iterations have been moved
+            foreach (var iteration in iterations)
+            {
+                var nonReadySubIterations = GetSubIterations(iteration.IterationId)
+                    .Where(s => s.State <= from)
+                    //  Check we didn't slate them for being exported already
+                    .Where(s => !itemsToUpdate.Any(
+                        i => i.IterationId == s.IterationId
+                        && i.SubIterationId == s.SubIterationId));
+
+                if (!nonReadySubIterations.Any())
+                {
+                    itemsToUpdate.Add(iteration.UpdateState(to));
+                }
+            }
+
+            if (itemsToUpdate.Count > 0)
+            {
+                await PersistNewItemsAsync(itemsToUpdate, ct);
+            }
+        }
+
         public async Task PersistNewItemsAsync(
             IEnumerable<StatusItem> items,
             CancellationToken ct)

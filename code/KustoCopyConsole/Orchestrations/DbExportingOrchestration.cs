@@ -73,7 +73,7 @@ namespace KustoCopyConsole.Orchestrations
             while (_isContinuousRun
                 || !_planningTask.IsCompleted
                 || HasUnexportedIterations())
-            {   //  Reset task source
+            {
                 await ObserveTasksAsync();
 
                 var iterations = _dbStatus.GetIterations()
@@ -103,11 +103,16 @@ namespace KustoCopyConsole.Orchestrations
                         }
                     }
                 }
+                await _dbStatus.RollupStatesAsync(
+                    StatusItemState.Planned,
+                    StatusItemState.Exported,
+                    ct);
                 //  Wait for activity to continue
                 await _awaitingActivitiesSource.Task;
+                //  Reset task source
                 _awaitingActivitiesSource = new TaskCompletionSource();
-                await MarkIterationsAsExportedAsync(ct);
             }
+            await ObserveTasksAsync();
         }
 
         private bool HasUnexportedIterations()
@@ -162,54 +167,6 @@ namespace KustoCopyConsole.Orchestrations
             if (!_processingRecordMap.TryRemove(record.RecordBatchId!.Value, out var _))
             {
                 throw new NotSupportedException("Processing record should have been in map");
-            }
-        }
-
-        private async Task MarkIterationsAsExportedAsync(CancellationToken ct)
-        {
-            var itemsToUpdate = new List<StatusItem>();
-            var iterations = _dbStatus.GetIterations()
-               .Where(i => i.State == StatusItemState.Initial
-               || i.State == StatusItemState.Planned);
-            var subIterations = iterations
-                .SelectMany(i => _dbStatus.GetSubIterations(i.IterationId))
-                .Where(s => s.State == StatusItemState.Planned);
-
-            //  Prep sub iterations where all records have been exported
-            foreach (var subIteration in subIterations)
-            {
-                var allRecords = _dbStatus.GetRecordBatches(
-                    subIteration.IterationId,
-                    subIteration.SubIterationId!.Value);
-
-                if (!allRecords.Any(r => r.State == StatusItemState.Planned))
-                {
-                    itemsToUpdate.Add(subIteration.UpdateState(StatusItemState.Exported));
-                }
-            }
-
-            var plannedIterations = _dbStatus.GetIterations()
-                .Where(i => i.State == StatusItemState.Planned);
-
-            //  Prep planned iterations where all sub iterations have been exported
-            foreach (var iteration in plannedIterations)
-            {
-                var nonExportedSubIterations = _dbStatus.GetSubIterations(iteration.IterationId)
-                    .Where(s => s.State == StatusItemState.Planned
-                    || s.State == StatusItemState.Initial)
-                    //  Check we didn't slate them for being exported already
-                    .Where(s => !itemsToUpdate.Any(
-                        i => i.IterationId == s.IterationId && i.SubIterationId == s.SubIterationId));
-
-                if (!nonExportedSubIterations.Any())
-                {
-                    itemsToUpdate.Add(iteration.UpdateState(StatusItemState.Exported));
-                }
-            }
-
-            if (itemsToUpdate.Count > 0)
-            {
-                await _dbStatus.PersistNewItemsAsync(itemsToUpdate, ct);
             }
         }
     }

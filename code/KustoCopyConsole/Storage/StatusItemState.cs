@@ -9,12 +9,12 @@ namespace KustoCopyConsole.Storage
 {
     public enum StatusItemState
     {
-        Initial,
-        Planned,
-        Exported,
-        Staged,
-        Moved,
-        Done,
-        Deleted
+        Initial = 1,
+        Planned = 2,
+        Exported = 3,
+        Staged = 4,
+        Moved = 5,
+        Done = 6,
+        Deleted = 7
     }
 }
