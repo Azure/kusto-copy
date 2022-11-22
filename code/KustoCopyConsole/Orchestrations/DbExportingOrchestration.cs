@@ -7,34 +7,16 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Orchestrations
 {
-    public class DbExportingOrchestration
+    public class DbExportingOrchestration : DependantOrchestrationBase
     {
-        #region Inner Types
-        private record TableTimeWindowCounts(
-            string TableName,
-            IImmutableList<TimeWindowCount> TimeWindowCounts);
-
-        private record SubIterationTimeFilter(DateTime? StartTime, DateTime? EndTime);
-        #endregion
-
-        private const long TABLE_SIZE_CAP = 1000000000;
-
-        private readonly bool _isContinuousRun;
-        private readonly Task _planningTask;
-        private readonly SourceDatabaseParameterization _dbParameterization;
-        private readonly DatabaseStatus _dbStatus;
         private readonly KustoExportQueue _sourceExportQueue;
         private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
             new ConcurrentDictionary<long, StatusItem>();
-        private readonly ConcurrentQueue<Task> _unobservedTasksQueue =
-            new ConcurrentQueue<Task>();
-        private TaskCompletionSource _awaitingActivitiesSource = new TaskCompletionSource();
 
         #region Constructor
         public static async Task ExportAsync(
             bool isContinuousRun,
             Task planningTask,
-            SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoExportQueue sourceExportQueue,
             CancellationToken ct)
@@ -42,7 +24,6 @@ namespace KustoCopyConsole.Orchestrations
             var orchestration = new DbExportingOrchestration(
                 isContinuousRun,
                 planningTask,
-                dbParameterization,
                 dbStatus,
                 sourceExportQueue);
 
@@ -52,103 +33,51 @@ namespace KustoCopyConsole.Orchestrations
         private DbExportingOrchestration(
             bool isContinuousRun,
             Task planningTask,
-            SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
             KustoExportQueue sourceExportQueue)
+            : base(
+                  StatusItemState.Planned,
+                  StatusItemState.Exported,
+                  isContinuousRun,
+                  planningTask,
+                  dbStatus)
         {
-            _isContinuousRun = isContinuousRun;
-            _planningTask = planningTask;
-            _dbParameterization = dbParameterization;
-            _dbStatus = dbStatus;
             _sourceExportQueue = sourceExportQueue;
-            _dbStatus.StatusChanged += (sender, e) =>
-            {
-                _awaitingActivitiesSource.TrySetResult();
-            };
         }
         #endregion
 
-        private async Task RunAsync(CancellationToken ct)
+        protected override void QueueActivities(CancellationToken ct)
         {
-            while (_isContinuousRun
-                || !_planningTask.IsCompleted
-                || HasUnexportedIterations())
+            var plannedRecordBatches = DbStatus.GetIterations()
+                //  So the records don't change after the filter
+                .ToImmutableArray()
+                .Where(i => i.State <= StatusItemState.Planned)
+                .SelectMany(i => DbStatus.GetSubIterations(i.IterationId))
+                .SelectMany(s => DbStatus.GetRecordBatches(
+                    s.IterationId,
+                    s.SubIterationId!.Value))
+                //  So the records don't change after the filter
+                .ToImmutableArray()
+                .Where(r => r.State == StatusItemState.Planned)
+                .Where(r => !_processingRecordMap.ContainsKey(r.RecordBatchId!.Value))
+                .OrderBy(i => i.IterationId)
+                .ThenBy(i => i.SubIterationId)
+                .ThenBy(i => i.RecordBatchId);
+
+            foreach (var record in plannedRecordBatches)
             {
-                await ObserveTasksAsync();
-
-                var iterations = _dbStatus.GetIterations()
-                    .Where(i => i.State == StatusItemState.Initial
-                    || i.State == StatusItemState.Planned)
-                    .OrderBy(i => i.IterationId);
-
-                foreach (var iteration in iterations)
-                {
-                    var subIterations = _dbStatus.GetSubIterations(iteration.IterationId)
-                        .Where(i => i.State == StatusItemState.Initial
-                        || i.State == StatusItemState.Planned)
-                        .OrderBy(i => i.SubIterationId);
-
-                    foreach (var subIteration in subIterations)
-                    {
-                        var recordBatches = _dbStatus.GetRecordBatches(
-                            subIteration.IterationId,
-                            subIteration.SubIterationId!.Value);
-                        var plannedRecordBatches = recordBatches
-                            .Where(i => i.State == StatusItemState.Planned)
-                            .OrderBy(i => i.RecordBatchId);
-
-                        foreach (var record in plannedRecordBatches)
-                        {
-                            QueueRecordBatchForExport(record, ct);
-                        }
-                    }
-                }
-                await _dbStatus.RollupStatesAsync(
-                    StatusItemState.Planned,
-                    StatusItemState.Exported,
-                    ct);
-                //  Wait for activity to continue
-                await _awaitingActivitiesSource.Task;
-                //  Reset task source
-                _awaitingActivitiesSource = new TaskCompletionSource();
-            }
-            await ObserveTasksAsync();
-        }
-
-        private bool HasUnexportedIterations()
-        {
-            return _dbStatus.GetIterations().Any(i => i.State == StatusItemState.Initial
-            || i.State == StatusItemState.Planned);
-        }
-
-        private async Task ObserveTasksAsync()
-        {
-            if (_unobservedTasksQueue.TryPeek(out var task))
-            {
-                if (task.IsCompleted)
-                {
-                    await task;
-                    _unobservedTasksQueue.TryDequeue(out var _);
-                    await ObserveTasksAsync();
-                }
+                QueueRecordBatchesForExport(plannedRecordBatches, ct);
             }
         }
 
-        private void QueueRecordBatchForExport(StatusItem record, CancellationToken ct)
+        private void QueueRecordBatchesForExport(
+            IEnumerable<StatusItem> recordBatches,
+            CancellationToken ct)
         {
-            if (!_processingRecordMap.ContainsKey(record.RecordBatchId!.Value))
-            {   //  Let's try to find the item again to make sure there isn't a racing condition
-                record = _dbStatus.GetRecordBatch(
-                    record.IterationId,
-                    record.SubIterationId!.Value,
-                    record.RecordBatchId!.Value);
-
-                //  Ensure the record is still in planned state
-                if (record.State == StatusItemState.Planned)
-                {
-                    _processingRecordMap[record.RecordBatchId!.Value] = record;
-                    _unobservedTasksQueue.Enqueue(ExportRecordAsync(record, ct));
-                }
+            foreach (var record in recordBatches)
+            {
+                _processingRecordMap[record.RecordBatchId!.Value] = record;
+                EnqueueUnobservedTask(ExportRecordAsync(record, ct), ct);
             }
         }
 
@@ -156,9 +85,9 @@ namespace KustoCopyConsole.Orchestrations
         {
             await RecordBatchExportingOrchestration.ExportAsync(
                 record,
-                _dbStatus,
+                DbStatus,
                 _sourceExportQueue,
-                _dbStatus
+                DbStatus
                 .IndexFolderClient
                 .GetSubDirectoryClient(record.TableName)
                 .GetSubDirectoryClient(record.RecordBatchId!.Value.ToString("D20")),

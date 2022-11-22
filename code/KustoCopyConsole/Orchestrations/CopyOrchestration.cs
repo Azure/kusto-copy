@@ -105,7 +105,6 @@ namespace KustoCopyConsole.Orchestrations
                 .Select(dbStatus => DbExportingOrchestration.ExportAsync(
                     _parameterization.IsContinuousRun,
                     Task.WhenAll(planningTasks),
-                    dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
                     _sourceExportQueue,
                     ct))
