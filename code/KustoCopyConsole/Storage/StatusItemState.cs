@@ -12,6 +12,8 @@ namespace KustoCopyConsole.Storage
         Initial,
         Planned,
         Exported,
+        Staged,
+        Moved,
         Done,
         Deleted
     }
