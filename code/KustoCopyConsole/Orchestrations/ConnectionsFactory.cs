@@ -27,30 +27,31 @@ namespace KustoCopyConsole.Orchestrations
                     parameterization.Source!.ConcurrentQueryCount,
                     parameterization.Source!.ConcurrentExportCommandCount)
                 : null;
-            var destinationQueuedClient = parameterization.Destination != null
-                ? CreateKustoQueuedClient(
+            var destinationIngestQueue = parameterization.Destination != null
+                ? CreateKustoIngestQueue(
                     credentials,
                     parameterization.Destination!.ClusterQueryConnectionString!,
-                    parameterization.Destination!.ConcurrentQueryCount)
+                    parameterization.Destination!.ConcurrentQueryCount,
+                    parameterization.Destination!.ConcurrentIngestionCount)
                 : null;
 
             return new ConnectionsFactory(
                 lakeFolderClient,
                 lakeContainerClient,
                 sourceExportQueue,
-                destinationQueuedClient);
+                destinationIngestQueue);
         }
 
         private ConnectionsFactory(
             DataLakeDirectoryClient lakeFolderClient,
             BlobContainerClient lakeContainerClient,
             KustoExportQueue? sourceExportQueue,
-            KustoQueuedClient? destinationQueuedClient)
+            KustoIngestQueue? destinationIngestQueue)
         {
             LakeFolderClient = lakeFolderClient;
             LakeContainerClient = lakeContainerClient;
             SourceExportQueue = sourceExportQueue;
-            DestinationQueuedClient = destinationQueuedClient;
+            DestinationIngestQueue = destinationIngestQueue;
         }
 
         #region Helpers
@@ -105,6 +106,25 @@ namespace KustoCopyConsole.Orchestrations
             return exportQueue;
         }
 
+        private static KustoIngestQueue CreateKustoIngestQueue(
+            TokenCredential credentials,
+            string clusterQueryConnectionString,
+            int concurrentQueryCount,
+            int concurrentIngestionCount)
+        {
+            var queuedClient = CreateKustoQueuedClient(
+                credentials,
+                clusterQueryConnectionString,
+                concurrentQueryCount);
+            var awaiter = new KustoOperationAwaiter(queuedClient);
+            var exportQueue = new KustoIngestQueue(
+                queuedClient,
+                awaiter,
+                concurrentIngestionCount);
+
+            return exportQueue;
+        }
+
         private static TokenCredential CreateCredentials(KustoConnectionStringBuilder builder)
         {
             if (string.IsNullOrWhiteSpace(builder.ApplicationClientId))
@@ -141,6 +161,6 @@ namespace KustoCopyConsole.Orchestrations
 
         public KustoExportQueue? SourceExportQueue { get; }
 
-        public KustoQueuedClient? DestinationQueuedClient { get; }
+        public KustoIngestQueue? DestinationIngestQueue { get; }
     }
 }

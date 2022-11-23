@@ -14,7 +14,7 @@ namespace KustoCopyConsole.Orchestrations
     {
         private readonly MainParameterization _parameterization;
         private readonly KustoExportQueue _sourceExportQueue;
-        private readonly KustoQueuedClient _destinationClient;
+        private readonly KustoIngestQueue _destinationIngestQueue;
         private readonly DataLakeDirectoryClient _lakeFolderClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
@@ -54,7 +54,7 @@ namespace KustoCopyConsole.Orchestrations
                         var orchestration = new CopyOrchestration(
                             parameterization,
                             connectionFactory.SourceExportQueue!,
-                            connectionFactory.DestinationQueuedClient!,
+                            connectionFactory.DestinationIngestQueue!,
                             connectionFactory.LakeFolderClient,
                             dbStatusList);
 
@@ -71,13 +71,13 @@ namespace KustoCopyConsole.Orchestrations
         private CopyOrchestration(
             MainParameterization parameterization,
             KustoExportQueue sourceExportQueue,
-            KustoQueuedClient destinationClient,
+            KustoIngestQueue destinationIngestQueue,
             DataLakeDirectoryClient lakeFolderClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
             _sourceExportQueue = sourceExportQueue;
-            _destinationClient = destinationClient;
+            _destinationIngestQueue = destinationIngestQueue;
             _lakeFolderClient = lakeFolderClient;
             _dbStatusList = dbStatusList;
         }
@@ -90,7 +90,7 @@ namespace KustoCopyConsole.Orchestrations
             var setupTasks = _dbStatusList
                 .Select(dbStatus => DestinationDbSetupOrchestration.SetupAsync(
                     dbStatus,
-                    _destinationClient,
+                    _destinationIngestQueue.Client,
                     ct))
                 .ToImmutableArray();
             var planningTasks = _dbStatusList
@@ -114,7 +114,7 @@ namespace KustoCopyConsole.Orchestrations
                     _parameterization.IsContinuousRun,
                     Task.WhenAll(exportingTasks),
                     dbStatus,
-                    _sourceExportQueue.Client,
+                    _destinationIngestQueue,
                     ct))
                 .ToImmutableArray();
             var allTasks = setupTasks

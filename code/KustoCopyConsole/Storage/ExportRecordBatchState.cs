@@ -11,5 +11,7 @@ namespace KustoCopyConsole.Storage
             = ImmutableArray<Uri>.Empty;
 
         public long RecordCount { get; set; }
+
+        public ExportFormat ExportFormat { get; set; } = ExportFormat.CsvGz;
     }
 }

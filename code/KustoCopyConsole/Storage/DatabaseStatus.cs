@@ -112,6 +112,15 @@ namespace KustoCopyConsole.Storage
                 return items;
             }
 
+            public StatusItem GetSubIteration(long iterationId, long subIterationId)
+            {
+                return _iterationIndex
+                    .Index[iterationId]
+                    .Children
+                    .Index[subIterationId]
+                    .Parent;
+            }
+
             public IImmutableList<StatusItem> GetRecordBatches(
                 long iterationId,
                 long subIterationId)
@@ -325,6 +334,11 @@ namespace KustoCopyConsole.Storage
         public IImmutableList<StatusItem> GetSubIterations(long iterationId)
         {
             return _statusIndex.GetSubIterations(iterationId);
+        }
+
+        public StatusItem GetSubIteration(long iterationId, long subIterationId)
+        {
+            return _statusIndex.GetSubIteration(iterationId, subIterationId);
         }
 
         public IImmutableList<StatusItem> GetRecordBatches(long iterationId, long subIterationId)

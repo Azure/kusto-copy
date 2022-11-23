@@ -10,8 +10,8 @@ namespace KustoCopyConsole.Orchestrations
     public class DbExportingOrchestration : DependantOrchestrationBase
     {
         private readonly KustoExportQueue _sourceExportQueue;
-        private readonly ConcurrentDictionary<long, StatusItem> _processingRecordMap =
-            new ConcurrentDictionary<long, StatusItem>();
+        private readonly ConcurrentDictionary<RecordBatchKey, StatusItem> _processingRecordMap =
+            new ConcurrentDictionary<RecordBatchKey, StatusItem>();
 
         #region Constructor
         public static async Task ExportAsync(
@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Orchestrations
                     s.IterationId,
                     s.SubIterationId!.Value))
                 .Where(r => r.State == StatusItemState.Planned)
-                .Where(r => !_processingRecordMap.ContainsKey(r.RecordBatchId!.Value))
+                .Where(r => !_processingRecordMap.ContainsKey(RecordBatchKey.FromRecordBatch(r)))
                 .OrderBy(i => i.IterationId)
                 .ThenBy(i => i.SubIterationId)
                 .ThenBy(i => i.RecordBatchId);
@@ -69,7 +69,7 @@ namespace KustoCopyConsole.Orchestrations
         {
             foreach (var record in recordBatches)
             {
-                _processingRecordMap[record.RecordBatchId!.Value] = record;
+                _processingRecordMap[RecordBatchKey.FromRecordBatch(record)] = record;
                 EnqueueUnobservedTask(ExportRecordBatchAsync(record, ct), ct);
             }
         }
@@ -86,7 +86,9 @@ namespace KustoCopyConsole.Orchestrations
                 .GetSubDirectoryClient(recordBatch.RecordBatchId!.Value.ToString("D20")),
                 ct);
 
-            if (!_processingRecordMap.TryRemove(recordBatch.RecordBatchId!.Value, out var _))
+            if (!_processingRecordMap.TryRemove(
+                RecordBatchKey.FromRecordBatch(recordBatch),
+                out var _))
             {
                 throw new NotSupportedException("Processing record should have been in map");
             }
