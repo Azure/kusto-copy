@@ -2,6 +2,7 @@
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoIngestQueue
     {
-        private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
         public KustoIngestQueue(
@@ -21,13 +22,11 @@ namespace KustoCopyConsole.KustoQuery
             int concurrentIngestCommandCount)
         {
             Client = kustoClient;
+            _queue = new PriorityExecutionQueue<KustoPriority>(concurrentIngestCommandCount);
             _awaiter = kustoOperationAwaiter;
-            _executionQueue.ParallelRunCount = concurrentIngestCommandCount;
         }
 
         public KustoQueuedClient Client { get; }
-
-        public bool HasAvailability => _executionQueue.HasAvailability;
 
         public async Task IngestAsync(
             KustoPriority priority,
@@ -44,13 +43,18 @@ namespace KustoCopyConsole.KustoQuery
   ) 
   with (format='csv', persistDetails=true)
 ";
-            var operationsIds = await Client.ExecuteCommandAsync(
+            await _queue.RequestRunAsync(
                 priority,
-                priority.DatabaseName!,
-                commandText,
-                r => (Guid)r["OperationId"]);
-            
-            await _awaiter.RunAsynchronousOperationAsync(operationsIds.First());
+                async () =>
+                {
+                    var operationsIds = await Client.ExecuteCommandAsync(
+                        KustoPriority.HighestPriority,
+                        priority.DatabaseName!,
+                        commandText,
+                        r => (Guid)r["OperationId"]);
+
+                    await _awaiter.RunAsynchronousOperationAsync(operationsIds.First());
+                });
         }
     }
 }
