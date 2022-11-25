@@ -8,5 +8,7 @@ namespace KustoCopyConsole.Storage
         public PlanRecordBatchState? PlanRecordBatchState { get; set; }
         
         public ExportRecordBatchState? ExportRecordBatchState { get; set; }
+        
+        public StageRecordBatchState? StageRecordBatchState { get; set; }
     }
 }
