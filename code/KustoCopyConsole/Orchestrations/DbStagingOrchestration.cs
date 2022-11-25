@@ -165,9 +165,23 @@ namespace KustoCopyConsole.Orchestrations
                     ", ",
                     columns.Select(i => $"{i.Name}:{i.Type}"));
                 var commandText = $@"
-.execute database script <|
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
     .create-merge table ['{priority.TableName}']({columnListText})
-    .alter table ['{priority.TableName}']({columnListText})";
+    .alter table ['{priority.TableName}']({columnListText})
+    .alter table ['{priority.TableName}'] policy merge
+    ```
+    {{
+      ""AllowRebuild"": false,
+      ""AllowMerge"": false
+    }}
+    ```
+    .alter table ['{priority.TableName}'] policy caching hot = 0d
+    .alter table ['{priority.TableName}'] policy retention 
+    ```
+    {{
+      ""SoftDeletePeriod"": ""40000.00:00:00""
+    }}
+    ```";
 
                 await _ingestQueue.Client.ExecuteCommandAsync(
                     priority,
