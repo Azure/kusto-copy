@@ -255,7 +255,7 @@ namespace KustoCopyConsole.Orchestrations
             var recordState = recordBatch
                 .InternalState!
                 .RecordBatchState!;
-            var outputs = await _ingestQueue.IngestAsync(
+            await _ingestQueue.IngestAsync(
                 priority,
                 recordState!.ExportRecordBatchState!.BlobPaths,
                 recordState!.PlanRecordBatchState!.CreationTime!.Value,

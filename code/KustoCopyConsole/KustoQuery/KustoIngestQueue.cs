@@ -29,7 +29,7 @@ namespace KustoCopyConsole.KustoQuery
 
         public bool HasAvailability => _executionQueue.HasAvailability;
 
-        public async Task<IImmutableList<ExportOutput>> IngestAsync(
+        public async Task IngestAsync(
             KustoPriority priority,
             IEnumerable<Uri> blobPaths,
             DateTime creationTime,
@@ -49,14 +49,8 @@ namespace KustoCopyConsole.KustoQuery
                 priority.DatabaseName!,
                 commandText,
                 r => (Guid)r["OperationId"]);
-            var outputs = await _awaiter.RunAsynchronousOperationAsync(
-                operationsIds.First(),
-                r => new ExportOutput(
-                    new Uri((string)r["Path"]),
-                    (long)r["NumRecords"],
-                    (long)r["SizeInBytes"]));
-
-            return outputs;
+            
+            await _awaiter.RunAsynchronousOperationAsync(operationsIds.First());
         }
     }
 }
