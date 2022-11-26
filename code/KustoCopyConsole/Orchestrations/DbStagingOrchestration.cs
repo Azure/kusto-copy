@@ -270,6 +270,7 @@ namespace KustoCopyConsole.Orchestrations
                 recordState!.ExportRecordBatchState!.RecordCount);
             var newRecordBatch = recordBatch.UpdateState(StatusItemState.Staged);
 
+            await CleanExtentsAsync(priority, tagValue);
             newRecordBatch.InternalState.RecordBatchState!.StageRecordBatchState =
                 new StageRecordBatchState
                 {
@@ -277,6 +278,18 @@ namespace KustoCopyConsole.Orchestrations
                 };
 
             await DbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
+        }
+
+        private async Task CleanExtentsAsync(KustoPriority priority, string tagValue)
+        {
+            var commandText = $@".drop extent tags from table ['{priority.TableName}']
+('{tagValue}')";
+            
+            await _ingestQueue.Client.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                priority.DatabaseName!,
+                commandText,
+                r => r);
         }
 
         private async Task<IImmutableList<string>> FetchExtentIdsAsync(
