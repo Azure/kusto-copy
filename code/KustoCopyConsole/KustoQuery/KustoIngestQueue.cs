@@ -32,16 +32,22 @@ namespace KustoCopyConsole.KustoQuery
             KustoPriority priority,
             IEnumerable<Uri> blobPaths,
             DateTime creationTime,
-            long expectedRecordCount)
+            IEnumerable<string> tags)
         {
             var pathTexts = blobPaths
                 .Select(p => $"'{p};impersonate'");
             var sourceLocatorText = string.Join(Environment.NewLine + ", ", pathTexts);
+            var creationTimeText = creationTime.ToString("yyyy-MM-dd HH:mm:ss");
+            var tagsText = string.Join(", ", tags.Select(t => $"'{t}'"));
             var commandText = $@".ingest async into table ['{priority.TableName}']
   (
     {sourceLocatorText}
   ) 
-  with (format='csv', persistDetails=true)
+  with (
+    format='csv',
+    persistDetails=true,
+    creationTime='{creationTimeText}',
+    tags=""[{tagsText}]"")
 ";
             await _queue.RequestRunAsync(
                 priority,

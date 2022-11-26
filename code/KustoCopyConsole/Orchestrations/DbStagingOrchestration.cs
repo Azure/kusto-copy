@@ -255,13 +255,64 @@ namespace KustoCopyConsole.Orchestrations
             var recordState = recordBatch
                 .InternalState!
                 .RecordBatchState!;
+            //  Tag to retrieve the extent IDs with
+            var tagValue = Guid.NewGuid().ToString();
+
             await _ingestQueue.IngestAsync(
                 priority,
                 recordState!.ExportRecordBatchState!.BlobPaths,
                 recordState!.PlanRecordBatchState!.CreationTime!.Value,
-                recordState!.ExportRecordBatchState!.RecordCount);
+                new[] { tagValue });
 
-            throw new NotImplementedException();
+            var extentIds = await FetchExtentIdsAsync(
+                priority,
+                tagValue,
+                recordState!.ExportRecordBatchState!.RecordCount);
+            var newRecordBatch = recordBatch.UpdateState(StatusItemState.Staged);
+
+            newRecordBatch.InternalState.RecordBatchState!.StageRecordBatchState =
+                new StageRecordBatchState
+                {
+                    ExtentIds = extentIds
+                };
+
+            await DbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
+        }
+
+        private async Task<IImmutableList<string>> FetchExtentIdsAsync(
+            KustoPriority priority,
+            string tagValue,
+            long expectedRecordCount)
+        {
+            var queryText = $@"['{priority.TableName}']
+| where array_length(extent_tags())!=0
+| project Tag = tostring(extent_tags()[0])
+| where Tag == '{tagValue}'
+| summarize Cardinality=count() by ExtentId = extent_id()
+";
+            var outputs = await _ingestQueue.Client.ExecuteQueryAsync(
+                KustoPriority.HighestPriority,
+                priority.DatabaseName!,
+                queryText,
+                r => new
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    Cardinality = (long)r["Cardinality"]
+                });
+            var totalCardinality = outputs.Sum(o => o.Cardinality);
+
+            if (totalCardinality != expectedRecordCount)
+            {
+                throw new InvalidOperationException(
+                    $"Expected ingested record count was {expectedRecordCount} but was"
+                    + $"{totalCardinality}");
+            }
+
+            var extentIds = outputs
+                .Select(o => o.ExtentId.ToString())
+                .ToImmutableArray();
+
+            return extentIds;
         }
     }
 }
