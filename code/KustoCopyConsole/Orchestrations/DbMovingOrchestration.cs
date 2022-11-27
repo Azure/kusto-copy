@@ -116,8 +116,16 @@ namespace KustoCopyConsole.Orchestrations
         private async Task MoveSubIterationAsync(StatusItem subIteration, CancellationToken ct)
         {
             await EnsureAllTablesCreatedAsync(subIteration);
+            await MoveAllExtentsAsync(subIteration);
 
-            throw new NotImplementedException();
+            var subIterationKey = SubIterationKey.FromSubIteration(subIteration);
+            var newSubIteration = subIteration.UpdateState(StatusItemState.Moved);
+            var newRecordBatches = DbStatus
+                .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
+                .Select(r => r.UpdateState(StatusItemState.Moved));
+            var allItems = newRecordBatches.Prepend(newSubIteration).ToImmutableArray();
+
+            await DbStatus.PersistNewItemsAsync(allItems, ct);
         }
 
         #region Table Schema
@@ -205,6 +213,47 @@ namespace KustoCopyConsole.Orchestrations
                 r => (string)r["TableName"]);
 
             return existingTables.ToImmutableHashSet();
+        }
+        #endregion
+
+        #region Move Extents
+        private async Task MoveAllExtentsAsync(StatusItem subIteration)
+        {
+            var subIterationKey = SubIterationKey.FromSubIteration(subIteration);
+            var moveTasks = DbStatus
+                .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
+                .GroupBy(r => r.TableName)
+                .Select(g => MoveTableExtentsAsync(g.ToImmutableArray(), subIteration))
+                .ToImmutableArray();
+
+            await Task.WhenAll(moveTasks);
+        }
+
+        private async Task MoveTableExtentsAsync(
+            ImmutableArray<StatusItem> recordBatchItems,
+            StatusItem subIteration)
+        {
+            var subIterationKey = SubIterationKey.FromSubIteration(subIteration);
+            var tableName = recordBatchItems.First().TableName;
+            var stagingTableName = recordBatchItems.First().GetStagingTableName(subIteration);
+            var extentIds = recordBatchItems
+                .SelectMany(r => r.InternalState.RecordBatchState!.StageRecordBatchState!.ExtentIds)
+                .Distinct();
+            var priority = new KustoPriority(
+               subIterationKey.IterationId,
+               subIterationKey.SubIterationId,
+               DbStatus.DbName,
+               stagingTableName);
+            var commandText = $@".move extents
+from table ['{stagingTableName}']
+to table ['{tableName}']
+({string.Join(", ", extentIds)})";
+
+            await _queuedClient.ExecuteCommandAsync(
+                priority,
+                DbStatus.DbName,
+                commandText,
+                r => r);
         }
         #endregion
     }
