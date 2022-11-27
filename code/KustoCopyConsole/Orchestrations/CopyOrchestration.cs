@@ -119,6 +119,14 @@ namespace KustoCopyConsole.Orchestrations
                     _destinationIngestQueue,
                     ct))
                 .ToImmutableArray();
+            var movingTasks = _dbStatusList
+                .Select(dbStatus => DbMovingOrchestration.StageAsync(
+                    _parameterization.IsContinuousRun,
+                    Task.WhenAll(stagingTasks),
+                    dbStatus,
+                    _destinationIngestQueue.Client,
+                    ct))
+                .ToImmutableArray();
             var allTasks = setupTasks
                 .Concat(planningTasks)
                 .Concat(exportingTasks)

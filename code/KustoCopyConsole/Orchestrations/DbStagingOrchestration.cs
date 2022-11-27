@@ -56,14 +56,14 @@ namespace KustoCopyConsole.Orchestrations
         #region Constructor
         public static async Task StageAsync(
             bool isContinuousRun,
-            Task planningTask,
+            Task exportingTask,
             DatabaseStatus dbStatus,
             KustoIngestQueue ingestQueue,
             CancellationToken ct)
         {
             var orchestration = new DbStagingOrchestration(
                 isContinuousRun,
-                planningTask,
+                exportingTask,
                 dbStatus,
                 ingestQueue);
 
@@ -95,9 +95,7 @@ namespace KustoCopyConsole.Orchestrations
                     s.IterationId,
                     s.SubIterationId!.Value))
                 .Where(r => r.State == StatusItemState.Exported)
-                .Where(r => !_processingRecordMap.ContainsKey(new RecordBatchKey(
-                    new TableKey(r.IterationId, r.SubIterationId!.Value, r.TableName!),
-                    r.RecordBatchId!.Value)))
+                .Where(r => !_processingRecordMap.ContainsKey(RecordBatchKey.FromRecordBatch(r)))
                 .OrderBy(i => i.IterationId)
                 .ThenBy(i => i.SubIterationId)
                 .ThenBy(i => i.RecordBatchId)
@@ -112,12 +110,7 @@ namespace KustoCopyConsole.Orchestrations
         {
             foreach (var record in recordBatches)
             {
-                var recordBatchKey = new RecordBatchKey(
-                    new TableKey(
-                        record.IterationId,
-                        record.SubIterationId!.Value,
-                        record.TableName!),
-                    record.RecordBatchId!.Value);
+                var recordBatchKey = RecordBatchKey.FromRecordBatch(record);
 
                 _processingRecordMap[recordBatchKey] = record;
                 EnqueueUnobservedTask(StageRecordBatchAsync(record, ct), ct);
