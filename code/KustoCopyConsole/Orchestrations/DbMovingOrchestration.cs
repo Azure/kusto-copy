@@ -124,6 +124,10 @@ namespace KustoCopyConsole.Orchestrations
         private async Task EnsureAllTablesCreatedAsync(StatusItem subIteration)
         {
             var subIterationKey = SubIterationKey.FromSubIteration(subIteration);
+            var priority = new KustoPriority(
+                subIterationKey.IterationId,
+                subIterationKey.SubIterationId,
+                DbStatus.DbName);
             var tables = DbStatus
                 .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
                 .GroupBy(r => r.TableName)
@@ -135,7 +139,9 @@ namespace KustoCopyConsole.Orchestrations
                     Schema = r.InternalState!.RecordBatchState!.ExportRecordBatchState!.TableColumns!
                 })
                 .ToImmutableArray();
-            var existingTables = await ExistingTablesAsync(tables.Select(t => t.TableName));
+            var existingTables = await ExistingTablesAsync(
+                tables.Select(t => t.TableName),
+                priority);
             var commands = tables
                 .SelectMany(t => GetTableSchemaCommands(
                     t.TableName,
@@ -146,7 +152,7 @@ namespace KustoCopyConsole.Orchestrations
 {string.Join(Environment.NewLine, commands)}";
 
             await _queuedClient.ExecuteCommandAsync(
-                KustoPriority.HighestPriority,
+                priority,
                 DbStatus.DbName,
                 commandText,
                 r => r);
@@ -183,7 +189,9 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private async Task<IImmutableSet<string>> ExistingTablesAsync(IEnumerable<string> tableNames)
+        private async Task<IImmutableSet<string>> ExistingTablesAsync(
+            IEnumerable<string> tableNames,
+            KustoPriority priority)
         {
             var tableListText = string.Join(", ", tableNames.Select(t => $"'{t}'"));
             var commandText = $@"
@@ -192,7 +200,7 @@ namespace KustoCopyConsole.Orchestrations
 | project TableName
 ";
             var existingTables = await _queuedClient.ExecuteCommandAsync(
-                KustoPriority.HighestPriority,
+                priority,
                 DbStatus.DbName,
                 commandText,
                 r => (string)r["TableName"]);
