@@ -135,7 +135,6 @@ namespace KustoCopyConsole.Orchestrations
                 .Select(r => new
                 {
                     TableName = r.TableName,
-                    StagingTableName = r.GetStagingTableName(subIteration),
                     Schema = r.InternalState!.RecordBatchState!.ExportRecordBatchState!.TableColumns!
                 })
                 .ToImmutableArray();
