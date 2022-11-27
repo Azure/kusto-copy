@@ -122,13 +122,11 @@ namespace KustoCopyConsole.Orchestrations
             var subIteration = DbStatus.GetSubIteration(
                 recordBatch.IterationId,
                 recordBatch.SubIterationId!.Value);
-            var suffix = subIteration.InternalState!.SubIterationState!.StagingTableSuffix;
-            var stagingTableName = $"{recordBatch.TableName}_{suffix}";
             var priority = new KustoPriority(
                 recordBatch.IterationId,
                 recordBatch.SubIterationId,
                 DbStatus.DbName,
-                stagingTableName);
+                recordBatch.GetStagingTableName(subIteration));
 
             await SetupStagingTableAsync(recordBatch, priority, ct);
             await IngestRecordBatchAsync(recordBatch, priority, ct);

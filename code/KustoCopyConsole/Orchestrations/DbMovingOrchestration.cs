@@ -3,6 +3,7 @@ using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Net.NetworkInformation;
 
 namespace KustoCopyConsole.Orchestrations
@@ -112,9 +113,92 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
-        private Task MoveSubIterationAsync(StatusItem subIteration, CancellationToken ct)
+        private async Task MoveSubIterationAsync(StatusItem subIteration, CancellationToken ct)
         {
+            await EnsureAllTablesCreatedAsync(subIteration);
+
             throw new NotImplementedException();
         }
+
+        #region Table Schema
+        private async Task EnsureAllTablesCreatedAsync(StatusItem subIteration)
+        {
+            var subIterationKey = SubIterationKey.FromSubIteration(subIteration);
+            var tables = DbStatus
+                .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
+                .GroupBy(r => r.TableName)
+                .Select(g => g.MaxBy(r => r.Timestamp)!)
+                .Select(r => new
+                {
+                    TableName = r.TableName,
+                    StagingTableName = r.GetStagingTableName(subIteration),
+                    Schema = r.InternalState!.RecordBatchState!.ExportRecordBatchState!.TableColumns!
+                })
+                .ToImmutableArray();
+            var existingTables = await ExistingTablesAsync(tables.Select(t => t.TableName));
+            var commands = tables
+                .SelectMany(t => GetTableSchemaCommands(
+                    t.TableName,
+                    existingTables.Contains(t.TableName),
+                    t.Schema));
+            var commandText = $@"
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
+{string.Join(Environment.NewLine, commands)}";
+
+            await _queuedClient.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                DbStatus.DbName,
+                commandText,
+                r => r);
+        }
+
+        private IEnumerable<string> GetTableSchemaCommands(
+            string tableName,
+            bool doesTableExist,
+            IImmutableList<TableColumn> schema)
+        {
+            var columnListText = string.Join(
+                ", ",
+                schema.Select(i => $"{i.Name}:{i.Type}"));
+
+            if (doesTableExist)
+            {
+                var tableAlter =
+                    $@".alter table['{tableName}']({columnListText})";
+
+                return new[] { tableAlter };
+            }
+            else
+            {
+                var tableCreate =
+                    $@".create table['{tableName}']({columnListText})";
+                var alterTableRetention = $@".alter table ['{tableName}'] policy retention
+```
+{{
+    ""SoftDeletePeriod"": ""40000.00:00:00""
+}}
+```";
+
+                return new[] { tableCreate, alterTableRetention };
+            }
+        }
+
+        private async Task<IImmutableSet<string>> ExistingTablesAsync(IEnumerable<string> tableNames)
+        {
+            var tableListText = string.Join(", ", tableNames.Select(t => $"'{t}'"));
+            var commandText = $@"
+.show tables
+| where TableName in ({tableListText})
+| project TableName
+";
+            var existingTables = await _queuedClient.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                DbStatus.DbName,
+                commandText,
+                r => (string)r["TableName"]);
+
+            return existingTables.ToImmutableHashSet();
+        }
+        #endregion
     }
 }
