@@ -48,10 +48,8 @@ namespace KustoCopyConsole.Orchestrations
         #endregion
 
         private readonly KustoQueuedClient _queuedClient;
-        private readonly ConcurrentDictionary<SubIterationKey, StatusItem> _processingSubIteratinMap =
+        private readonly ConcurrentDictionary<SubIterationKey, StatusItem> _processingSubIterationMap =
             new ConcurrentDictionary<SubIterationKey, StatusItem>();
-        private readonly IDictionary<TableKey, TableState> _tableNameToStateMap =
-            new Dictionary<TableKey, TableState>();
 
         #region Constructor
         public static async Task StageAsync(
@@ -88,23 +86,33 @@ namespace KustoCopyConsole.Orchestrations
 
         protected override void QueueActivities(CancellationToken ct)
         {
-            var exportedRecordBatches = DbStatus.GetIterations()
+            var stagedSubIterations = DbStatus.GetIterations()
                 .Where(i => i.State <= StatusItemState.Moved)
                 .SelectMany(i => DbStatus.GetSubIterations(i.IterationId))
                 .Where(s => s.State == StatusItemState.Staged)
-                .Where(s => !_processingSubIteratinMap.ContainsKey(
+                .Where(s => !_processingSubIterationMap.ContainsKey(
                     SubIterationKey.FromSubIteration(s)))
-                .OrderBy(i => i.IterationId)
-                .ThenBy(i => i.SubIterationId)
-                .ThenBy(i => i.RecordBatchId)
+                .OrderBy(s => s.IterationId)
+                .ThenBy(s => s.SubIterationId)
                 .ToImmutableArray();
 
-            QueueSubIterationsForMoving(exportedRecordBatches, ct);
+            QueueSubIterationsForMoving(stagedSubIterations, ct);
         }
 
         private void QueueSubIterationsForMoving(
-            IEnumerable<StatusItem> recordBatches,
+            IEnumerable<StatusItem> subIterations,
             CancellationToken ct)
+        {
+            foreach (var subIteration in subIterations)
+            {
+                var key = SubIterationKey.FromSubIteration(subIteration);
+
+                _processingSubIterationMap[key] = subIteration;
+                EnqueueUnobservedTask(MoveSubIterationAsync(subIteration, ct), ct);
+            }
+        }
+
+        private Task MoveSubIterationAsync(StatusItem subIteration, CancellationToken ct)
         {
             throw new NotImplementedException();
         }
