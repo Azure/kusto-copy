@@ -130,7 +130,8 @@ namespace KustoCopyConsole.Orchestrations
             var allTasks = setupTasks
                 .Concat(planningTasks)
                 .Concat(exportingTasks)
-                .Concat(stagingTasks);
+                .Concat(stagingTasks)
+                .Concat(movingTasks);
 
             await Task.WhenAll(allTasks);
         }
