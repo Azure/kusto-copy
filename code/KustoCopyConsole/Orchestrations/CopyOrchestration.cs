@@ -58,7 +58,9 @@ namespace KustoCopyConsole.Orchestrations
                             connectionFactory.LakeFolderClient,
                             dbStatusList);
 
+                        Trace.WriteLine("Copying orchestration started");
                         await orchestration.RunAsync(ct);
+                        Trace.WriteLine("Copying orchestration completed");
                     }
                     else
                     {

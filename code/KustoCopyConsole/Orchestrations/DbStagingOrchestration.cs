@@ -76,8 +76,8 @@ namespace KustoCopyConsole.Orchestrations
             DatabaseStatus dbStatus,
             KustoIngestQueue ingestQueue)
             : base(
-                  StatusItemState.Planned,
                   StatusItemState.Exported,
+                  StatusItemState.Staged,
                   isContinuousRun,
                   planningTask,
                   dbStatus)
@@ -100,7 +100,8 @@ namespace KustoCopyConsole.Orchestrations
                     r.RecordBatchId!.Value)))
                 .OrderBy(i => i.IterationId)
                 .ThenBy(i => i.SubIterationId)
-                .ThenBy(i => i.RecordBatchId);
+                .ThenBy(i => i.RecordBatchId)
+                .ToImmutableArray();
 
             QueueRecordBatchesForStaging(exportedRecordBatches, ct);
         }

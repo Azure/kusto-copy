@@ -2,6 +2,7 @@
 using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -244,6 +245,7 @@ namespace KustoCopyConsole.Orchestrations
                     .Max(i => i.TimeWindowCount.TimeWindow.EndTime),
                     DateTime.UtcNow.Ticks.ToString("x8"));
 
+                Trace.WriteLine($"Sub iteration {subIteration.SubIterationId} created");
                 await _dbStatus.PersistNewItemsAsync(new[] { subIteration }, ct);
 
                 return subIteration;
@@ -294,6 +296,7 @@ namespace KustoCopyConsole.Orchestrations
                     info.Cursor,
                     info.Time);
 
+                Trace.WriteLine($"Iteration {newIterationId} created");
                 await _dbStatus.PersistNewItemsAsync(new[] { newIteration }, ct);
 
                 return newIteration;
