@@ -59,7 +59,9 @@ namespace KustoCopyConsole.KustoQuery
                         commandText,
                         r => (Guid)r["OperationId"]);
 
-                    await _awaiter.RunAsynchronousOperationAsync(operationsIds.First());
+                    await _awaiter.RunAsynchronousOperationAsync(
+                        operationsIds.First(),
+                        commandText);
                 });
         }
     }

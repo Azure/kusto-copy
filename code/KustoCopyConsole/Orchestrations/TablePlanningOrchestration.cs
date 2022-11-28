@@ -29,7 +29,6 @@ namespace KustoCopyConsole.Orchestrations
         public static async Task PlanAsync(
             KustoPriority kustoPriority,
             StatusItem subIteration,
-            CursorWindow cursorWindow,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
             Func<long> recordBatchIdProvider,
@@ -38,7 +37,6 @@ namespace KustoCopyConsole.Orchestrations
             var orchestration = new TablePlanningOrchestration(
                 kustoPriority,
                 subIteration,
-                cursorWindow,
                 dbStatus,
                 sourceQueuedClient,
                 recordBatchIdProvider);
@@ -49,14 +47,15 @@ namespace KustoCopyConsole.Orchestrations
         private TablePlanningOrchestration(
             KustoPriority kustoPriority,
             StatusItem subIteration,
-            CursorWindow cursorWindow,
             DatabaseStatus dbStatus,
             KustoQueuedClient sourceQueuedClient,
             Func<long> recordBatchIdProvider)
         {
             _kustoPriority = kustoPriority;
             _subIteration = subIteration;
-            _cursorWindowPredicate = cursorWindow.ToCursorKustoPredicate();
+            _cursorWindowPredicate = dbStatus
+                .GetCursorWindow(subIteration.IterationId)
+                .ToCursorKustoPredicate();
             _dbStatus = dbStatus;
             _sourceQueuedClient = sourceQueuedClient;
             _recordBatchIdProvider = recordBatchIdProvider;
@@ -180,11 +179,13 @@ declare query_parameters(StartTime:datetime, EndTime:datetime);
 | order by IngestionTime asc
 | extend IsNewExtentId = iif(prev(ExtentId)==ExtentId, false, true)
 | extend IsNextNewExtentId = iif(next(ExtentId)==ExtentId, false, true)
+| extend TotalCardinality = row_cumsum(Cardinality, IsNewExtentId)
 | where IsNewExtentId or IsNextNewExtentId
 | extend MinIngestionTime=IngestionTime
 | extend MaxIngestionTime=iif(not(IsNextNewExtentId), next(IngestionTime), IngestionTime)
+| extend ActualTotalCardinality = iif(IsNextNewExtentId, TotalCardinality, next(TotalCardinality))
 | where IsNewExtentId
-| project MinIngestionTime, MaxIngestionTime, tostring(ExtentId), Cardinality
+| project MinIngestionTime, MaxIngestionTime, tostring(ExtentId), Cardinality=ActualTotalCardinality
 | take {RECORD_BATCH_SIZE}
 ";
             var protoBatches = await sourceQueuedClient.ExecuteQueryAsync(

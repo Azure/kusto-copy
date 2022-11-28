@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Files.DataLake;
 using CsvHelper;
+using KustoCopyConsole.Orchestrations;
 using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
 using System;
 using System.Collections.Concurrent;
@@ -349,6 +350,22 @@ namespace KustoCopyConsole.Storage
         public StatusItem GetRecordBatch(long iterationId, long subIterationId, long recordBatchId)
         {
             return _statusIndex.GetRecordBatch(iterationId, subIterationId, recordBatchId);
+        }
+
+        public CursorWindow GetCursorWindow(long iterationId)
+        {
+            var iteration = GetIteration(iterationId);
+
+            if (iterationId == 1)
+            {
+                return new CursorWindow(null, iteration.EndCursor);
+            }
+            else
+            {
+                var previousIteration = GetIteration(iterationId - 1);
+
+                return new CursorWindow(previousIteration.EndCursor, previousIteration.EndCursor);
+            }
         }
 
         public async Task RollupStatesAsync(

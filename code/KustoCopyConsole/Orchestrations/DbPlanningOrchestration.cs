@@ -99,7 +99,6 @@ namespace KustoCopyConsole.Orchestrations
                         _dbStatus.DbName,
                         t),
                     subIteration,
-                    GetLatestCursorWindow(subIteration.IterationId),
                     _dbStatus,
                     _queuedClient,
                     () => Interlocked.Increment(ref currentRecordBatchId),
@@ -131,7 +130,7 @@ namespace KustoCopyConsole.Orchestrations
                 var subIterationId = subIterations.Any()
                     ? subIterations.Max(i => i.SubIterationId!) + 1
                     : 1;
-                var cursorWindow = GetLatestCursorWindow(iterationId);
+                var cursorWindow = _dbStatus.GetCursorWindow(iterationId);
                 //  Find time window for each table to establish sub iteration
                 var timeWindowsTasks = tableNames.Select(t => new
                 {
@@ -253,22 +252,6 @@ namespace KustoCopyConsole.Orchestrations
             else
             {
                 return null;
-            }
-        }
-
-        private CursorWindow GetLatestCursorWindow(long iterationId)
-        {
-            var iteration = _dbStatus.GetIteration(iterationId);
-
-            if (iterationId == 1)
-            {
-                return new CursorWindow(null, iteration.EndCursor);
-            }
-            else
-            {
-                var previousIteration = _dbStatus.GetIteration(iterationId - 1);
-
-                return new CursorWindow(previousIteration.EndCursor, previousIteration.EndCursor);
             }
         }
 

@@ -57,14 +57,15 @@ namespace KustoCopyConsole.Orchestrations
                 _priority.SubIterationId!.Value,
                 _recordBatchId);
             var planState = recordBatch.InternalState.RecordBatchState!.PlanRecordBatchState!;
+            var cursorWindow = _dbStatus.GetCursorWindow(recordBatch.IterationId);
 
             await deleteFolderTask;
 
             var exportOutputs = await _exportQueue.ExportAsync(
                 _priority,
                 _folderClient.Uri,
+                cursorWindow,
                 planState.IngestionTimes,
-                planState.CreationTime!.Value,
                 planState.RecordCount!.Value);
             var postSchema = await FetchSchemaAsync(ct);
 

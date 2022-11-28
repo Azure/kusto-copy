@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Orchestrations;
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
 using System;
@@ -31,17 +32,22 @@ namespace KustoCopyConsole.KustoQuery
         public async Task<IImmutableList<ExportOutput>> ExportAsync(
             KustoPriority priority,
             Uri folderUri,
-            IEnumerable<TimeInterval> ingestionTimes,
-            DateTime creationTime,
+            CursorWindow cursorWindow,
+            IImmutableList<TimeInterval> ingestionTimes,
             long expectedRecordCount)
         {
-            var commandText = $@".export async 
-  compressed
-  to csv (
+            var timeFilters = ingestionTimes
+                .Select(i => $"(ingestion_time()>=datetime({i.StartTime.ToKql()})" +
+                $" and ingestion_time()<=datetime({i.EndTime.ToKql()}))");
+            var commandText = $@"
+.export async compressed
+to csv (
     h@'{folderUri};impersonate'
-  ) 
-  <|
-  ['{priority.TableName}']
+)
+<|
+['{priority.TableName}']
+{cursorWindow.ToCursorKustoPredicate()}
+| where {string.Join(Environment.NewLine + " or ", timeFilters)}
 ";
             var outputs = await _queue.RequestRunAsync(
                 priority,
@@ -54,10 +60,19 @@ namespace KustoCopyConsole.KustoQuery
                         r => (Guid)r["OperationId"]);
                     var outputs = await _awaiter.RunAsynchronousOperationAsync(
                         operationsIds.First(),
+                        commandText,
                         r => new ExportOutput(
                             new Uri((string)r["Path"]),
                             (long)r["NumRecords"],
                             (long)r["SizeInBytes"]));
+                    var totalRecordCount = outputs.Sum(o => o.RecordCount);
+
+                    if (expectedRecordCount != totalRecordCount)
+                    {
+                        throw new CopyException(
+                            $"Expected to export {expectedRecordCount} records"
+                            + $" but exported {totalRecordCount}");
+                    }
 
                     return outputs;
                 });

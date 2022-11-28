@@ -38,7 +38,9 @@ namespace KustoCopyConsole.KustoQuery
             _kustoClient = kustoClient;
         }
 
-        public async Task RunAsynchronousOperationAsync(Guid operationId)
+        public async Task RunAsynchronousOperationAsync(
+            Guid operationId,
+            string commandText)
         {
             var thisOperationState = new OperationState();
 
@@ -51,21 +53,22 @@ namespace KustoCopyConsole.KustoQuery
             {
                 throw new CopyException(
                     $"Operation {operationId} failed with message:  "
-                    + $"'{thisOperationState.Status}'");
+                    + $"'{thisOperationState.Status}' for command {commandText}");
             }
             else if (thisOperationState.State == THROTTLED_STATE)
             {
                 throw new CopyException(
                     $"Operation {operationId} has been throttled with message:  "
-                    + $"'{thisOperationState.Status}'");
+                    + $"'{thisOperationState.Status}' for command {commandText}");
             }
         }
 
         public async Task<IImmutableList<T>> RunAsynchronousOperationAsync<T>(
             Guid operationId,
+            string commandText,
             Func<IDataRecord, T> projection)
         {
-            await RunAsynchronousOperationAsync(operationId);
+            await RunAsynchronousOperationAsync(operationId, commandText);
 
             return await FetchOperationDetailsAsync(operationId, projection);
         }
