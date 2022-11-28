@@ -266,7 +266,8 @@ namespace KustoCopyConsole.Orchestrations
             newRecordBatch.InternalState.RecordBatchState!.StageRecordBatchState =
                 new StageRecordBatchState
                 {
-                    ExtentIds = extentIds
+                    ExtentIds = extentIds,
+                    TagValue = tagValue
                 };
 
             await DbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
@@ -276,7 +277,7 @@ namespace KustoCopyConsole.Orchestrations
         {
             var commandText = $@".drop extent tags from table ['{priority.TableName}']
 ('{tagValue}')";
-            
+
             await _ingestQueue.Client.ExecuteCommandAsync(
                 KustoPriority.HighestPriority,
                 priority.DatabaseName!,
