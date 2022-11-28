@@ -12,6 +12,7 @@ The tool has the following known limitations:
 *   Number of databases:  the tool isn't optimized to work with lots of small databases totalling a huge amount (1000+) of tables
 *   The tool doesn't track purges, row deletions or extent drops
 *   Update policies aren't taken into account ; tables are replicated assuming it is all "original content"
+*   If some records have no ingestion-time (e.g. ingestion time policy was disabled), records won't be copied over
 
 ## Contributing
 
