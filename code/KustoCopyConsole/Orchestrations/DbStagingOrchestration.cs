@@ -56,14 +56,14 @@ namespace KustoCopyConsole.Orchestrations
         #region Constructor
         public static async Task StageAsync(
             bool isContinuousRun,
-            Task planningTask,
+            Task exportingTask,
             DatabaseStatus dbStatus,
             KustoIngestQueue ingestQueue,
             CancellationToken ct)
         {
             var orchestration = new DbStagingOrchestration(
                 isContinuousRun,
-                planningTask,
+                exportingTask,
                 dbStatus,
                 ingestQueue);
 
@@ -76,8 +76,8 @@ namespace KustoCopyConsole.Orchestrations
             DatabaseStatus dbStatus,
             KustoIngestQueue ingestQueue)
             : base(
-                  StatusItemState.Planned,
                   StatusItemState.Exported,
+                  StatusItemState.Staged,
                   isContinuousRun,
                   planningTask,
                   dbStatus)
@@ -95,12 +95,11 @@ namespace KustoCopyConsole.Orchestrations
                     s.IterationId,
                     s.SubIterationId!.Value))
                 .Where(r => r.State == StatusItemState.Exported)
-                .Where(r => !_processingRecordMap.ContainsKey(new RecordBatchKey(
-                    new TableKey(r.IterationId, r.SubIterationId!.Value, r.TableName!),
-                    r.RecordBatchId!.Value)))
+                .Where(r => !_processingRecordMap.ContainsKey(RecordBatchKey.FromRecordBatch(r)))
                 .OrderBy(i => i.IterationId)
                 .ThenBy(i => i.SubIterationId)
-                .ThenBy(i => i.RecordBatchId);
+                .ThenBy(i => i.RecordBatchId)
+                .ToImmutableArray();
 
             QueueRecordBatchesForStaging(exportedRecordBatches, ct);
         }
@@ -111,12 +110,7 @@ namespace KustoCopyConsole.Orchestrations
         {
             foreach (var record in recordBatches)
             {
-                var recordBatchKey = new RecordBatchKey(
-                    new TableKey(
-                        record.IterationId,
-                        record.SubIterationId!.Value,
-                        record.TableName!),
-                    record.RecordBatchId!.Value);
+                var recordBatchKey = RecordBatchKey.FromRecordBatch(record);
 
                 _processingRecordMap[recordBatchKey] = record;
                 EnqueueUnobservedTask(StageRecordBatchAsync(record, ct), ct);
@@ -128,13 +122,11 @@ namespace KustoCopyConsole.Orchestrations
             var subIteration = DbStatus.GetSubIteration(
                 recordBatch.IterationId,
                 recordBatch.SubIterationId!.Value);
-            var suffix = subIteration.InternalState!.SubIterationState!.StagingTableSuffix;
-            var stagingTableName = $"{recordBatch.TableName}_{suffix}";
             var priority = new KustoPriority(
                 recordBatch.IterationId,
                 recordBatch.SubIterationId,
                 DbStatus.DbName,
-                stagingTableName);
+                recordBatch.GetStagingTableName(subIteration));
 
             await SetupStagingTableAsync(recordBatch, priority, ct);
             await IngestRecordBatchAsync(recordBatch, priority, ct);
@@ -165,9 +157,23 @@ namespace KustoCopyConsole.Orchestrations
                     ", ",
                     columns.Select(i => $"{i.Name}:{i.Type}"));
                 var commandText = $@"
-.execute database script <|
+.execute database script with (ContinueOnErrors=false, ThrowOnErrors=true) <|
     .create-merge table ['{priority.TableName}']({columnListText})
-    .alter table ['{priority.TableName}']({columnListText})";
+    .alter table ['{priority.TableName}']({columnListText})
+    .alter table ['{priority.TableName}'] policy merge
+    ```
+    {{
+      ""AllowRebuild"": false,
+      ""AllowMerge"": false
+    }}
+    ```
+    .alter table ['{priority.TableName}'] policy caching hot = 0d
+    .alter table ['{priority.TableName}'] policy retention 
+    ```
+    {{
+      ""SoftDeletePeriod"": ""40000.00:00:00""
+    }}
+    ```";
 
                 await _ingestQueue.Client.ExecuteCommandAsync(
                     priority,
@@ -241,13 +247,78 @@ namespace KustoCopyConsole.Orchestrations
             var recordState = recordBatch
                 .InternalState!
                 .RecordBatchState!;
-            var outputs = await _ingestQueue.IngestAsync(
+            //  Tag to retrieve the extent IDs with
+            var tagValue = Guid.NewGuid().ToString();
+
+            await _ingestQueue.IngestAsync(
                 priority,
                 recordState!.ExportRecordBatchState!.BlobPaths,
                 recordState!.PlanRecordBatchState!.CreationTime!.Value,
-                recordState!.ExportRecordBatchState!.RecordCount);
+                new[] { tagValue });
 
-            throw new NotImplementedException();
+            var extentIds = await FetchExtentIdsAsync(
+                priority,
+                tagValue,
+                recordState!.ExportRecordBatchState!.RecordCount);
+            var newRecordBatch = recordBatch.UpdateState(StatusItemState.Staged);
+
+            await CleanExtentsAsync(priority, tagValue);
+            newRecordBatch.InternalState.RecordBatchState!.StageRecordBatchState =
+                new StageRecordBatchState
+                {
+                    ExtentIds = extentIds,
+                    TagValue = tagValue
+                };
+
+            await DbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
+        }
+
+        private async Task CleanExtentsAsync(KustoPriority priority, string tagValue)
+        {
+            var commandText = $@".drop extent tags from table ['{priority.TableName}']
+('{tagValue}')";
+
+            await _ingestQueue.Client.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                priority.DatabaseName!,
+                commandText,
+                r => r);
+        }
+
+        private async Task<IImmutableList<string>> FetchExtentIdsAsync(
+            KustoPriority priority,
+            string tagValue,
+            long expectedRecordCount)
+        {
+            var queryText = $@"['{priority.TableName}']
+| where array_length(extent_tags())!=0
+| project Tag = tostring(extent_tags()[0])
+| where Tag == '{tagValue}'
+| summarize Cardinality=count() by ExtentId = extent_id()
+";
+            var outputs = await _ingestQueue.Client.ExecuteQueryAsync(
+                KustoPriority.HighestPriority,
+                priority.DatabaseName!,
+                queryText,
+                r => new
+                {
+                    ExtentId = (Guid)r["ExtentId"],
+                    Cardinality = (long)r["Cardinality"]
+                });
+            var totalCardinality = outputs.Sum(o => o.Cardinality);
+
+            if (totalCardinality != expectedRecordCount)
+            {
+                throw new InvalidOperationException(
+                    $"Expected ingested record count was {expectedRecordCount} but was"
+                    + $"{totalCardinality}");
+            }
+
+            var extentIds = outputs
+                .Select(o => o.ExtentId.ToString())
+                .ToImmutableArray();
+
+            return extentIds;
         }
     }
 }

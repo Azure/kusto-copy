@@ -2,6 +2,7 @@
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoIngestQueue
     {
-        private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
         public KustoIngestQueue(
@@ -21,42 +22,45 @@ namespace KustoCopyConsole.KustoQuery
             int concurrentIngestCommandCount)
         {
             Client = kustoClient;
+            _queue = new PriorityExecutionQueue<KustoPriority>(concurrentIngestCommandCount);
             _awaiter = kustoOperationAwaiter;
-            _executionQueue.ParallelRunCount = concurrentIngestCommandCount;
         }
 
         public KustoQueuedClient Client { get; }
 
-        public bool HasAvailability => _executionQueue.HasAvailability;
-
-        public async Task<IImmutableList<ExportOutput>> IngestAsync(
+        public async Task IngestAsync(
             KustoPriority priority,
             IEnumerable<Uri> blobPaths,
             DateTime creationTime,
-            long expectedRecordCount)
+            IEnumerable<string> tags)
         {
             var pathTexts = blobPaths
                 .Select(p => $"'{p};impersonate'");
             var sourceLocatorText = string.Join(Environment.NewLine + ", ", pathTexts);
+            var creationTimeText = creationTime.ToString("yyyy-MM-dd HH:mm:ss");
+            var tagsText = string.Join(", ", tags.Select(t => $"'{t}'"));
             var commandText = $@".ingest async into table ['{priority.TableName}']
   (
     {sourceLocatorText}
   ) 
-  with (format='csv', persistDetails=true)
+  with (
+    format='csv',
+    persistDetails=true,
+    creationTime='{creationTimeText}',
+    tags=""[{tagsText}]"")
 ";
-            var operationsIds = await Client.ExecuteCommandAsync(
+            await _queue.RequestRunAsync(
                 priority,
-                priority.DatabaseName!,
-                commandText,
-                r => (Guid)r["OperationId"]);
-            var outputs = await _awaiter.RunAsynchronousOperationAsync(
-                operationsIds.First(),
-                r => new ExportOutput(
-                    new Uri((string)r["Path"]),
-                    (long)r["NumRecords"],
-                    (long)r["SizeInBytes"]));
+                async () =>
+                {
+                    var operationsIds = await Client.ExecuteCommandAsync(
+                        KustoPriority.HighestPriority,
+                        priority.DatabaseName!,
+                        commandText,
+                        r => (Guid)r["OperationId"]);
 
-            return outputs;
+                    await _awaiter.RunAsynchronousOperationAsync(operationsIds.First());
+                });
         }
     }
 }

@@ -220,6 +220,14 @@ namespace KustoCopyConsole.Storage
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
 
+        public string GetStagingTableName(StatusItem subIteration)
+        {
+            var suffix = subIteration.InternalState!.SubIterationState!.StagingTableSuffix;
+            var stagingTableName = $"Stg_{TableName}_{suffix}";
+
+            return stagingTableName;
+        }
+
         public StatusItem UpdateState(StatusItemState applied)
         {
             var clone = Clone(clone =>

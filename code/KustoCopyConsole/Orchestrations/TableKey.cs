@@ -2,13 +2,12 @@
 
 namespace KustoCopyConsole.Orchestrations
 {
-    public record TableKey(long IterationId, long SubIterationId, string TableName)
+    public record TableKey(SubIterationKey SubIterationKey, string TableName)
     {
         public static TableKey FromRecordBatch(StatusItem recordBatch)
         {
             var tableKey = new TableKey(
-                recordBatch.IterationId,
-                recordBatch.SubIterationId!.Value,
+                SubIterationKey.FromSubIteration(recordBatch),
                 recordBatch.TableName!);
 
             return tableKey;

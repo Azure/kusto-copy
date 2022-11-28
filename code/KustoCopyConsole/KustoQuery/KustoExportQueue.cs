@@ -2,6 +2,7 @@
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoExportQueue
     {
-        private readonly ExecutionQueue _executionQueue = new ExecutionQueue(1);
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
         public KustoExportQueue(
@@ -21,13 +22,11 @@ namespace KustoCopyConsole.KustoQuery
             int concurrentExportCommandCount)
         {
             Client = kustoClient;
+            _queue = new PriorityExecutionQueue<KustoPriority>(concurrentExportCommandCount);
             _awaiter = kustoOperationAwaiter;
-            _executionQueue.ParallelRunCount = concurrentExportCommandCount;
         }
 
         public KustoQueuedClient Client { get; }
-
-        public bool HasAvailability => _executionQueue.HasAvailability;
 
         public async Task<IImmutableList<ExportOutput>> ExportAsync(
             KustoPriority priority,
@@ -44,17 +43,24 @@ namespace KustoCopyConsole.KustoQuery
   <|
   ['{priority.TableName}']
 ";
-            var operationsIds = await Client.ExecuteCommandAsync(
+            var outputs = await _queue.RequestRunAsync(
                 priority,
-                priority.DatabaseName!,
-                commandText,
-                r => (Guid)r["OperationId"]);
-            var outputs = await _awaiter.RunAsynchronousOperationAsync(
-                operationsIds.First(),
-                r=>new ExportOutput(
-                    new Uri((string)r["Path"]),
-                    (long)r["NumRecords"],
-                    (long)r["SizeInBytes"]));
+                async () =>
+                {
+                    var operationsIds = await Client.ExecuteCommandAsync(
+                        KustoPriority.HighestPriority,
+                        priority.DatabaseName!,
+                        commandText,
+                        r => (Guid)r["OperationId"]);
+                    var outputs = await _awaiter.RunAsynchronousOperationAsync(
+                        operationsIds.First(),
+                        r => new ExportOutput(
+                            new Uri((string)r["Path"]),
+                            (long)r["NumRecords"],
+                            (long)r["SizeInBytes"]));
+
+                    return outputs;
+                });
 
             return outputs;
         }
