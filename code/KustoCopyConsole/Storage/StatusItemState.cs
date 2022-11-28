@@ -14,7 +14,7 @@ namespace KustoCopyConsole.Storage
         Exported = 3,
         Staged = 4,
         Moved = 5,
-        Done = 6,
+        Complete = 6,
         Deleted = 7
     }
 }
