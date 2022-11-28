@@ -25,10 +25,11 @@ namespace KustoCopyConsole.Storage
 
         public static string ExternalTableSchema =>
             $"{nameof(IterationId)}:long, {nameof(EndCursor)}:string, "
-            + $"{nameof(StartIteration)}:datetime, {nameof(EndIteration)}:datetime, "
             + $"{nameof(SubIterationId)}:long, "
             + $"{nameof(RecordBatchId)}:long, {nameof(TableName)}:string, "
-            + $"{nameof(State)}:string, {nameof(Timestamp)}:datetime, {nameof(InternalState)}:dynamic";
+            + $"{nameof(State)}:string, "
+            + $"{nameof(Created)}:datetime, {nameof(Updated)}:datetime, "
+            + $"{nameof(InternalState)}:dynamic";
 
         #region Inner types
         private class InternalStateConverter : DefaultTypeConverter
@@ -85,16 +86,16 @@ namespace KustoCopyConsole.Storage
         #region Constructors
         public static StatusItem CreateIteration(
             long iterationId,
-            string endCursor,
-            DateTime startIteration)
+            string endCursor)
         {
+            var now = DateTime.UtcNow;
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 EndCursor = endCursor,
-                StartIteration = startIteration,
                 State = StatusItemState.Initial,
-                Timestamp = DateTime.UtcNow
+                Created = now,
+                Updated = now
             };
 
             return item;
@@ -107,12 +108,14 @@ namespace KustoCopyConsole.Storage
             DateTime endIngestionTime,
             string? stagingTableSuffix)
         {
+            var now = DateTime.UtcNow;
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
                 State = StatusItemState.Initial,
-                Timestamp = DateTime.UtcNow,
+                Created = now,
+                Updated = now,
                 InternalState = new InternalState
                 {
                     SubIterationState = new SubIterationState
@@ -136,6 +139,7 @@ namespace KustoCopyConsole.Storage
             DateTime creationTime,
             long recordCount)
         {
+            var now = DateTime.UtcNow;
             var item = new StatusItem
             {
                 IterationId = iterationId,
@@ -143,7 +147,8 @@ namespace KustoCopyConsole.Storage
                 RecordBatchId = recordBatchId,
                 TableName = tableName,
                 State = StatusItemState.Planned,
-                Timestamp = DateTime.UtcNow,
+                Created = now,
+                Updated = now,
                 InternalState = new InternalState
                 {
                     RecordBatchState = new RecordBatchState
@@ -182,40 +187,35 @@ namespace KustoCopyConsole.Storage
         /// <summary>End cursor of the iteration.</summary>
         [Index(1)]
         public string EndCursor { get; set; } = string.Empty;
-
-        /// <summary>Start time for iteration.</summary>
-        [Index(2)]
-        public DateTime? StartIteration { get; set; }
-
-        /// <summary>end time for iteration.</summary>
-        [Index(3)]
-        public DateTime? EndIteration { get; set; }
         #endregion
 
         #region Sub Iteration
         /// <summary>Identifier of the sub iteration.</summary>
-        [Index(4)]
+        [Index(2)]
         public long? SubIterationId { get; set; }
         #endregion
 
         #region Record Batch
         /// <summary>Identifier of the record batch.</summary>
-        [Index(5)]
+        [Index(3)]
         public long? RecordBatchId { get; set; }
 
         /// <summary>Table Name.</summary>
-        [Index(6)]
+        [Index(4)]
         public string TableName { get; set; } = string.Empty;
         #endregion
 
         /// <summary>State of the item.</summary>
-        [Index(7)]
+        [Index(5)]
         public StatusItemState State { get; set; } = StatusItemState.Initial;
 
-        [Index(8)]
-        public DateTime Timestamp { get; set; }
+        [Index(6)]
+        public DateTime Created { get; set; }
 
-        [Index(9)]
+        [Index(7)]
+        public DateTime Updated { get; set; }
+
+        [Index(8)]
         [TypeConverter(typeof(InternalStateConverter))]
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
@@ -233,7 +233,7 @@ namespace KustoCopyConsole.Storage
             var clone = Clone(clone =>
             {
                 clone.State = applied;
-                clone.Timestamp = DateTime.UtcNow;
+                clone.Updated = DateTime.UtcNow;
             });
 
             return clone;

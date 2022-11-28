@@ -139,7 +139,7 @@ namespace KustoCopyConsole.Orchestrations
             var tables = DbStatus
                 .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
                 .GroupBy(r => r.TableName)
-                .Select(g => g.MaxBy(r => r.Timestamp)!)
+                .Select(g => g.MaxBy(r => r.Created)!)
                 .Select(r => new
                 {
                     TableName = r.TableName,
