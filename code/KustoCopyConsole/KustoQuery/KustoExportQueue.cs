@@ -37,8 +37,8 @@ namespace KustoCopyConsole.KustoQuery
             long expectedRecordCount)
         {
             var timeFilters = ingestionTimes
-                .Select(i => $"(ingestion_time()>=datetime({i.StartTime.ToKql()})" +
-                $" and ingestion_time()<=datetime({i.EndTime.ToKql()}))");
+                .Select(i => $"(ingestion_time()>={i.StartTime.ToKql()}" +
+                $" and ingestion_time()<={i.EndTime.ToKql()})");
             var commandText = $@"
 .export async compressed
 to csv (

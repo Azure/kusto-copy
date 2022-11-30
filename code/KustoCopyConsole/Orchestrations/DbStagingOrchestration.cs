@@ -256,13 +256,13 @@ namespace KustoCopyConsole.Orchestrations
                 recordState!.PlanRecordBatchState!.CreationTime!.Value,
                 new[] { tagValue });
 
-            var extentIds = await FetchExtentIdsAsync(
-                priority,
-                tagValue,
-                recordState!.ExportRecordBatchState!.RecordCount);
             var newRecordBatch = recordBatch.UpdateState(StatusItemState.Staged);
+            var extentIds = await CleanExtentsAsync(priority, tagValue);
 
-            await CleanExtentsAsync(priority, tagValue);
+            await ValidateRecordCountAsync(
+                priority,
+                extentIds,
+                recordState!.ExportRecordBatchState!.RecordCount);
             newRecordBatch.InternalState.RecordBatchState!.StageRecordBatchState =
                 new StageRecordBatchState
                 {
@@ -273,39 +273,37 @@ namespace KustoCopyConsole.Orchestrations
             await DbStatus.PersistNewItemsAsync(new[] { newRecordBatch }, ct);
         }
 
-        private async Task CleanExtentsAsync(KustoPriority priority, string tagValue)
+        private async Task<IImmutableList<string>> CleanExtentsAsync(
+            KustoPriority priority,
+            string tagValue)
         {
             var commandText = $@".drop extent tags from table ['{priority.TableName}']
 ('{tagValue}')";
-
-            await _ingestQueue.Client.ExecuteCommandAsync(
+            var extentIds = await _ingestQueue.Client.ExecuteCommandAsync(
                 KustoPriority.HighestPriority,
                 priority.DatabaseName!,
                 commandText,
-                r => r);
+                r => (string)r["ResultExtentId"]);
+
+            return extentIds;
         }
 
-        private async Task<IImmutableList<string>> FetchExtentIdsAsync(
+        private async Task ValidateRecordCountAsync(
             KustoPriority priority,
-            string tagValue,
+            IEnumerable<string> extentIds,
             long expectedRecordCount)
         {
+            var extentIdsText = string.Join(", ", extentIds.Select(e => $"'{e}'"));
             var queryText = $@"['{priority.TableName}']
-| where array_length(extent_tags())!=0
-| project Tag = tostring(extent_tags()[0])
-| where Tag == '{tagValue}'
-| summarize Cardinality=count() by ExtentId = extent_id()
+| where extent_id() in ({extentIdsText})
+| summarize Cardinality=count()
 ";
-            var outputs = await _ingestQueue.Client.ExecuteQueryAsync(
+            var cardinalities = await _ingestQueue.Client.ExecuteQueryAsync(
                 KustoPriority.HighestPriority,
                 priority.DatabaseName!,
                 queryText,
-                r => new
-                {
-                    ExtentId = (Guid)r["ExtentId"],
-                    Cardinality = (long)r["Cardinality"]
-                });
-            var totalCardinality = outputs.Sum(o => o.Cardinality);
+                r => (long)r["Cardinality"]);
+            var totalCardinality = cardinalities.Sum(c => c);
 
             if (totalCardinality != expectedRecordCount)
             {
@@ -313,12 +311,6 @@ namespace KustoCopyConsole.Orchestrations
                     $"Expected ingested record count was {expectedRecordCount} but was"
                     + $"{totalCardinality}");
             }
-
-            var extentIds = outputs
-                .Select(o => o.ExtentId.ToString())
-                .ToImmutableArray();
-
-            return extentIds;
         }
     }
 }
