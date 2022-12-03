@@ -55,14 +55,14 @@ namespace KustoCopyConsole.Orchestrations
         #region Constructor
         public static async Task StageAsync(
             bool isContinuousRun,
-            Task planningTask,
+            Task stagingTask,
             DatabaseStatus dbStatus,
             KustoQueuedClient queuedClient,
             CancellationToken ct)
         {
             var orchestration = new DbMovingOrchestration(
                 isContinuousRun,
-                planningTask,
+                stagingTask,
                 dbStatus,
                 queuedClient);
 
