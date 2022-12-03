@@ -1,8 +1,12 @@
-﻿using Azure.Core;
+﻿using Azure;
+using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
+using Kusto.Data.Exceptions;
+using Polly.Retry;
+using Polly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +18,11 @@ namespace KustoCopyConsole.Storage
 {
     internal class CheckpointGateway
     {
+        private static readonly AsyncRetryPolicy _retryPolicyReadWhileWriting =
+            Policy.Handle<RequestFailedException>(e => e.Status == 409).WaitAndRetryAsync(
+                5,
+                attempt => TimeSpan.FromSeconds((float)attempt / 5));
+
         private const string CHECKPOINT_BLOB = "index.csv";
         private const string TEMP_CHECKPOINT_BLOB = "temp-index.csv";
 
@@ -43,7 +52,7 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         public Uri BlobUri => _blobClient.Uri;
-        
+
         public DataLakeDirectoryClient FolderClient => _lakeFolderClient;
 
         public bool CanWrite => _blockCount < 50000;
@@ -88,10 +97,13 @@ namespace KustoCopyConsole.Storage
 
         public async Task WriteAsync(byte[] buffer, CancellationToken ct)
         {
-            using (var stream = new MemoryStream(buffer))
+            await _retryPolicyReadWhileWriting.ExecuteAsync(async () =>
             {
-                await _blobClient.AppendBlockAsync(stream, cancellationToken: ct);
-            }
+                using (var stream = new MemoryStream(buffer))
+                {
+                    await _blobClient.AppendBlockAsync(stream, cancellationToken: ct);
+                }
+            });
             Interlocked.Increment(ref _blockCount);
         }
 

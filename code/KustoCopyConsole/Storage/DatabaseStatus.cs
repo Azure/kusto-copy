@@ -320,7 +320,16 @@ namespace KustoCopyConsole.Storage
 
         public Uri IndexBlobUri => _checkpointGateway.BlobUri;
         
-        public DataLakeDirectoryClient IndexFolderClient => _checkpointGateway.FolderClient;
+        public DataLakeDirectoryClient GetSubIterationFolderClient(
+            long iterationId,
+            long subIterationId)
+        {
+            var client = _checkpointGateway.FolderClient
+                .GetSubDirectoryClient($"iteration-{iterationId:D20}")
+                .GetSubDirectoryClient($"subIteration-{subIterationId:D20}");
+
+            return client;
+        }
 
         public IImmutableList<StatusItem> GetIterations()
         {

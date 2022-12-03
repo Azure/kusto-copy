@@ -76,14 +76,17 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task ExportRecordBatchAsync(StatusItem recordBatch, CancellationToken ct)
         {
+            var recordBatchId = recordBatch.RecordBatchId!.Value;
+
             await RecordBatchExportingOrchestration.ExportAsync(
                 recordBatch,
                 DbStatus,
                 _sourceExportQueue,
-                DbStatus
-                .IndexFolderClient
+                DbStatus.GetSubIterationFolderClient(
+                    recordBatch.IterationId,
+                    recordBatch.SubIterationId!.Value)
                 .GetSubDirectoryClient(recordBatch.TableName)
-                .GetSubDirectoryClient(recordBatch.RecordBatchId!.Value.ToString("D20")),
+                .GetSubDirectoryClient($"batch-{recordBatchId:D20}"),
                 ct);
 
             if (!_processingRecordMap.TryRemove(
