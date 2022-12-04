@@ -3,6 +3,7 @@ using KustoCopyConsole.Parameters;
 using KustoCopyConsole.Storage;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 
@@ -126,6 +127,12 @@ namespace KustoCopyConsole.Orchestrations
                     .Select(r => r.Iteration.UpdateState(StatusItemState.Complete))
                     .ToImmutableArray();
 
+                foreach (var iterationId in newIterations
+                    .Select(i => i.IterationId)
+                    .OrderBy(i => i))
+                {
+                    Trace.WriteLine($"Iteration {iterationId} completed");
+                }
                 await Task.WhenAll(deleteFolderTasks);
                 await DbStatus.PersistNewItemsAsync(newIterations, ct);
             }
@@ -160,6 +167,7 @@ namespace KustoCopyConsole.Orchestrations
                 .Select(r => r.UpdateState(StatusItemState.Complete));
             var allItems = newRecordBatches.Prepend(newSubIteration).ToImmutableArray();
 
+            Trace.WriteLine($"Sub iteration {subIterationKey.SubIterationId} completed");
             await DbStatus.PersistNewItemsAsync(allItems, ct);
         }
 
