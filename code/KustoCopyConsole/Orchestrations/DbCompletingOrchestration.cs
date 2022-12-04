@@ -88,7 +88,7 @@ namespace KustoCopyConsole.Orchestrations
         protected override void QueueActivities(CancellationToken ct)
         {
             var movedSubIterations = DbStatus.GetIterations()
-                .Where(i => i.State <= StatusItemState.Complete)
+                .Where(i => i.State <= StatusItemState.Moved)
                 .SelectMany(i => DbStatus.GetSubIterations(i.IterationId))
                 .Where(s => s.State == StatusItemState.Moved)
                 .Where(s => !_processingSubIterationMap.ContainsKey(
@@ -98,6 +98,37 @@ namespace KustoCopyConsole.Orchestrations
                 .ToImmutableArray();
 
             QueueSubIterationsForCompleting(movedSubIterations, ct);
+        }
+
+        protected override async Task RollupStatesAsync(CancellationToken ct)
+        {
+            var readyToCompleteIterations = DbStatus.GetIterations()
+                .Where(i => i.State == StatusItemState.Moved)
+                .Select(i => new
+                {
+                    Iteration = i,
+                    SubIterations = DbStatus.GetSubIterations(i.IterationId)
+                })
+                .Where(i => i.SubIterations.All(s => s.State == StatusItemState.Complete))
+                .Select(i => new
+                {
+                    Iteration = i.Iteration,
+                    FolderClient = DbStatus.GetIterationFolderClient(i.Iteration.IterationId)
+                })
+                .ToImmutableArray();
+
+            if (readyToCompleteIterations.Any())
+            {
+                var deleteFolderTasks = readyToCompleteIterations
+                    .Select(i => i.FolderClient.DeleteIfExistsAsync(cancellationToken: ct))
+                    .ToImmutableArray();
+                var newIterations = readyToCompleteIterations
+                    .Select(r => r.Iteration.UpdateState(StatusItemState.Complete))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(deleteFolderTasks);
+                await DbStatus.PersistNewItemsAsync(newIterations, ct);
+            }
         }
 
         private void QueueSubIterationsForCompleting(

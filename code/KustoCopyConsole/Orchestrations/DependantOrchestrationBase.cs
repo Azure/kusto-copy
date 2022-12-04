@@ -51,16 +51,21 @@ namespace KustoCopyConsole.Orchestrations
 
                 QueueActivities(ct);
 
-                await DbStatus.RollupStatesAsync(
-                    _fromState,
-                    _toState,
-                    ct);
+                await RollupStatesAsync(ct);
                 //  Wait for activity to continue
                 await _awaitingActivitiesSource.Task;
                 //  Reset task source
                 _awaitingActivitiesSource = new TaskCompletionSource();
             }
             await ObserveTasksAsync();
+        }
+
+        protected virtual async Task RollupStatesAsync(CancellationToken ct)
+        {
+            await DbStatus.RollupStatesAsync(
+                _fromState,
+                _toState,
+                ct);
         }
 
         protected void EnqueueUnobservedTask(Task task, CancellationToken ct)

@@ -88,7 +88,7 @@ namespace KustoCopyConsole.Orchestrations
         protected override void QueueActivities(CancellationToken ct)
         {
             var stagedSubIterations = DbStatus.GetIterations()
-                .Where(i => i.State <= StatusItemState.Moved)
+                .Where(i => i.State <= StatusItemState.Staged)
                 .SelectMany(i => DbStatus.GetSubIterations(i.IterationId))
                 .Where(s => s.State == StatusItemState.Staged)
                 .Where(s => !_processingSubIterationMap.ContainsKey(
