@@ -2,8 +2,8 @@ lakeFolderConnectionString:  URL  # URL of ADLS gen 2 folder where state data (i
 # If source isn't present, no export is performed
 source:
     clusterQueryConnectionString:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
-    concurrentQueryCount:  1    #   Number of queries / commands sent in parallel to a given cluster
-    concurrentExportCommandCount:  2    #   Number of export commands sent in parallel to a given cluster
+    concurrentQueryCount:  1    #   Number of queries / commands sent in parallel to a given cluster (0 will take the maximum number of slots)
+    concurrentExportCommandCount:  20    #   Number of export commands sent in parallel to a given cluster
     databaseDefault:
         isEnabled:  true #   Indicates if data will be exported from the source
         backfillHorizon:  null  #   Horizon back in time we replicate history in ingestion-time (as timespan) ; null means infinite

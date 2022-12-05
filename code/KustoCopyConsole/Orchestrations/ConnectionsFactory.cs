@@ -6,13 +6,15 @@ using Azure.Storage.Files.DataLake;
 using Kusto.Data;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Parameters;
+using System.Net.NetworkInformation;
 
 namespace KustoCopyConsole.Orchestrations
 {
     public class ConnectionsFactory
     {
         #region Constructors
-        public static ConnectionsFactory Create(MainParameterization parameterization)
+        public static async Task<ConnectionsFactory> CreateAsync(
+            MainParameterization parameterization)
         {
             var lakeFolderBuilder =
                 new KustoConnectionStringBuilder(parameterization.LakeFolderConnectionString);
@@ -20,20 +22,30 @@ namespace KustoCopyConsole.Orchestrations
             var lakeFolderUri = new Uri(lakeFolderBuilder.DataSource);
             var lakeFolderClient = new DataLakeDirectoryClient(lakeFolderUri, credentials);
             var lakeContainerClient = GetLakeContainerClient(lakeFolderUri, credentials);
-            var sourceExportQueue = parameterization.Source != null
-                ? CreateKustoExportQueue(
+            var sourceExportQueueTask = parameterization.Source != null
+                ? CreateKustoExportQueueAsync(
                     credentials,
                     parameterization.Source!.ClusterQueryConnectionString!,
                     parameterization.Source!.ConcurrentQueryCount,
                     parameterization.Source!.ConcurrentExportCommandCount)
                 : null;
-            var destinationIngestQueue = parameterization.Destination != null
-                ? CreateKustoIngestQueue(
+            var destinationIngestQueueTask = parameterization.Destination != null
+                ? CreateKustoIngestQueueAsync(
                     credentials,
                     parameterization.Destination!.ClusterQueryConnectionString!,
                     parameterization.Destination!.ConcurrentQueryCount,
                     parameterization.Destination!.ConcurrentIngestionCount)
                 : null;
+
+            //  Forces authentication to data lake
+            await lakeContainerClient.GetPropertiesAsync();
+
+            var sourceExportQueue = sourceExportQueueTask == null
+                ? null
+                : await sourceExportQueueTask;
+            var destinationIngestQueue = destinationIngestQueueTask == null
+                ? null
+                : await destinationIngestQueueTask;
 
             return new ConnectionsFactory(
                 lakeFolderClient,
@@ -87,7 +99,7 @@ namespace KustoCopyConsole.Orchestrations
             return sourceQueuedClient;
         }
 
-        private static KustoExportQueue CreateKustoExportQueue(
+        private static async Task<KustoExportQueue> CreateKustoExportQueueAsync(
             TokenCredential credentials,
             string clusterQueryConnectionString,
             int concurrentQueryCount,
@@ -98,15 +110,32 @@ namespace KustoCopyConsole.Orchestrations
                 clusterQueryConnectionString,
                 concurrentQueryCount);
             var awaiter = new KustoOperationAwaiter(queuedClient);
+            var effectiveExportCommandCount = concurrentExportCommandCount <= 0
+                ? await FetchMaxExportCommandCountAsync(queuedClient)
+                : concurrentExportCommandCount;
             var exportQueue = new KustoExportQueue(
                 queuedClient,
                 awaiter,
-                concurrentExportCommandCount);
+                effectiveExportCommandCount);
 
             return exportQueue;
         }
 
-        private static KustoIngestQueue CreateKustoIngestQueue(
+        private static async Task<int> FetchMaxExportCommandCountAsync(
+            KustoQueuedClient queuedClient)
+        {
+            var commandText = ".show capacity data-export | project Total";
+            var totals = await queuedClient.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                string.Empty,
+                commandText,
+                r => (long)r["Total"]);
+            var total = (int)totals.First();
+
+            return total;
+        }
+
+        private static async Task<KustoIngestQueue> CreateKustoIngestQueueAsync(
             TokenCredential credentials,
             string clusterQueryConnectionString,
             int concurrentQueryCount,
@@ -117,12 +146,28 @@ namespace KustoCopyConsole.Orchestrations
                 clusterQueryConnectionString,
                 concurrentQueryCount);
             var awaiter = new KustoOperationAwaiter(queuedClient);
+            var effectiveIngestionCount = concurrentIngestionCount <= 0
+                ? await FetchMaxIngestionCountAsync(queuedClient)
+                : concurrentIngestionCount;
             var ingestQueue = new KustoIngestQueue(
                 queuedClient,
                 awaiter,
-                concurrentIngestionCount);
+                effectiveIngestionCount);
 
             return ingestQueue;
+        }
+
+        private static async Task<int> FetchMaxIngestionCountAsync(KustoQueuedClient queuedClient)
+        {
+            var commandText = ".show capacity ingestions | project Total";
+            var totals = await queuedClient.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                string.Empty,
+                commandText,
+                r => (long)r["Total"]);
+            var total = (int)totals.First();
+
+            return total;
         }
 
         private static TokenCredential CreateCredentials(KustoConnectionStringBuilder builder)

@@ -15,7 +15,6 @@ namespace KustoCopyConsole.Orchestrations
         private readonly MainParameterization _parameterization;
         private readonly KustoExportQueue _sourceExportQueue;
         private readonly KustoIngestQueue _destinationIngestQueue;
-        private readonly DataLakeDirectoryClient _lakeFolderClient;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
         #region Bootstrap
@@ -23,7 +22,7 @@ namespace KustoCopyConsole.Orchestrations
             MainParameterization parameterization,
             CancellationToken ct)
         {
-            var connectionFactory = ConnectionsFactory.Create(parameterization);
+            var connectionFactory = await ConnectionsFactory.CreateAsync(parameterization);
 
             Trace.WriteLine("Acquiring lock on folder...");
             await using (var blobLock = await CreateLockAsync(
@@ -55,7 +54,6 @@ namespace KustoCopyConsole.Orchestrations
                             parameterization,
                             connectionFactory.SourceExportQueue!,
                             connectionFactory.DestinationIngestQueue!,
-                            connectionFactory.LakeFolderClient,
                             dbStatusList);
 
                         Trace.WriteLine("Copying orchestration started");
@@ -74,13 +72,11 @@ namespace KustoCopyConsole.Orchestrations
             MainParameterization parameterization,
             KustoExportQueue sourceExportQueue,
             KustoIngestQueue destinationIngestQueue,
-            DataLakeDirectoryClient lakeFolderClient,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
             _sourceExportQueue = sourceExportQueue;
             _destinationIngestQueue = destinationIngestQueue;
-            _lakeFolderClient = lakeFolderClient;
             _dbStatusList = dbStatusList;
         }
         #endregion

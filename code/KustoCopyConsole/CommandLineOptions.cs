@@ -41,9 +41,9 @@ namespace KustoCopyConsole
         public int ConcurrentQueryCount { get; set; } = 1;
 
         [Option("export-slots", Required = false, HelpText = "# export slots to use on source cluster")]
-        public int ConcurrentExportCommandCount { get; set; } = 2;
+        public int ConcurrentExportCommandCount { get; set; } = 0;
 
         [Option("ingestion-slots", Required = false, HelpText = "Number of concurrent ingestions on the clusters")]
-        public int ConcurrentIngestionCount { get; set; } = 2;
+        public int ConcurrentIngestionCount { get; set; } = 0;
     }
 }
