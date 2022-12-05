@@ -117,12 +117,12 @@ namespace KustoCopyConsole.Orchestrations
                 clusterQueryConnectionString,
                 concurrentQueryCount);
             var awaiter = new KustoOperationAwaiter(queuedClient);
-            var exportQueue = new KustoIngestQueue(
+            var ingestQueue = new KustoIngestQueue(
                 queuedClient,
                 awaiter,
                 concurrentIngestionCount);
 
-            return exportQueue;
+            return ingestQueue;
         }
 
         private static TokenCredential CreateCredentials(KustoConnectionStringBuilder builder)
