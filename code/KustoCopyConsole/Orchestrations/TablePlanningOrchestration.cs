@@ -92,10 +92,13 @@ namespace KustoCopyConsole.Orchestrations
 
                 if (protoRecordBatches.Any())
                 {
-                    var extentMap = await FetchExtentIdMapAsync(
-                        protoRecordBatches.Select(p => p.ExtentId));
+                    var extentIdList = protoRecordBatches
+                        .Select(p => p.ExtentId)
+                        .Distinct()
+                        .ToImmutableArray();
+                    var extentMap = await FetchExtentIdMapAsync(extentIdList);
 
-                    if (extentMap.Count() != protoRecordBatches.Count())
+                    if (extentMap.Count() != extentIdList.Count())
                     {
                         Trace.TraceWarning(
                             $"Extent list changed between 2 close operations on "
@@ -142,14 +145,14 @@ namespace KustoCopyConsole.Orchestrations
             var extentIdTextList = string.Join(
                 Environment.NewLine + ", ",
                 extentIds.Select(e => $"'{e}'"));
+            var commandText = $@".show table ['{_kustoPriority.TableName}'] extents
+({extentIdTextList})
+| project tostring(ExtentId), MaxCreatedOn
+";
             var mapList = await _sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
-                $@"
-.show table ['{_kustoPriority.TableName}'] extents
-({extentIdTextList})
-| project tostring(ExtentId), MaxCreatedOn
-",
+                commandText,
                 r => new
                 {
                     ExtentId = (string)r["ExtentId"],
