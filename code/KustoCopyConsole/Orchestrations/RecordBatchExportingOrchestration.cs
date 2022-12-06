@@ -66,7 +66,8 @@ namespace KustoCopyConsole.Orchestrations
                 _folderClient.Uri,
                 cursorWindow,
                 planState.IngestionTimes,
-                planState.RecordCount!.Value);
+                planState.RecordCount!.Value,
+                ct);
             var postSchema = await FetchSchemaAsync(ct);
 
             if (preSchema.SequenceEqual(postSchema))

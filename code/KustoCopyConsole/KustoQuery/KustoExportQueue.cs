@@ -1,7 +1,10 @@
-﻿using KustoCopyConsole.Concurrency;
+﻿using Kusto.Data.Exceptions;
+using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Orchestrations;
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
+using Polly.Retry;
+using Polly;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -14,6 +17,10 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoExportQueue
     {
+        private static readonly AsyncRetryPolicy _retryPolicyThrottled =
+            Policy.Handle<KustoRequestThrottledException>().WaitAndRetryForeverAsync(
+                attempt => TimeSpan.FromSeconds(0.5));
+
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
@@ -34,7 +41,8 @@ namespace KustoCopyConsole.KustoQuery
             Uri folderUri,
             CursorWindow cursorWindow,
             IImmutableList<TimeInterval> ingestionTimes,
-            long expectedRecordCount)
+            long expectedRecordCount,
+            CancellationToken ct)
         {
             var timeFilters = ingestionTimes
                 .Select(i => $"(ingestion_time()>={i.StartTime.ToKql()}" +
@@ -51,31 +59,34 @@ to csv (
 ";
             var outputs = await _queue.RequestRunAsync(
                 priority,
-                async () =>
-                {
-                    var operationsIds = await Client.ExecuteCommandAsync(
-                        KustoPriority.HighestPriority,
-                        priority.DatabaseName!,
-                        commandText,
-                        r => (Guid)r["OperationId"]);
-                    var outputs = await _awaiter.RunAsynchronousOperationAsync(
-                        operationsIds.First(),
-                        commandText,
-                        r => new ExportOutput(
-                            new Uri((string)r["Path"]),
-                            (long)r["NumRecords"],
-                            (long)r["SizeInBytes"]));
-                    var totalRecordCount = outputs.Sum(o => o.RecordCount);
-
-                    if (expectedRecordCount != totalRecordCount)
+                //  Once the export gets prioritized, it gets retried forever
+                async () => await _retryPolicyThrottled.ExecuteAsync(
+                    async (cct) =>
                     {
-                        throw new CopyException(
-                            $"Expected to export {expectedRecordCount} records"
-                            + $" but exported {totalRecordCount}");
-                    }
+                        var operationsIds = await Client.ExecuteCommandAsync(
+                            KustoPriority.HighestPriority,
+                            priority.DatabaseName!,
+                            commandText,
+                            r => (Guid)r["OperationId"]);
+                        var outputs = await _awaiter.RunAsynchronousOperationAsync(
+                            operationsIds.First(),
+                            commandText,
+                            r => new ExportOutput(
+                                new Uri((string)r["Path"]),
+                                (long)r["NumRecords"],
+                                (long)r["SizeInBytes"]));
+                        var totalRecordCount = outputs.Sum(o => o.RecordCount);
 
-                    return outputs;
-                });
+                        if (expectedRecordCount != totalRecordCount)
+                        {
+                            throw new CopyException(
+                                $"Expected to export {expectedRecordCount} records"
+                                + $" but exported {totalRecordCount}");
+                        }
+
+                        return outputs;
+                    },
+                    ct));
 
             return outputs;
         }

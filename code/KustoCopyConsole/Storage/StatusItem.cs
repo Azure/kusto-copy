@@ -223,7 +223,7 @@ namespace KustoCopyConsole.Storage
         public string GetStagingTableName(StatusItem subIteration)
         {
             var suffix = subIteration.InternalState!.SubIterationState!.StagingTableSuffix;
-            var stagingTableName = $"Stg_{TableName}_{suffix}";
+            var stagingTableName = $"KC_STG_{TableName}_{suffix}";
 
             return stagingTableName;
         }

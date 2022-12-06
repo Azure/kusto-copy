@@ -19,6 +19,7 @@ namespace KustoCopyConsole.KustoQuery
         private static readonly AsyncRetryPolicy _retryPolicyThrottled =
             Policy.Handle<KustoRequestThrottledException>().WaitAndRetryForeverAsync(
                 attempt => TimeSpan.FromSeconds(0.5));
+
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 

@@ -123,10 +123,13 @@ namespace KustoCopyConsole.KustoQuery
 
                     foreach (var info in operationInfo)
                     {
-                        var operationState = _operations[info.OperationId];
-
-                        operationState.State = info.State;
-                        operationState.Status = info.Status;
+                        //  It is possible the operation ID get removes as a racing condition
+                        //  by the owning thread
+                        if (_operations.TryGetValue(info.OperationId, out var operationState))
+                        {
+                            operationState.State = info.State;
+                            operationState.Status = info.Status;
+                        }
                     }
                 });
             }
