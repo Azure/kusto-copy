@@ -68,7 +68,8 @@ namespace KustoCopyConsole.Orchestrations
             {
                 var batches = _dbStatus.GetRecordBatches(
                     _subIteration.IterationId,
-                    _subIteration.SubIterationId!.Value);
+                    _subIteration.SubIterationId!.Value)
+                    .Where(b => b.TableName == _kustoPriority.TableName);
                 //  Clip out the bracket considering existing batches
                 var startTime = batches
                     .SelectMany(b =>
