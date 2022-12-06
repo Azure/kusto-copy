@@ -254,7 +254,8 @@ namespace KustoCopyConsole.Orchestrations
                 priority,
                 recordState!.ExportRecordBatchState!.BlobPaths,
                 recordState!.PlanRecordBatchState!.CreationTime!.Value,
-                new[] { tagValue });
+                new[] { tagValue },
+                ct);
 
             var newRecordBatch = recordBatch.UpdateState(StatusItemState.Staged);
             var extentIds = await CleanExtentsAsync(priority, tagValue);

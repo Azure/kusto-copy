@@ -1,4 +1,5 @@
 ﻿using Kusto.Cloud.Platform.Utils;
+using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Concurrent;
@@ -57,9 +58,11 @@ namespace KustoCopyConsole.KustoQuery
             }
             else if (thisOperationState.State == THROTTLED_STATE)
             {
-                throw new CopyException(
-                    $"Operation {operationId} has been throttled with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}");
+                throw new KustoRequestThrottledException
+                {
+                    ErrorMessage = $"Operation {operationId} has been throttled with message:  "
+                    + $"'{thisOperationState.Status}' for command {commandText}"
+                };
             }
         }
 
