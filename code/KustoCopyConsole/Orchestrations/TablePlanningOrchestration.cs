@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.KustoQuery;
+﻿using Kusto.Data.Linq;
+using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
@@ -70,13 +71,23 @@ namespace KustoCopyConsole.Orchestrations
         private async Task<PlanningOutput> PlanAsync(
             CancellationToken ct)
         {
-            var iterationTableEndTimeTask = FetchIterationTableEndTimeAsync();
+            var iterationTableEndTime = await FetchIterationTableEndTimeAsync();
 
-            return await PlanAsync(iterationTableEndTimeTask, ct);
+            if (iterationTableEndTime == null)
+            {
+                return new PlanningOutput(
+                    false,
+                    null,
+                    ImmutableArray<PlanRecordBatchState>.Empty);
+            }
+            else
+            {
+                return await PlanAsync(iterationTableEndTime.Value, ct);
+            }
         }
 
         private async Task<PlanningOutput> PlanAsync(
-            Task<DateTime?> iterationTableEndTimeTask,
+            DateTime iterationTableEndTime,
             CancellationToken ct)
         {
             var protoRecordBatches = await LoadProtoRecordBatchesAsync();
@@ -97,7 +108,7 @@ namespace KustoCopyConsole.Orchestrations
                         + $"'{protoRecordBatches.Count()}' vs '{extentMap.Count()}'.  "
                         + "Likely cause:  merge.  Mitigation:  retry.");
 
-                    return await PlanAsync(iterationTableEndTimeTask, ct);
+                    return await PlanAsync(iterationTableEndTime, ct);
                 }
                 else
                 {
@@ -105,7 +116,6 @@ namespace KustoCopyConsole.Orchestrations
                     var maxIngestionTime = recordBatches
                         .SelectMany(r => r.IngestionTimes)
                         .Max(i => i.EndTime);
-                    var iterationTableEndTime = await iterationTableEndTimeTask;
                     var hasMoreRecords = iterationTableEndTime > maxIngestionTime;
 
                     return new PlanningOutput(
@@ -116,11 +126,9 @@ namespace KustoCopyConsole.Orchestrations
             }
             else
             {
-                var iterationMaxIngestionTime = await iterationTableEndTimeTask;
-
                 return new PlanningOutput(
                     false,
-                    iterationMaxIngestionTime,
+                    iterationTableEndTime,
                     ImmutableArray<PlanRecordBatchState>.Empty);
             }
         }
@@ -150,15 +158,27 @@ namespace KustoCopyConsole.Orchestrations
         {
             var commandText = $@"['{_kustoPriority.TableName}']
 {_cursorWindow.ToCursorKustoPredicate()}
-| summarize MaxTime = max(ingestion_time())";
+| summarize MinTime = min(ingestion_time()), MaxTime = max(ingestion_time())";
             var outputs = await _sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
                 commandText,
-                r => r["MaxTime"].To<DateTime>());
+                r => new
+                {
+                    MinTime = r["MinTime"].To<DateTime>(),
+                    MaxTime = r["MaxTime"].To<DateTime>()
+                });
             var output = outputs.First();
 
-            return output;
+            if (output.MinTime == null || output.MaxTime == null)
+            {
+                Trace.TraceWarning(
+                    $"Table ['{_kustoPriority.TableName}'] contains rows without ingestion_time() "
+                    + $"in the iteration {_kustoPriority.IterationId} cursor window ; that iteration's "
+                    + $"data won't be processed for that table");
+            }
+
+            return output.MaxTime;
         }
 
         private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchesAsync()
