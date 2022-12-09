@@ -18,7 +18,6 @@ namespace KustoCopyConsole.Orchestrations
 
         public record TableProtoPlanning(
             string TableName,
-            bool HasMoreRecords,
             DateTime? IterationTableEndTime,
             IImmutableList<PlanRecordBatchState> RecordBatches);
 
@@ -27,7 +26,7 @@ namespace KustoCopyConsole.Orchestrations
             IImmutableList<PlanRecordBatchState> RecordBatches);
         #endregion
 
-        private const long MAX_EXTENT_COUNT = 1000000000;
+        private const long MAX_EXTENT_COUNT = 10;
 
         private readonly bool _isContinuousRun;
         private readonly SourceDatabaseParameterization _dbParameterization;
@@ -125,6 +124,7 @@ namespace KustoCopyConsole.Orchestrations
                     ? recordBatches.Prepend(newSubIteration).Append(plannedIteration)
                     : recordBatches.Prepend(newSubIteration);
 
+                Trace.WriteLine($"Sub Iteration {newSubIterationId} planned");
                 await _dbStatus.PersistNewItemsAsync(items, ct);
             }
             else
@@ -170,8 +170,7 @@ namespace KustoCopyConsole.Orchestrations
             DateTime maxIterationEndTime)
         {
             //  If no more records, that table doesn't constrain the sub iteration
-            var incompletePlannings = tablePlannings
-                .Where(p => p.HasMoreRecords);
+            var incompletePlannings = ComputeIncompletePlannings(tablePlannings);
 
             if (incompletePlannings.Any())
             {
@@ -188,6 +187,29 @@ namespace KustoCopyConsole.Orchestrations
             {
                 return maxIterationEndTime;
             }
+        }
+
+        private static IEnumerable<TableProtoPlanning> ComputeIncompletePlannings(
+            IEnumerable<TableProtoPlanning> tablePlannings)
+        {
+            var incompletePlannings = tablePlannings
+                .Select(p => new
+                {
+                    TablePlanning = p,
+                    PlanningEndTime = p
+                    .RecordBatches
+                    .SelectMany(r => r.IngestionTimes.Select(i => i.EndTime))
+                    .Max()
+                })
+                .Select(b => new
+                {
+                    TablePlanning = b.TablePlanning,
+                    HasMoreRecords = b.PlanningEndTime < b.TablePlanning.IterationTableEndTime
+                })
+                .Where(p => p.HasMoreRecords)
+                .Select(p => p.TablePlanning);
+
+            return incompletePlannings;
         }
 
         private async Task<TableProtoPlanning> PlanTableAsync(
@@ -211,7 +233,6 @@ namespace KustoCopyConsole.Orchestrations
                 ct);
             var planning = new TableProtoPlanning(
                 t,
-                output.HasMoreRecords,
                 output.IterationTableEndTime,
                 output.RecordBatches);
 
@@ -241,19 +262,19 @@ namespace KustoCopyConsole.Orchestrations
             PlanRecordBatchState recordBatch,
             DateTime maxSubIterationEndTime)
         {
-            var maxEndTime = recordBatch.IngestionTimes
+            var maxBatchEndTime = recordBatch.IngestionTimes
                 .Max(i => i.EndTime);
 
-            if (maxEndTime > maxSubIterationEndTime)
+            if (maxBatchEndTime > maxSubIterationEndTime)
             {
-                return new PlanRecordBatchState
+                var clippedRecordBatch = new PlanRecordBatchState
                 {
                     CreationTime = recordBatch.CreationTime,
                     //  Since we clip, we won't be able to validate record count
                     RecordCount = null,
                     IngestionTimes = recordBatch.IngestionTimes
                     //  Remove ingestion time intervals "above the line"
-                    .Where(i => i.StartTime >= maxSubIterationEndTime)
+                    .Where(i => i.StartTime <= maxSubIterationEndTime)
                     .Select(i => new TimeInterval
                     {   //  Clipping both start and end time
                         StartTime = i.StartTime < maxSubIterationEndTime
@@ -265,6 +286,8 @@ namespace KustoCopyConsole.Orchestrations
                     })
                     .ToImmutableArray()
                 };
+
+                return clippedRecordBatch;
             }
             else
             {   //  Nothing to clip

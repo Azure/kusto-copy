@@ -41,7 +41,7 @@ namespace KustoCopyConsole.KustoQuery
             Uri folderUri,
             CursorWindow cursorWindow,
             IImmutableList<TimeInterval> ingestionTimes,
-            long expectedRecordCount,
+            long? expectedRecordCount,
             CancellationToken ct)
         {
             var timeFilters = ingestionTimes
@@ -70,6 +70,7 @@ to csv (
                             r => (Guid)r["OperationId"]);
                         var outputs = await _awaiter.RunAsynchronousOperationAsync(
                             operationsIds.First(),
+                            "Export",
                             commandText,
                             r => new ExportOutput(
                                 new Uri((string)r["Path"]),
@@ -77,7 +78,12 @@ to csv (
                                 (long)r["SizeInBytes"]));
                         var totalRecordCount = outputs.Sum(o => o.RecordCount);
 
-                        if (expectedRecordCount != totalRecordCount)
+                        if (!outputs.Any())
+                        {
+                            throw new CopyException($"Export yielded no blob");
+                        }
+                        if (expectedRecordCount != null
+                            && expectedRecordCount != totalRecordCount)
                         {
                             throw new CopyException(
                                 $"Expected to export {expectedRecordCount} records"

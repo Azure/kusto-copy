@@ -15,7 +15,6 @@ namespace KustoCopyConsole.Orchestrations
     {
         #region Inner types
         public record PlanningOutput(
-            bool HasMoreRecords,
             DateTime? IterationTableEndTime,
             IImmutableList<PlanRecordBatchState> RecordBatches);
 
@@ -76,7 +75,6 @@ namespace KustoCopyConsole.Orchestrations
             if (iterationTableEndTime == null)
             {
                 return new PlanningOutput(
-                    false,
                     null,
                     ImmutableArray<PlanRecordBatchState>.Empty);
             }
@@ -113,13 +111,8 @@ namespace KustoCopyConsole.Orchestrations
                 else
                 {
                     var recordBatches = MapRecordBatches(protoRecordBatches, extentMap);
-                    var maxIngestionTime = recordBatches
-                        .SelectMany(r => r.IngestionTimes)
-                        .Max(i => i.EndTime);
-                    var hasMoreRecords = iterationTableEndTime > maxIngestionTime;
 
                     return new PlanningOutput(
-                        hasMoreRecords,
                         iterationTableEndTime,
                         recordBatches);
                 }
@@ -127,7 +120,6 @@ namespace KustoCopyConsole.Orchestrations
             else
             {
                 return new PlanningOutput(
-                    false,
                     iterationTableEndTime,
                     ImmutableArray<PlanRecordBatchState>.Empty);
             }

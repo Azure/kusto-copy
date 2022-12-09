@@ -27,7 +27,17 @@ namespace KustoCopyConsole.Orchestrations
                 kustoExportQueue,
                 folderClient);
 
-            await orchestrator.RunAsync(ct);
+            try
+            {
+                await orchestrator.RunAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                throw new CopyException($"Issue exporting record batch {record.RecordBatchId} "
+                    + $"from sub iteration {record.SubIterationId} of iteration "
+                    + $"{record.IterationId}",
+                    ex);
+            }
         }
 
         private RecordBatchExportingOrchestration(
@@ -66,7 +76,7 @@ namespace KustoCopyConsole.Orchestrations
                 _folderClient.Uri,
                 cursorWindow,
                 planState.IngestionTimes,
-                planState.RecordCount!.Value,
+                planState.RecordCount,
                 ct);
             var postSchema = await FetchSchemaAsync(ct);
 

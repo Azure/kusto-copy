@@ -41,6 +41,7 @@ namespace KustoCopyConsole.KustoQuery
 
         public async Task RunAsynchronousOperationAsync(
             Guid operationId,
+            string operationType,
             string commandText)
         {
             var thisOperationState = new OperationState();
@@ -53,25 +54,27 @@ namespace KustoCopyConsole.KustoQuery
             else if (thisOperationState.State == FAILED_STATE)
             {
                 throw new CopyException(
-                    $"Operation {operationId} failed with message:  "
+                    $"Operation {operationId} ({operationType}) failed with message:  "
                     + $"'{thisOperationState.Status}' for command {commandText}");
             }
             else if (thisOperationState.State == THROTTLED_STATE)
             {
                 throw new KustoRequestThrottledException
                 {
-                    ErrorMessage = $"Operation {operationId} has been throttled with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}"
+                    ErrorMessage = $"Operation {operationId} ({operationType}) has been "
+                    + $"throttled with message:  '{thisOperationState.Status}' "
+                    + $"for command {commandText}"
                 };
             }
         }
 
         public async Task<IImmutableList<T>> RunAsynchronousOperationAsync<T>(
             Guid operationId,
+            string operationType,
             string commandText,
             Func<IDataRecord, T> projection)
         {
-            await RunAsynchronousOperationAsync(operationId, commandText);
+            await RunAsynchronousOperationAsync(operationId, operationType, commandText);
 
             return await FetchOperationDetailsAsync(operationId, projection);
         }
