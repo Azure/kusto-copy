@@ -66,6 +66,15 @@ namespace KustoCopyConsole.KustoQuery
             return WithNewProperties(newProperties);
         }
 
+        public KustoQueuedClient SetOption(string name, object value)
+        {
+            var newProperties = _properties.Clone();
+
+            newProperties.SetOption(name, value);
+
+            return WithNewProperties(newProperties);
+        }
+
         private KustoQueuedClient WithNewProperties(ClientRequestProperties newProperties)
         {
             return new KustoQueuedClient(_config, newProperties);
@@ -83,7 +92,7 @@ namespace KustoCopyConsole.KustoQuery
                 {
                     return await _config
                     .Client
-                    .ExecuteCommandAsync(database, command, projection);
+                    .ExecuteCommandAsync(database, command, projection, _properties);
                 });
         }
 

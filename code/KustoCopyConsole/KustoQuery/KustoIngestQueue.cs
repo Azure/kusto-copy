@@ -57,13 +57,15 @@ namespace KustoCopyConsole.KustoQuery
     creationTime='{creationTimeText}',
     tags=""[{tagsText}]"")
 ";
+            var client = Client.SetOption("norequesttimeout", true);
+
             await _queue.RequestRunAsync(
                 priority,
                 //  Once the ingestion gets prioritized, it gets retried forever
                 async () => await _retryPolicyThrottled.ExecuteAsync(
                     async (cct) =>
                     {
-                        var operationsIds = await Client.ExecuteCommandAsync(
+                        var operationsIds = await client.ExecuteCommandAsync(
                             KustoPriority.HighestPriority,
                             priority.DatabaseName!,
                             commandText,

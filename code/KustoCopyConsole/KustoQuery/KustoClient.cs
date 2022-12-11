@@ -39,11 +39,15 @@ namespace KustoCopyConsole.KustoQuery
         public async Task<ImmutableArray<T>> ExecuteCommandAsync<T>(
             string database,
             string command,
-            Func<IDataRecord, T> projection)
+            Func<IDataRecord, T> projection,
+            ClientRequestProperties? properties = null)
         {
             try
             {
-                using (var reader = await ExecuteCommandWithPoliciesAsync(database, command))
+                using (var reader = await ExecuteCommandWithPoliciesAsync(
+                    database,
+                    command,
+                    properties))
                 {
                     var enumerableProjection = Project(reader, projection);
 
@@ -64,7 +68,7 @@ namespace KustoCopyConsole.KustoQuery
             string database,
             string query,
             Func<IDataRecord, T> projection,
-            ClientRequestProperties properties)
+            ClientRequestProperties? properties = null)
         {
             using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
             {
@@ -79,7 +83,7 @@ namespace KustoCopyConsole.KustoQuery
             string query,
             Func<IDataRecord, T> projection1,
             Func<IDataRecord, U> projection2,
-            ClientRequestProperties properties)
+            ClientRequestProperties? properties = null)
         {
             using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
             {
@@ -100,15 +104,19 @@ namespace KustoCopyConsole.KustoQuery
 
         private async Task<IDataReader> ExecuteCommandWithPoliciesAsync(
             string database,
-            string command)
+            string command,
+            ClientRequestProperties? properties = null)
         {
             return await _retryPolicyThrottled.ExecuteAsync(async () =>
             {
                 try
                 {
+                    properties = properties ?? new ClientRequestProperties();
+                    
                     return await _commandProvider.ExecuteControlCommandAsync(
                         database,
-                        command);
+                        command,
+                        properties);
                 }
                 catch (KustoRequestThrottledException)
                 {
@@ -123,12 +131,14 @@ namespace KustoCopyConsole.KustoQuery
         private async Task<IDataReader> ExecuteQueryWithPoliciesAsync(
             string database,
             string query,
-            ClientRequestProperties properties)
+            ClientRequestProperties? properties = null)
         {
             return await _retryPolicyThrottled.ExecuteAsync(async () =>
             {
                 try
                 {
+                    properties = properties ?? new ClientRequestProperties();
+
                     return await _queryProvider.ExecuteQueryAsync(
                         database,
                         query,
@@ -136,9 +146,9 @@ namespace KustoCopyConsole.KustoQuery
                 }
                 catch (KustoRequestThrottledException)
                 {
-                    var parameters = properties
-                    .Parameters
-                    .Select(p => $"'{p.Key}' : '{p.Value}'");
+                    var parameters = properties == null
+                    ? new string[0]
+                    : properties.Parameters.Select(p => $"'{p.Key}' : '{p.Value}'");
                     var paramList = string.Join(", ", parameters);
 
                     Trace.TraceWarning($"Kusto query throttled on db '{database}' "
