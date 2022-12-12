@@ -1,5 +1,6 @@
 ﻿using Kusto.Data.Common;
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 
 namespace KustoCopyConsole.Storage
 {
@@ -12,6 +13,7 @@ namespace KustoCopyConsole.Storage
 
         public long RecordCount { get; set; }
 
+        [JsonConverter(typeof(JsonStringEnumConverter))]
         public ExportFormat ExportFormat { get; set; } = ExportFormat.CsvGz;
     }
 }
