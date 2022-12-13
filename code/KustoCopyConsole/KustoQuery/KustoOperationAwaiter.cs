@@ -123,7 +123,7 @@ namespace KustoCopyConsole.KustoQuery
                             State = (string)r["State"],
                             Status = (string)r["Status"],
                             Database = (string)r["Database"],
-                            ShouldRetry = (byte)r["ShouldRetry"]
+                            ShouldRetry = (SByte)r["ShouldRetry"]
                         });
 
                     foreach (var info in operationInfo)
