@@ -62,6 +62,8 @@ namespace KustoCopyConsole.KustoQuery
             _policy = policy;
         }
 
+        public string HostName => _config.Client.HostName;
+
         public KustoQueuedClient SetRetryPolicy(bool doRetry)
         {
             return new KustoQueuedClient(

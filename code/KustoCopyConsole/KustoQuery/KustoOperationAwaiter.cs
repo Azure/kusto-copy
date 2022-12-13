@@ -20,12 +20,14 @@ namespace KustoCopyConsole.KustoQuery
             public string State { get; set; } = IN_PROGRESS_STATE;
 
             public string Status { get; set; } = string.Empty;
+
+            public string Database { get; set; } = string.Empty;
+            
+            public bool ShouldRetry { get; set; } = false;
         }
         #endregion
 
         private const string IN_PROGRESS_STATE = "InProgress";
-        private const string FAILED_STATE = "Failed";
-        private const string THROTTLED_STATE = "Throttled";
 
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
@@ -51,22 +53,18 @@ namespace KustoCopyConsole.KustoQuery
             {
                 throw new InvalidOperationException("Operation ID wasn't present");
             }
-            else if (thisOperationState.State == FAILED_STATE)
+            else if (thisOperationState.State != IN_PROGRESS_STATE)
             {
-                throw new KustoRequestThrottledException
-                {
-                    ErrorMessage = $"Operation {operationId} ({operationType}) failed with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}"
-                };
-            }
-            else if (thisOperationState.State == THROTTLED_STATE)
-            {
-                throw new KustoRequestThrottledException
-                {
-                    ErrorMessage = $"Operation {operationId} ({operationType}) has been "
-                    + $"throttled with message:  '{thisOperationState.Status}' "
-                    + $"for command {commandText}"
-                };
+                throw new KustoServiceException(
+                    "0000",
+                    "AsyncOperationNotCompleting",
+                    $"Operation {operationId} ({operationType}) failed with message:  "
+                    + $"'{thisOperationState.Status}' for command {commandText}",
+                    _kustoClient.HostName,
+                    thisOperationState.Database,
+                    string.Empty,
+                    Guid.Empty,
+                    isPermanent:!thisOperationState.ShouldRetry);
             }
         }
 
@@ -112,7 +110,7 @@ namespace KustoCopyConsole.KustoQuery
                         _operations.Keys.Select(id => $"'{id}'"));
                     var commandText = @$"
 .show operations ({operationIdList})
-| project OperationId, State, Status
+| project OperationId, State, Status, Database, ShouldRetry
 | where State != '{IN_PROGRESS_STATE}'";
                     var operationInfo = await _kustoClient
                         .ExecuteCommandAsync(
@@ -123,7 +121,9 @@ namespace KustoCopyConsole.KustoQuery
                         {
                             OperationId = (Guid)r["OperationId"],
                             State = (string)r["State"],
-                            Status = (string)r["Status"]
+                            Status = (string)r["Status"],
+                            Database = (string)r["Database"],
+                            ShouldRetry = (bool)r["ShouldRetry"]
                         });
 
                     foreach (var info in operationInfo)
@@ -134,6 +134,8 @@ namespace KustoCopyConsole.KustoQuery
                         {
                             operationState.State = info.State;
                             operationState.Status = info.Status;
+                            operationState.Database = info.Database;
+                            operationState.ShouldRetry = info.ShouldRetry;
                         }
                     }
                 });
