@@ -13,9 +13,9 @@ namespace KustoCopyConsole.Orchestrations
     public class RetryHelper
     {
         public static AsyncRetryPolicy RetryNonPermanentKustoErrorPolicy { get; } = Policy
-            .Handle<KustoRequestThrottledException>()
-            .WaitAndRetryForeverAsync(
-            attempt => TimeSpan.FromSeconds(0.5),
+            .Handle<KustoException>(ex => !ex.IsPermanent)
+            .WaitAndRetryForeverAsync(attempt =>
+            TimeSpan.FromSeconds(Math.Max(10, attempt) / 2.0),
             TraceException);
 
         private static void TraceException(Exception ex, TimeSpan ts)

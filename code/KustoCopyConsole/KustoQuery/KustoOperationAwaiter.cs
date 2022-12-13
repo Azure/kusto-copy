@@ -28,6 +28,7 @@ namespace KustoCopyConsole.KustoQuery
         #endregion
 
         private const string IN_PROGRESS_STATE = "InProgress";
+        private const string COMPLETED_STATE = "Completed";
 
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
@@ -53,7 +54,7 @@ namespace KustoCopyConsole.KustoQuery
             {
                 throw new InvalidOperationException("Operation ID wasn't present");
             }
-            else if (thisOperationState.State != IN_PROGRESS_STATE)
+            else if (thisOperationState.State != COMPLETED_STATE)
             {
                 throw new KustoServiceException(
                     "0000",
