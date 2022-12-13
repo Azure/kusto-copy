@@ -110,14 +110,17 @@ namespace KustoCopyConsole.KustoQuery
             string command,
             Func<IDataRecord, T> projection)
         {
-            return await _config.QueryExecutionQueue.RequestRunAsync(
-                priority,
-                async () =>
-                {
-                    return await _config
-                    .Client
-                    .ExecuteCommandAsync(database, command, projection, _properties);
-                });
+            return await ExecuteAsync(async (ct) =>
+            {
+                return await _config.QueryExecutionQueue.RequestRunAsync(
+                    priority,
+                    async () =>
+                    {
+                        return await _config
+                        .Client
+                        .ExecuteCommandAsync(database, command, projection, _properties);
+                    });
+            });
         }
 
         public async Task<ImmutableArray<T>> ExecuteQueryAsync<T>(
@@ -126,11 +129,14 @@ namespace KustoCopyConsole.KustoQuery
             string query,
             Func<IDataRecord, T> projection)
         {
-            return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+            return await ExecuteAsync(async (ct) =>
             {
-                return await _config
-                .Client
-                .ExecuteQueryAsync(database, query, projection, _properties);
+                return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+                {
+                    return await _config
+                    .Client
+                    .ExecuteQueryAsync(database, query, projection, _properties);
+                });
             });
         }
 
@@ -141,11 +147,14 @@ namespace KustoCopyConsole.KustoQuery
             Func<IDataRecord, T> projection1,
             Func<IDataRecord, U> projection2)
         {
-            return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+            return await ExecuteAsync(async (ct) =>
             {
-                return await _config
-                .Client
-                .ExecuteQueryAsync(database, query, projection1, projection2, _properties);
+                return await _config.QueryExecutionQueue.RequestRunAsync(priority, async () =>
+                {
+                    return await _config
+                    .Client
+                    .ExecuteQueryAsync(database, query, projection1, projection2, _properties);
+                });
             });
         }
 
@@ -154,6 +163,20 @@ namespace KustoCopyConsole.KustoQuery
             Trace.TraceWarning(@$"Non permanent Kusto exception thrown.  It will be retried.
 Exception:  {ex.GetType().Name}
 Message:  {ex.Message}");
+        }
+
+        private async Task<T> ExecuteAsync<T>(
+            Func<CancellationToken, Task<T>> action,
+            CancellationToken ct = default(CancellationToken))
+        {
+            if (_policy != null)
+            {
+                return await _policy.ExecuteAsync(action, ct);
+            }
+            else
+            {
+                return await action(ct);
+            }
         }
     }
 }
