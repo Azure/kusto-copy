@@ -53,9 +53,11 @@ namespace KustoCopyConsole.KustoQuery
             }
             else if (thisOperationState.State == FAILED_STATE)
             {
-                throw new CopyException(
-                    $"Operation {operationId} ({operationType}) failed with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}");
+                throw new KustoRequestThrottledException
+                {
+                    ErrorMessage = $"Operation {operationId} ({operationType}) failed with message:  "
+                    + $"'{thisOperationState.Status}' for command {commandText}"
+                };
             }
             else if (thisOperationState.State == THROTTLED_STATE)
             {

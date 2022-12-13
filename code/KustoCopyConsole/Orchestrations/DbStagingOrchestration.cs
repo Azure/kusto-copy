@@ -244,6 +244,19 @@ namespace KustoCopyConsole.Orchestrations
             KustoPriority priority,
             CancellationToken ct)
         {
+            await RetryHelper.RetryNonPermanentKustoErrorPolicy.ExecuteAndCaptureAsync(
+                async (cct) => await IngestRecordBatchNoPolicyAsync(
+                    recordBatch,
+                    priority,
+                    cct),
+                ct);
+        }
+
+        private async Task IngestRecordBatchNoPolicyAsync(
+            StatusItem recordBatch,
+            KustoPriority priority,
+            CancellationToken ct)
+        {
             var recordState = recordBatch
                 .InternalState!
                 .RecordBatchState!;

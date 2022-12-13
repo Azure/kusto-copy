@@ -12,15 +12,12 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.KustoQuery
 {
     public class KustoExportQueue
     {
-        private static readonly AsyncRetryPolicy _retryPolicyThrottled =
-            Policy.Handle<KustoRequestThrottledException>().WaitAndRetryForeverAsync(
-                attempt => TimeSpan.FromSeconds(0.5));
-
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
@@ -29,7 +26,7 @@ namespace KustoCopyConsole.KustoQuery
             KustoOperationAwaiter kustoOperationAwaiter,
             int concurrentExportCommandCount)
         {
-            Client = kustoClient;
+            Client = kustoClient.SetRetryPolicy(false);
             _queue = new PriorityExecutionQueue<KustoPriority>(concurrentExportCommandCount);
             _awaiter = kustoOperationAwaiter;
         }
@@ -59,40 +56,37 @@ to csv (
 ";
             var outputs = await _queue.RequestRunAsync(
                 priority,
-                //  Once the export gets prioritized, it gets retried forever
-                async () => await _retryPolicyThrottled.ExecuteAsync(
-                    async (cct) =>
+                async () =>
+                {
+                    var operationsIds = await Client.ExecuteCommandAsync(
+                        KustoPriority.HighestPriority,
+                        priority.DatabaseName!,
+                        commandText,
+                        r => (Guid)r["OperationId"]);
+                    var outputs = await _awaiter.RunAsynchronousOperationAsync(
+                        operationsIds.First(),
+                        "Export",
+                        commandText,
+                        r => new ExportOutput(
+                            new Uri((string)r["Path"]),
+                            (long)r["NumRecords"],
+                            (long)r["SizeInBytes"]));
+                    var totalRecordCount = outputs.Sum(o => o.RecordCount);
+
+                    if (!outputs.Any())
                     {
-                        var operationsIds = await Client.ExecuteCommandAsync(
-                            KustoPriority.HighestPriority,
-                            priority.DatabaseName!,
-                            commandText,
-                            r => (Guid)r["OperationId"]);
-                        var outputs = await _awaiter.RunAsynchronousOperationAsync(
-                            operationsIds.First(),
-                            "Export",
-                            commandText,
-                            r => new ExportOutput(
-                                new Uri((string)r["Path"]),
-                                (long)r["NumRecords"],
-                                (long)r["SizeInBytes"]));
-                        var totalRecordCount = outputs.Sum(o => o.RecordCount);
+                        throw new CopyException($"Export yielded no blob");
+                    }
+                    if (expectedRecordCount != null
+                        && expectedRecordCount != totalRecordCount)
+                    {
+                        throw new CopyException(
+                            $"Expected to export {expectedRecordCount} records"
+                            + $" but exported {totalRecordCount}");
+                    }
 
-                        if (!outputs.Any())
-                        {
-                            throw new CopyException($"Export yielded no blob");
-                        }
-                        if (expectedRecordCount != null
-                            && expectedRecordCount != totalRecordCount)
-                        {
-                            throw new CopyException(
-                                $"Expected to export {expectedRecordCount} records"
-                                + $" but exported {totalRecordCount}");
-                        }
-
-                        return outputs;
-                    },
-                    ct));
+                    return outputs;
+                });
 
             return outputs;
         }

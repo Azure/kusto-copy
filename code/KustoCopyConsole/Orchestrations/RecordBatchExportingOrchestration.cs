@@ -60,6 +60,13 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task RunAsync(CancellationToken ct)
         {
+            await RetryHelper.RetryNonPermanentKustoErrorPolicy.ExecuteAndCaptureAsync(
+                async (cct) => await RunNoPolicyAsync(cct),
+                ct);
+        }
+
+        private async Task RunNoPolicyAsync(CancellationToken ct)
+        {
             var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken: ct);
             var preSchema = await FetchSchemaAsync(ct);
             var recordBatch = _dbStatus.GetRecordBatch(

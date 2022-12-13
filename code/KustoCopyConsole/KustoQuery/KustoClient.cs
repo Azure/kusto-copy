@@ -17,12 +17,9 @@ namespace KustoCopyConsole.KustoQuery
 {
     public class KustoClient
     {
-        private static readonly AsyncRetryPolicy _retryPolicyThrottled =
-            Policy.Handle<KustoRequestThrottledException>().WaitAndRetryAsync(
-                5,
-                attempt => TimeSpan.FromSeconds(attempt));
+        private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES =
+            new ClientRequestProperties();
 
-        private readonly string _hostName;
         private readonly ICslAdminProvider _commandProvider;
         private readonly ICslQueryProvider _queryProvider;
 
@@ -31,10 +28,12 @@ namespace KustoCopyConsole.KustoQuery
             var commandProvider = KustoClientFactory.CreateCslAdminProvider(builder);
             var queryProvider = KustoClientFactory.CreateCslQueryProvider(builder);
 
-            _hostName = builder.Hostname;
+            HostName = builder.Hostname;
             _commandProvider = commandProvider;
             _queryProvider = queryProvider;
         }
+
+        public string HostName { get; }
 
         public async Task<ImmutableArray<T>> ExecuteCommandAsync<T>(
             string database,
@@ -42,25 +41,16 @@ namespace KustoCopyConsole.KustoQuery
             Func<IDataRecord, T> projection,
             ClientRequestProperties? properties = null)
         {
-            try
-            {
-                using (var reader = await ExecuteCommandWithPoliciesAsync(
-                    database,
-                    command,
-                    properties))
-                {
-                    var enumerableProjection = Project(reader, projection);
+            properties = properties ?? EMPTY_REQUEST_PROPERTIES;
 
-                    return enumerableProjection.ToImmutableArray();
-                }
-            }
-            catch (Exception ex)
+            using (var reader = await _commandProvider.ExecuteControlCommandAsync(
+                database,
+                command,
+                properties))
             {
-                throw new CopyException(
-                    "Issue while executing a command in cluster "
-                    + $"'{_hostName}', database '{database}' "
-                    + $"for command '{command}'",
-                    ex);
+                var enumerableProjection = Project(reader, projection);
+
+                return enumerableProjection.ToImmutableArray();
             }
         }
 
@@ -70,7 +60,12 @@ namespace KustoCopyConsole.KustoQuery
             Func<IDataRecord, T> projection,
             ClientRequestProperties? properties = null)
         {
-            using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
+            properties = properties ?? EMPTY_REQUEST_PROPERTIES;
+
+            using (var reader = await _queryProvider.ExecuteQueryAsync(
+                database,
+                query,
+                properties))
             {
                 var enumerableProjection = Project(reader, projection);
 
@@ -85,7 +80,12 @@ namespace KustoCopyConsole.KustoQuery
             Func<IDataRecord, U> projection2,
             ClientRequestProperties? properties = null)
         {
-            using (var reader = await ExecuteQueryWithPoliciesAsync(database, query, properties))
+            properties = properties ?? EMPTY_REQUEST_PROPERTIES;
+
+            using (var reader = await _queryProvider.ExecuteQueryAsync(
+                database,
+                query,
+                properties))
             {
                 var enumerableProjection1 = Project(reader, projection1).ToImmutableArray();
 
@@ -100,70 +100,6 @@ namespace KustoCopyConsole.KustoQuery
                     enumerableProjection1.ToImmutableArray(),
                     enumerableProjection2.ToImmutableArray());
             }
-        }
-
-        private async Task<IDataReader> ExecuteCommandWithPoliciesAsync(
-            string database,
-            string command,
-            ClientRequestProperties? properties = null)
-        {
-            return await _retryPolicyThrottled.ExecuteAsync(async () =>
-            {
-                try
-                {
-                    properties = properties ?? new ClientRequestProperties();
-                    
-                    return await _commandProvider.ExecuteControlCommandAsync(
-                        database,
-                        command,
-                        properties);
-                }
-                catch (KustoRequestThrottledException)
-                {
-                    Trace.TraceWarning(
-                        $"Kusto command throttled on db '{database}':  '{command}'");
-
-                    throw;
-                }
-            });
-        }
-
-        private async Task<IDataReader> ExecuteQueryWithPoliciesAsync(
-            string database,
-            string query,
-            ClientRequestProperties? properties = null)
-        {
-            return await _retryPolicyThrottled.ExecuteAsync(async () =>
-            {
-                try
-                {
-                    properties = properties ?? new ClientRequestProperties();
-
-                    return await _queryProvider.ExecuteQueryAsync(
-                        database,
-                        query,
-                        properties);
-                }
-                catch (KustoRequestThrottledException)
-                {
-                    var parameters = properties == null
-                    ? new string[0]
-                    : properties.Parameters.Select(p => $"'{p.Key}' : '{p.Value}'");
-                    var paramList = string.Join(", ", parameters);
-
-                    Trace.TraceWarning($"Kusto query throttled on db '{database}' "
-                        + $"{{{paramList}}}:  '{query}'");
-
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    throw new CopyException(
-                        $"Issue while executing a query in cluster '{_hostName}', "
-                        + $"database '{database}':  '{query}'",
-                        ex);
-                }
-            });
         }
 
         private static IEnumerable<T> Project<T>(

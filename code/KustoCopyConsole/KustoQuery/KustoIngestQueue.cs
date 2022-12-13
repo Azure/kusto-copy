@@ -11,15 +11,12 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.KustoQuery
 {
     public class KustoIngestQueue
     {
-        private static readonly AsyncRetryPolicy _retryPolicyThrottled =
-            Policy.Handle<KustoRequestThrottledException>().WaitAndRetryForeverAsync(
-                attempt => TimeSpan.FromSeconds(0.5));
-
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly KustoOperationAwaiter _awaiter;
 
@@ -28,7 +25,7 @@ namespace KustoCopyConsole.KustoQuery
             KustoOperationAwaiter kustoOperationAwaiter,
             int concurrentIngestCommandCount)
         {
-            Client = kustoClient;
+            Client = kustoClient.SetRetryPolicy(false);
             _queue = new PriorityExecutionQueue<KustoPriority>(concurrentIngestCommandCount);
             _awaiter = kustoOperationAwaiter;
         }
@@ -61,22 +58,19 @@ namespace KustoCopyConsole.KustoQuery
 
             await _queue.RequestRunAsync(
                 priority,
-                //  Once the ingestion gets prioritized, it gets retried forever
-                async () => await _retryPolicyThrottled.ExecuteAsync(
-                    async (cct) =>
-                    {
-                        var operationsIds = await client.ExecuteCommandAsync(
-                            KustoPriority.HighestPriority,
-                            priority.DatabaseName!,
-                            commandText,
-                            r => (Guid)r["OperationId"]);
+                async () =>
+                {
+                    var operationsIds = await client.ExecuteCommandAsync(
+                        KustoPriority.HighestPriority,
+                        priority.DatabaseName!,
+                        commandText,
+                        r => (Guid)r["OperationId"]);
 
-                        await _awaiter.RunAsynchronousOperationAsync(
-                            operationsIds.First(),
-                            "Ingest",
-                            commandText);
-                    },
-                    ct));
+                    await _awaiter.RunAsynchronousOperationAsync(
+                        operationsIds.First(),
+                        "Ingest",
+                        commandText);
+                });
         }
     }
 }

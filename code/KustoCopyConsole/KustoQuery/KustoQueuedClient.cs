@@ -1,6 +1,9 @@
 ﻿using Kusto.Data;
 using Kusto.Data.Common;
+using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
+using Polly.Retry;
+using Polly;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -9,6 +12,7 @@ using System.Linq;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.KustoQuery
 {
@@ -30,22 +34,40 @@ namespace KustoCopyConsole.KustoQuery
         }
         #endregion
 
-        private static readonly ClientRequestProperties EMPTY_REQUEST_PROPERTIES =
-            new ClientRequestProperties();
+        private static readonly AsyncRetryPolicy _nonPermanentRetryPolicy = Policy
+            .Handle<KustoException>(ex => !ex.IsPermanent)
+            .WaitAndRetryForeverAsync(attempt =>
+            TimeSpan.FromSeconds(Math.Max(10, attempt)),
+            TraceNonPermanentException);
 
         private readonly InnerConfiguration _config;
         private readonly ClientRequestProperties _properties;
+        private readonly AsyncPolicy? _policy;
 
         public KustoQueuedClient(KustoClient kustoClient, int concurrentQueryCount)
+            : this(
+                  new InnerConfiguration(kustoClient, concurrentQueryCount),
+                  new ClientRequestProperties(),
+                  _nonPermanentRetryPolicy)
         {
-            _config = new InnerConfiguration(kustoClient, concurrentQueryCount);
-            _properties = new ClientRequestProperties();
         }
 
-        private KustoQueuedClient(InnerConfiguration config, ClientRequestProperties properties)
+        private KustoQueuedClient(
+            InnerConfiguration config,
+            ClientRequestProperties properties,
+            AsyncPolicy? policy)
         {
             _config = config;
             _properties = properties;
+            _policy = policy;
+        }
+
+        public KustoQueuedClient SetRetryPolicy(bool doRetry)
+        {
+            return new KustoQueuedClient(
+                _config,
+                _properties,
+                doRetry ? _nonPermanentRetryPolicy : null);
         }
 
         public KustoQueuedClient SetParameter(string name, string value)
@@ -77,7 +99,7 @@ namespace KustoCopyConsole.KustoQuery
 
         private KustoQueuedClient WithNewProperties(ClientRequestProperties newProperties)
         {
-            return new KustoQueuedClient(_config, newProperties);
+            return new KustoQueuedClient(_config, newProperties, _policy);
         }
 
         public async Task<ImmutableArray<T>> ExecuteCommandAsync<T>(
@@ -123,6 +145,13 @@ namespace KustoCopyConsole.KustoQuery
                 .Client
                 .ExecuteQueryAsync(database, query, projection1, projection2, _properties);
             });
+        }
+
+        private static void TraceNonPermanentException(Exception ex, TimeSpan ts)
+        {
+            Trace.TraceWarning(@$"Non permanent Kusto exception thrown.  It will be retried.
+Exception:  {ex.GetType().Name}
+Message:  {ex.Message}");
         }
     }
 }
