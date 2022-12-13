@@ -22,7 +22,7 @@ namespace KustoCopyConsole.KustoQuery
             public string Status { get; set; } = string.Empty;
 
             public string Database { get; set; } = string.Empty;
-            
+
             public bool ShouldRetry { get; set; } = false;
         }
         #endregion
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.KustoQuery
                     thisOperationState.Database,
                     string.Empty,
                     Guid.Empty,
-                    isPermanent:!thisOperationState.ShouldRetry);
+                    isPermanent: !thisOperationState.ShouldRetry);
             }
         }
 
@@ -123,7 +123,7 @@ namespace KustoCopyConsole.KustoQuery
                             State = (string)r["State"],
                             Status = (string)r["Status"],
                             Database = (string)r["Database"],
-                            ShouldRetry = (bool)r["ShouldRetry"]
+                            ShouldRetry = (byte)r["ShouldRetry"]
                         });
 
                     foreach (var info in operationInfo)
@@ -135,7 +135,7 @@ namespace KustoCopyConsole.KustoQuery
                             operationState.State = info.State;
                             operationState.Status = info.Status;
                             operationState.Database = info.Database;
-                            operationState.ShouldRetry = info.ShouldRetry;
+                            operationState.ShouldRetry = info.ShouldRetry == 1;
                         }
                     }
                 });
