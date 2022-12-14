@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.Immutable;
+using KustoCopyConsole.Orchestrations;
 
 namespace KustoCopyConsole.Storage
 {
@@ -25,7 +26,7 @@ namespace KustoCopyConsole.Storage
 
         public static string ExternalTableSchema =>
             $"{nameof(IterationId)}:long, {nameof(EndCursor)}:string, "
-            + $"{nameof(SubIterationId)}:long, "
+            + $"{nameof(SubIterationId)}:long, {nameof(SubIterationEndTime)}:datetime, "
             + $"{nameof(RecordBatchId)}:long, {nameof(TableName)}:string, "
             + $"{nameof(State)}:string, "
             + $"{nameof(Created)}:datetime, {nameof(Updated)}:datetime, "
@@ -104,25 +105,22 @@ namespace KustoCopyConsole.Storage
         public static StatusItem CreateSubIteration(
             long iterationId,
             long subIterationId,
-            DateTime startIngestionTime,
-            DateTime endIngestionTime,
-            string? stagingTableSuffix)
+            DateTime? subIterationEndTime)
         {
             var now = DateTime.UtcNow;
             var item = new StatusItem
             {
                 IterationId = iterationId,
                 SubIterationId = subIterationId,
-                State = StatusItemState.Initial,
+                SubIterationEndTime = subIterationEndTime,
+                State = StatusItemState.Planned,
                 Created = now,
                 Updated = now,
                 InternalState = new InternalState
                 {
                     SubIterationState = new SubIterationState
                     {
-                        StartIngestionTime = startIngestionTime,
-                        EndIngestionTime = endIngestionTime,
-                        StagingTableSuffix = stagingTableSuffix
+                        StagingTableSuffix = Guid.NewGuid().ToString("N")
                     },
                 }
             };
@@ -137,7 +135,7 @@ namespace KustoCopyConsole.Storage
             string tableName,
             IEnumerable<TimeInterval> ingestionTimes,
             DateTime creationTime,
-            long recordCount)
+            long? recordCount)
         {
             var now = DateTime.UtcNow;
             var item = new StatusItem
@@ -193,29 +191,33 @@ namespace KustoCopyConsole.Storage
         /// <summary>Identifier of the sub iteration.</summary>
         [Index(2)]
         public long? SubIterationId { get; set; }
+
+        /// <summary>End time / Maximum ingestion time for the sub iteration.</summary>
+        [Index(3)]
+        public DateTime? SubIterationEndTime { get; set; }
         #endregion
 
         #region Record Batch
         /// <summary>Identifier of the record batch.</summary>
-        [Index(3)]
+        [Index(4)]
         public long? RecordBatchId { get; set; }
 
         /// <summary>Table Name.</summary>
-        [Index(4)]
+        [Index(5)]
         public string TableName { get; set; } = string.Empty;
         #endregion
 
         /// <summary>State of the item.</summary>
-        [Index(5)]
+        [Index(6)]
         public StatusItemState State { get; set; } = StatusItemState.Initial;
 
-        [Index(6)]
+        [Index(7)]
         public DateTime Created { get; set; }
 
-        [Index(7)]
+        [Index(8)]
         public DateTime Updated { get; set; }
 
-        [Index(8)]
+        [Index(9)]
         [TypeConverter(typeof(InternalStateConverter))]
         public InternalState InternalState { get; set; } = new InternalState();
         #endregion
@@ -223,7 +225,7 @@ namespace KustoCopyConsole.Storage
         public string GetStagingTableName(StatusItem subIteration)
         {
             var suffix = subIteration.InternalState!.SubIterationState!.StagingTableSuffix;
-            var stagingTableName = $"Stg_{TableName}_{suffix}";
+            var stagingTableName = $"KC_STG_{TableName}_{suffix}";
 
             return stagingTableName;
         }

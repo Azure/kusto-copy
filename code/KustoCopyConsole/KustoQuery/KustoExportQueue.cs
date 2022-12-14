@@ -1,7 +1,10 @@
-﻿using KustoCopyConsole.Concurrency;
+﻿using Kusto.Data.Exceptions;
+using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Orchestrations;
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
+using Polly.Retry;
+using Polly;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,6 +12,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.KustoQuery
 {
@@ -22,7 +26,7 @@ namespace KustoCopyConsole.KustoQuery
             KustoOperationAwaiter kustoOperationAwaiter,
             int concurrentExportCommandCount)
         {
-            Client = kustoClient;
+            Client = kustoClient.SetRetryPolicy(false);
             _queue = new PriorityExecutionQueue<KustoPriority>(concurrentExportCommandCount);
             _awaiter = kustoOperationAwaiter;
         }
@@ -34,7 +38,8 @@ namespace KustoCopyConsole.KustoQuery
             Uri folderUri,
             CursorWindow cursorWindow,
             IImmutableList<TimeInterval> ingestionTimes,
-            long expectedRecordCount)
+            long? expectedRecordCount,
+            CancellationToken ct)
         {
             var timeFilters = ingestionTimes
                 .Select(i => $"(ingestion_time()>={i.StartTime.ToKql()}" +
@@ -60,14 +65,19 @@ to csv (
                         r => (Guid)r["OperationId"]);
                     var outputs = await _awaiter.RunAsynchronousOperationAsync(
                         operationsIds.First(),
-                        commandText,
+                        "Export",
                         r => new ExportOutput(
                             new Uri((string)r["Path"]),
                             (long)r["NumRecords"],
                             (long)r["SizeInBytes"]));
                     var totalRecordCount = outputs.Sum(o => o.RecordCount);
 
-                    if (expectedRecordCount != totalRecordCount)
+                    if (!outputs.Any())
+                    {
+                        throw new CopyException($"Export yielded no blob");
+                    }
+                    if (expectedRecordCount != null
+                        && expectedRecordCount != totalRecordCount)
                     {
                         throw new CopyException(
                             $"Expected to export {expectedRecordCount} records"

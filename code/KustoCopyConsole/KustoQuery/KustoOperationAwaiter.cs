@@ -1,4 +1,5 @@
 ﻿using Kusto.Cloud.Platform.Utils;
+using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Concurrent;
@@ -19,12 +20,15 @@ namespace KustoCopyConsole.KustoQuery
             public string State { get; set; } = IN_PROGRESS_STATE;
 
             public string Status { get; set; } = string.Empty;
+
+            public string Database { get; set; } = string.Empty;
+
+            public bool ShouldRetry { get; set; } = false;
         }
         #endregion
 
         private const string IN_PROGRESS_STATE = "InProgress";
-        private const string FAILED_STATE = "Failed";
-        private const string THROTTLED_STATE = "Throttled";
+        private const string COMPLETED_STATE = "Completed";
 
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
@@ -40,7 +44,7 @@ namespace KustoCopyConsole.KustoQuery
 
         public async Task RunAsynchronousOperationAsync(
             Guid operationId,
-            string commandText)
+            string operationType)
         {
             var thisOperationState = new OperationState();
 
@@ -49,26 +53,27 @@ namespace KustoCopyConsole.KustoQuery
             {
                 throw new InvalidOperationException("Operation ID wasn't present");
             }
-            else if (thisOperationState.State == FAILED_STATE)
+            else if (thisOperationState.State != COMPLETED_STATE)
             {
-                throw new CopyException(
-                    $"Operation {operationId} failed with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}");
-            }
-            else if (thisOperationState.State == THROTTLED_STATE)
-            {
-                throw new CopyException(
-                    $"Operation {operationId} has been throttled with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}");
+                throw new KustoServiceException(
+                    "0000",
+                    "AsyncOperationNotCompleting",
+                    $"Operation {operationId} ({operationType}) failed with status "
+                    + $"'{thisOperationState.Status}'",
+                    _kustoClient.HostName,
+                    thisOperationState.Database,
+                    string.Empty,
+                    Guid.Empty,
+                    isPermanent: !thisOperationState.ShouldRetry);
             }
         }
 
         public async Task<IImmutableList<T>> RunAsynchronousOperationAsync<T>(
             Guid operationId,
-            string commandText,
+            string operationType,
             Func<IDataRecord, T> projection)
         {
-            await RunAsynchronousOperationAsync(operationId, commandText);
+            await RunAsynchronousOperationAsync(operationId, operationType);
 
             return await FetchOperationDetailsAsync(operationId, projection);
         }
@@ -104,7 +109,7 @@ namespace KustoCopyConsole.KustoQuery
                         _operations.Keys.Select(id => $"'{id}'"));
                     var commandText = @$"
 .show operations ({operationIdList})
-| project OperationId, State, Status
+| project OperationId, State, Status, Database, ShouldRetry
 | where State != '{IN_PROGRESS_STATE}'";
                     var operationInfo = await _kustoClient
                         .ExecuteCommandAsync(
@@ -115,15 +120,22 @@ namespace KustoCopyConsole.KustoQuery
                         {
                             OperationId = (Guid)r["OperationId"],
                             State = (string)r["State"],
-                            Status = (string)r["Status"]
+                            Status = (string)r["Status"],
+                            Database = (string)r["Database"],
+                            ShouldRetry = (SByte)r["ShouldRetry"]
                         });
 
                     foreach (var info in operationInfo)
                     {
-                        var operationState = _operations[info.OperationId];
-
-                        operationState.State = info.State;
-                        operationState.Status = info.Status;
+                        //  It is possible the operation ID get removes as a racing condition
+                        //  by the owning thread
+                        if (_operations.TryGetValue(info.OperationId, out var operationState))
+                        {
+                            operationState.State = info.State;
+                            operationState.Status = info.Status;
+                            operationState.Database = info.Database;
+                            operationState.ShouldRetry = info.ShouldRetry == 1;
+                        }
                     }
                 });
             }

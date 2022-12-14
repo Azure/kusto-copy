@@ -1,181 +1,189 @@
-﻿using Kusto.Data.Common;
+﻿using Kusto.Data.Linq;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Storage;
+using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Net.NetworkInformation;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Orchestrations
 {
-    public class TablePlanningOrchestration
+    internal class TablePlanningOrchestration
     {
         #region Inner types
+        public record PlanningOutput(
+            DateTime? IterationTableEndTime,
+            IImmutableList<PlanRecordBatchState> RecordBatches);
+
         private record ProtoRecordBatch(
             TimeWindow IngestionTimeInterval,
             long RecordCount,
             string ExtentId);
         #endregion
 
-        private const int RECORD_BATCH_SIZE = 10000;
-
         private readonly KustoPriority _kustoPriority;
-        private readonly StatusItem _subIteration;
-        private readonly string _cursorWindowPredicate;
-        private readonly DatabaseStatus _dbStatus;
+        private readonly CursorWindow _cursorWindow;
+        private readonly string _startTimePredicate;
+        private readonly long _maxExtentCount;
         private readonly KustoQueuedClient _sourceQueuedClient;
-        private readonly Func<long> _recordBatchIdProvider;
 
         #region Constructors
-        public static async Task PlanAsync(
+        public static async Task<PlanningOutput> PlanAsync(
             KustoPriority kustoPriority,
-            StatusItem subIteration,
-            DatabaseStatus dbStatus,
+            CursorWindow cursorWindow,
+            DateTime? startTimeExclusive,
+            long maxExtentCount,
             KustoQueuedClient sourceQueuedClient,
-            Func<long> recordBatchIdProvider,
             CancellationToken ct)
         {
             var orchestration = new TablePlanningOrchestration(
                 kustoPriority,
-                subIteration,
-                dbStatus,
-                sourceQueuedClient,
-                recordBatchIdProvider);
+                cursorWindow,
+                startTimeExclusive,
+                maxExtentCount,
+                sourceQueuedClient);
+            var batches = await orchestration.PlanAsync(ct);
 
-            await orchestration.RunAsync(ct);
+            return batches;
         }
 
-        private TablePlanningOrchestration(
+        public TablePlanningOrchestration(
             KustoPriority kustoPriority,
-            StatusItem subIteration,
-            DatabaseStatus dbStatus,
-            KustoQueuedClient sourceQueuedClient,
-            Func<long> recordBatchIdProvider)
+            CursorWindow cursorWindow,
+            DateTime? startTimeExclusive,
+            long maxExtentCount,
+            KustoQueuedClient sourceQueuedClient)
         {
             _kustoPriority = kustoPriority;
-            _subIteration = subIteration;
-            _cursorWindowPredicate = dbStatus
-                .GetCursorWindow(subIteration.IterationId)
-                .ToCursorKustoPredicate();
-            _dbStatus = dbStatus;
+            _cursorWindow = cursorWindow;
+            _startTimePredicate = startTimeExclusive == null
+                ? string.Empty
+                : $"| where ingestion_time() > {startTimeExclusive.Value.ToKql()}";
+            _maxExtentCount = maxExtentCount;
             _sourceQueuedClient = sourceQueuedClient;
-            _recordBatchIdProvider = recordBatchIdProvider;
         }
         #endregion
 
-        private async Task RunAsync(CancellationToken ct)
+        private async Task<PlanningOutput> PlanAsync(
+            CancellationToken ct)
         {
-            do
+            var iterationTableEndTime = await FetchIterationTableEndTimeAsync();
+
+            if (iterationTableEndTime == null)
             {
-                var batches = _dbStatus.GetRecordBatches(
-                    _subIteration.IterationId,
-                    _subIteration.SubIterationId!.Value);
-                //  Clip out the bracket considering existing batches
-                var startTime = batches
-                    .SelectMany(b =>
-                    b.InternalState.RecordBatchState!.PlanRecordBatchState!.IngestionTimes.Select(t => t.EndTime))
-                    .Append(_subIteration.InternalState.SubIterationState!.StartIngestionTime!.Value)
-                    .Max();
-                var endTime = batches
-                    .SelectMany(b =>
-                    b.InternalState.RecordBatchState!.PlanRecordBatchState!.IngestionTimes.Select(t => t.StartTime))
-                    .Append(_subIteration.InternalState.SubIterationState!.EndIngestionTime!.Value)
-                    .Min();
-                var includeStartTime = startTime
-                    == _subIteration.InternalState.SubIterationState!.StartIngestionTime!.Value;
-                var includeEndTime = endTime
-                    == _subIteration.InternalState.SubIterationState!.EndIngestionTime!.Value;
-                var protoRecordBatches = await LoadProtoRecordBatchAsync(
-                    new TimeWindow(startTime, endTime),
-                    includeStartTime,
-                    includeEndTime);
+                return new PlanningOutput(
+                    null,
+                    ImmutableArray<PlanRecordBatchState>.Empty);
+            }
+            else
+            {
+                return await PlanAsync(iterationTableEndTime.Value, ct);
+            }
+        }
 
-                if (protoRecordBatches.Any())
+        private async Task<PlanningOutput> PlanAsync(
+            DateTime iterationTableEndTime,
+            CancellationToken ct)
+        {
+            var protoRecordBatches = await LoadProtoRecordBatchesAsync();
+
+            if (protoRecordBatches.Any())
+            {
+                var extentIdList = protoRecordBatches
+                    .Select(p => p.ExtentId)
+                    .Distinct()
+                    .ToImmutableArray();
+                var extentMap = await FetchExtentIdMapAsync(extentIdList);
+
+                if (extentMap.Count() != extentIdList.Count())
                 {
-                    var extentMap = await FetchExtentIdMapAsync(
-                        protoRecordBatches.Select(p => p.ExtentId));
+                    Trace.TraceWarning(
+                        $"Extent list changed between 2 close operations on "
+                        + $"table '{_kustoPriority.TableName}':  "
+                        + $"'{protoRecordBatches.Count()}' vs '{extentMap.Count()}'.  "
+                        + "Likely cause:  merge.  Mitigation:  retry.");
 
-                    if (extentMap.Count() != protoRecordBatches.Count())
-                    {
-                        Trace.TraceWarning(
-                            $"Extent list changed between 2 close operations on "
-                            + $"table '{_kustoPriority.TableName}':  "
-                            + $"'{protoRecordBatches.Count()}' vs '{extentMap.Count()}'.  "
-                            + "Likely cause:  merge.  Mitigation:  retry.");
-                    }
-                    else
-                    {
-                        var recordBatches = protoRecordBatches
-                            .GroupBy(p => p.ExtentId)
-                            .Select(g => StatusItem.CreateRecordBatch(
-                                _subIteration.IterationId,
-                                _subIteration.SubIterationId!.Value,
-                                _recordBatchIdProvider(),
-                                _kustoPriority.TableName!,
-                                g.Select(p => new TimeInterval
-                                {
-                                    StartTime = p.IngestionTimeInterval.StartTime,
-                                    EndTime = p.IngestionTimeInterval.EndTime
-                                }),
-                                extentMap[g.Key],
-                                g.Sum(p => p.RecordCount)))
-                            .ToImmutableArray();
-
-                        await _dbStatus.PersistNewItemsAsync(recordBatches, ct);
-                        if (protoRecordBatches.Count() < RECORD_BATCH_SIZE)
-                        {
-                            return;
-                        }
-                    }
+                    return await PlanAsync(iterationTableEndTime, ct);
                 }
                 else
                 {
-                    return;
+                    var recordBatches = MapRecordBatches(protoRecordBatches, extentMap);
+
+                    return new PlanningOutput(
+                        iterationTableEndTime,
+                        recordBatches);
                 }
             }
-            while (true);
+            else
+            {
+                return new PlanningOutput(
+                    iterationTableEndTime,
+                    ImmutableArray<PlanRecordBatchState>.Empty);
+            }
         }
 
-        private async Task<IImmutableDictionary<string, DateTime>> FetchExtentIdMapAsync(
-            IEnumerable<string> extentIds)
+        private static ImmutableArray<PlanRecordBatchState> MapRecordBatches(
+            IImmutableList<ProtoRecordBatch> protoRecordBatches,
+            IImmutableDictionary<string, DateTime> extentMap)
         {
-            var extentIdTextList = string.Join(
-                Environment.NewLine + ", ",
-                extentIds.Select(e => $"'{e}'"));
-            var mapList = await _sourceQueuedClient.ExecuteQueryAsync(
+            var recordBatches = protoRecordBatches
+                .GroupBy(p => p.ExtentId)
+                .Select(g => new PlanRecordBatchState
+                {
+                    CreationTime = extentMap[g.Key],
+                    RecordCount = g.Sum(p => p.RecordCount),
+                    IngestionTimes = g.Select(p => new TimeInterval
+                    {
+                        StartTime = p.IngestionTimeInterval.StartTime,
+                        EndTime = p.IngestionTimeInterval.EndTime
+                    }).ToImmutableArray()
+                })
+                .ToImmutableArray();
+
+            return recordBatches;
+        }
+
+        private async Task<DateTime?> FetchIterationTableEndTimeAsync()
+        {
+            var commandText = $@"['{_kustoPriority.TableName}']
+{_cursorWindow.ToCursorKustoPredicate()}
+| summarize MaxTime=max(ingestion_time())";
+            var maxima = await _sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
-                $@"
-.show table ['{_kustoPriority.TableName}'] extents
-({extentIdTextList})
-| project tostring(ExtentId), MaxCreatedOn
-",
-                r => new
-                {
-                    ExtentId = (string)r["ExtentId"],
-                    MaxCreatedOn = (DateTime)r["MaxCreatedOn"]
-                });
-            var map = mapList.ToImmutableDictionary(p => p.ExtentId, p => p.MaxCreatedOn);
+                commandText,
+                r => r["MaxTime"].To<DateTime>());
+            var maximum = maxima.First();
 
-            return map;
+            return maximum;
         }
 
-        private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchAsync(
-            TimeWindow timeWindow,
-            bool includeStartTime,
-            bool includeEndTime)
+        private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchesAsync()
         {
-            var sourceQueuedClient = _sourceQueuedClient
-                .SetParameter("StartTime", timeWindow.StartTime)
-                .SetParameter("EndTime", timeWindow.EndTime);
-            var startTimeOperator = includeStartTime ? ">=" : ">";
+            var sourceQueuedClient = _sourceQueuedClient;
             var queryText = $@"
-declare query_parameters(StartTime:datetime, EndTime:datetime);
-['{_kustoPriority.TableName}']
-{_cursorWindowPredicate}
-| where ingestion_time() {startTimeOperator} StartTime
-//  End time is always excluded
-| where ingestion_time() < EndTime
-| summarize Cardinality=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
+let MaxExtentCount = {_maxExtentCount};
+let FramedTable = ['{_kustoPriority.TableName}']
+    {_cursorWindow.ToCursorKustoPredicate()}
+    {_startTimePredicate};
+let Extremes = materialize(FramedTable
+    | extend ExtentId=extent_id()
+    | extend IngestionTime=ingestion_time()
+    | summarize MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time()) by ExtentId
+    | top MaxExtentCount by MinIngestionTime asc
+    | where isnotnull(MinIngestionTime)
+    | where isnotnull(MaxIngestionTime)
+    | summarize MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime));
+let MinIngestionTime = toscalar(Extremes | project MinIngestionTime);
+let MaxIngestionTime = toscalar(Extremes | project MaxIngestionTime);
+let MicroRecordBatches = FramedTable
+    | where ingestion_time() >= MinIngestionTime
+    | where ingestion_time() <= MaxIngestionTime
+    | summarize Cardinality=count() by IngestionTime=ingestion_time(), ExtentId=extent_id();
+MicroRecordBatches
 | order by IngestionTime asc
 | extend IsNewExtentId = iif(prev(ExtentId)==ExtentId, false, true)
 | extend IsNextNewExtentId = iif(next(ExtentId)==ExtentId, false, true)
@@ -185,9 +193,7 @@ declare query_parameters(StartTime:datetime, EndTime:datetime);
 | extend MaxIngestionTime=iif(not(IsNextNewExtentId), next(IngestionTime), IngestionTime)
 | extend ActualTotalCardinality = iif(IsNextNewExtentId, TotalCardinality, next(TotalCardinality))
 | where IsNewExtentId
-| project MinIngestionTime, MaxIngestionTime, tostring(ExtentId), Cardinality=ActualTotalCardinality
-| take {RECORD_BATCH_SIZE}
-";
+| project MinIngestionTime, MaxIngestionTime, tostring(ExtentId), Cardinality=ActualTotalCardinality";
             var protoBatches = await sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
@@ -200,6 +206,30 @@ declare query_parameters(StartTime:datetime, EndTime:datetime);
                     (string)r["ExtentId"]));
 
             return protoBatches;
+        }
+
+        private async Task<IImmutableDictionary<string, DateTime>> FetchExtentIdMapAsync(
+            IEnumerable<string> extentIds)
+        {
+            var extentIdTextList = string.Join(
+                Environment.NewLine + ", ",
+                extentIds.Select(e => $"'{e}'"));
+            var commandText = $@".show table ['{_kustoPriority.TableName}'] extents
+({extentIdTextList})
+| project tostring(ExtentId), MaxCreatedOn
+";
+            var mapList = await _sourceQueuedClient.ExecuteQueryAsync(
+                _kustoPriority,
+                _kustoPriority.DatabaseName!,
+                commandText,
+                r => new
+                {
+                    ExtentId = (string)r["ExtentId"],
+                    MaxCreatedOn = (DateTime)r["MaxCreatedOn"]
+                });
+            var map = mapList.ToImmutableDictionary(p => p.ExtentId, p => p.MaxCreatedOn);
+
+            return map;
         }
     }
 }

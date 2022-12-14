@@ -368,6 +368,26 @@ namespace KustoCopyConsole.Storage
             return _statusIndex.GetRecordBatch(iterationId, subIterationId, recordBatchId);
         }
 
+        public long GetNewIterationId()
+        {
+            var iterations = GetIterations();
+            var newIterationId = iterations.Any()
+                ? iterations.Last().IterationId + 1
+                : 1;
+
+            return newIterationId;
+        }
+
+        public long GetNewSubIterationId(long iterationId)
+        {
+            var subIterations = GetSubIterations(iterationId);
+            var newSubIterationId = subIterations.Any()
+                ? subIterations.Last().SubIterationId!.Value + 1
+                : 1;
+
+            return newSubIterationId;
+        }
+
         public CursorWindow GetCursorWindow(long iterationId)
         {
             var iteration = GetIteration(iterationId);
@@ -449,6 +469,7 @@ namespace KustoCopyConsole.Storage
                 {
                     ProcessNewItem(item);
                 }
+                OnStatusChanged();
             }
             else
             {
@@ -460,7 +481,6 @@ namespace KustoCopyConsole.Storage
         private void ProcessNewItem(StatusItem item)
         {
             _statusIndex.IndexNewItem(item);
-            OnStatusChanged();
         }
 
         private void OnStatusChanged()

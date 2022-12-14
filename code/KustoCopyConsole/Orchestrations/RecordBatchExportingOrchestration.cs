@@ -27,7 +27,17 @@ namespace KustoCopyConsole.Orchestrations
                 kustoExportQueue,
                 folderClient);
 
-            await orchestrator.RunAsync(ct);
+            try
+            {
+                await orchestrator.RunAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                throw new CopyException($"Issue exporting record batch {record.RecordBatchId} "
+                    + $"from sub iteration {record.SubIterationId} of iteration "
+                    + $"{record.IterationId}",
+                    ex);
+            }
         }
 
         private RecordBatchExportingOrchestration(
@@ -50,6 +60,13 @@ namespace KustoCopyConsole.Orchestrations
 
         private async Task RunAsync(CancellationToken ct)
         {
+            await RetryHelper.RetryNonPermanentKustoErrorPolicy.ExecuteAndCaptureAsync(
+                async (cct) => await RunNoPolicyAsync(cct),
+                ct);
+        }
+
+        private async Task RunNoPolicyAsync(CancellationToken ct)
+        {
             var deleteFolderTask = _folderClient.DeleteIfExistsAsync(cancellationToken: ct);
             var preSchema = await FetchSchemaAsync(ct);
             var recordBatch = _dbStatus.GetRecordBatch(
@@ -66,7 +83,8 @@ namespace KustoCopyConsole.Orchestrations
                 _folderClient.Uri,
                 cursorWindow,
                 planState.IngestionTimes,
-                planState.RecordCount!.Value);
+                planState.RecordCount,
+                ct);
             var postSchema = await FetchSchemaAsync(ct);
 
             if (preSchema.SequenceEqual(postSchema))

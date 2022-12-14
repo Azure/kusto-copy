@@ -33,16 +33,21 @@ with(format='csv', ignoreFirstRecord=true)
     {nameof(StatusItem.TableName)},
     {nameof(StatusItem.RecordBatchId)}
 | where {nameof(StatusItem.State)} != ""{StatusItemState.Deleted}""
+| extend Level=case(
+    isnotnull({nameof(StatusItem.SubIterationId)}) and isnotnull({nameof(StatusItem.RecordBatchId)}),
+    ""RecordBatch"",
+    isnotnull({nameof(StatusItem.SubIterationId)}),
+    ""SubIteration"",
+    ""Iteration"")
+| project Level, {columnListText}
 | order by
-    {nameof(StatusItem.IterationId)} asc,
-    {nameof(StatusItem.SubIterationId)} asc,
-    {nameof(StatusItem.TableName)} asc,
-    {nameof(StatusItem.RecordBatchId)} asc
-| project {columnListText}
+    {nameof(StatusItem.IterationId)} desc,
+    iif(isnotnull({nameof(StatusItem.SubIterationId)}), {nameof(StatusItem.SubIterationId)}, {long.MaxValue}) desc,
+    iif(isnotnull({nameof(StatusItem.RecordBatchId)}), {nameof(StatusItem.RecordBatchId)}, 0) asc
 }}";
 
             await destinationClient.ExecuteCommandAsync(
-                new KustoPriority(),
+                KustoPriority.HighestPriority,
                 dbStatus.DbName,
                 createStatusViewFunction,
                 r => r);

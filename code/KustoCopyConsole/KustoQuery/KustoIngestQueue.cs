@@ -1,6 +1,9 @@
-﻿using KustoCopyConsole.Concurrency;
+﻿using Kusto.Data.Exceptions;
+using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Storage;
 using Microsoft.Identity.Client;
+using Polly.Retry;
+using Polly;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -8,6 +11,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.KustoQuery
 {
@@ -21,7 +25,7 @@ namespace KustoCopyConsole.KustoQuery
             KustoOperationAwaiter kustoOperationAwaiter,
             int concurrentIngestCommandCount)
         {
-            Client = kustoClient;
+            Client = kustoClient.SetRetryPolicy(false);
             _queue = new PriorityExecutionQueue<KustoPriority>(concurrentIngestCommandCount);
             _awaiter = kustoOperationAwaiter;
         }
@@ -32,7 +36,8 @@ namespace KustoCopyConsole.KustoQuery
             KustoPriority priority,
             IEnumerable<Uri> blobPaths,
             DateTime creationTime,
-            IEnumerable<string> tags)
+            IEnumerable<string> tags,
+            CancellationToken ct)
         {
             var pathTexts = blobPaths
                 .Select(p => $"'{p};impersonate'");
@@ -42,18 +47,20 @@ namespace KustoCopyConsole.KustoQuery
             var commandText = $@".ingest async into table ['{priority.TableName}']
   (
     {sourceLocatorText}
-  ) 
+  )
   with (
     format='csv',
     persistDetails=true,
     creationTime='{creationTimeText}',
     tags=""[{tagsText}]"")
 ";
+            var client = Client.SetOption("norequesttimeout", true);
+
             await _queue.RequestRunAsync(
                 priority,
                 async () =>
                 {
-                    var operationsIds = await Client.ExecuteCommandAsync(
+                    var operationsIds = await client.ExecuteCommandAsync(
                         KustoPriority.HighestPriority,
                         priority.DatabaseName!,
                         commandText,
@@ -61,7 +68,7 @@ namespace KustoCopyConsole.KustoQuery
 
                     await _awaiter.RunAsynchronousOperationAsync(
                         operationsIds.First(),
-                        commandText);
+                        "Ingest");
                 });
         }
     }

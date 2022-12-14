@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Storage
     {
         private static readonly AsyncRetryPolicy _retryPolicyReadWhileWriting =
             Policy.Handle<RequestFailedException>(e => e.Status == 409).WaitAndRetryAsync(
-                5,
+                10,
                 attempt => TimeSpan.FromSeconds((float)attempt / 5));
 
         private const string CHECKPOINT_BLOB = "index.csv";
