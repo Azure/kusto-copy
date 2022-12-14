@@ -68,8 +68,7 @@ namespace KustoCopyConsole.KustoQuery
 
                     await _awaiter.RunAsynchronousOperationAsync(
                         operationsIds.First(),
-                        "Ingest",
-                        commandText);
+                        "Ingest");
                 });
         }
     }

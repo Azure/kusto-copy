@@ -44,8 +44,7 @@ namespace KustoCopyConsole.KustoQuery
 
         public async Task RunAsynchronousOperationAsync(
             Guid operationId,
-            string operationType,
-            string commandText)
+            string operationType)
         {
             var thisOperationState = new OperationState();
 
@@ -59,8 +58,8 @@ namespace KustoCopyConsole.KustoQuery
                 throw new KustoServiceException(
                     "0000",
                     "AsyncOperationNotCompleting",
-                    $"Operation {operationId} ({operationType}) failed with message:  "
-                    + $"'{thisOperationState.Status}' for command {commandText}",
+                    $"Operation {operationId} ({operationType}) failed with status "
+                    + $"'{thisOperationState.Status}'",
                     _kustoClient.HostName,
                     thisOperationState.Database,
                     string.Empty,
@@ -72,10 +71,9 @@ namespace KustoCopyConsole.KustoQuery
         public async Task<IImmutableList<T>> RunAsynchronousOperationAsync<T>(
             Guid operationId,
             string operationType,
-            string commandText,
             Func<IDataRecord, T> projection)
         {
-            await RunAsynchronousOperationAsync(operationId, operationType, commandText);
+            await RunAsynchronousOperationAsync(operationId, operationType);
 
             return await FetchOperationDetailsAsync(operationId, projection);
         }

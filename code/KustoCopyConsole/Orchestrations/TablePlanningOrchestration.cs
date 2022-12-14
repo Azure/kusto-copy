@@ -150,32 +150,15 @@ namespace KustoCopyConsole.Orchestrations
         {
             var commandText = $@"['{_kustoPriority.TableName}']
 {_cursorWindow.ToCursorKustoPredicate()}
-| fork
-    (summarize MinTime=min(ingestion_time()), MaxTime=max(ingestion_time()))
-    (count)";
-            var (Extrema, Cardinalities) = await _sourceQueuedClient.ExecuteQueryAsync(
+| summarize MaxTime=max(ingestion_time())";
+            var maxima = await _sourceQueuedClient.ExecuteQueryAsync(
                 _kustoPriority,
                 _kustoPriority.DatabaseName!,
                 commandText,
-                r => new
-                {
-                    MinTime = r["MinTime"].To<DateTime>(),
-                    MaxTime = r["MaxTime"].To<DateTime>()
-                },
-                r => (long)r[0]);
-            var extremum = Extrema.First();
-            var cardinality = Cardinalities.First();
+                r => r["MaxTime"].To<DateTime>());
+            var maximum = maxima.First();
 
-            if ((extremum.MinTime == null || extremum.MaxTime == null) && cardinality > 0)
-            {
-                Trace.TraceWarning(
-                    $"Table ['{_kustoPriority.TableName}'] contains rows without"
-                    + $" ingestion_time() in the iteration {_kustoPriority.IterationId}"
-                    + $" cursor window ; that iteration's data won't be"
-                    + $" processed for that table");
-            }
-
-            return extremum.MaxTime;
+            return maximum;
         }
 
         private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchesAsync()

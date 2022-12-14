@@ -66,7 +66,6 @@ to csv (
                     var outputs = await _awaiter.RunAsynchronousOperationAsync(
                         operationsIds.First(),
                         "Export",
-                        commandText,
                         r => new ExportOutput(
                             new Uri((string)r["Path"]),
                             (long)r["NumRecords"],
