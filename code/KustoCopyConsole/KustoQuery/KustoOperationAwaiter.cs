@@ -1,6 +1,8 @@
 ﻿using Kusto.Cloud.Platform.Utils;
 using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
+using Polly;
+using Polly.Bulkhead;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -33,7 +35,7 @@ namespace KustoCopyConsole.KustoQuery
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
         private readonly KustoQueuedClient _kustoClient;
-        private readonly SingletonExecution _singletonExecution = new SingletonExecution();
+        private readonly AsyncBulkheadPolicy _bulkheadPolicy = Policy.BulkheadAsync(1, int.MaxValue);
         private readonly ConcurrentDictionary<Guid, OperationState> _operations =
             new ConcurrentDictionary<Guid, OperationState>();
 
@@ -100,7 +102,7 @@ namespace KustoCopyConsole.KustoQuery
             _operations.TryAdd(operationId, thisOperationState);
             do
             {
-                await _singletonExecution.SingleRunAsync(async () =>
+                await _bulkheadPolicy.ExecuteAsync(async () =>
                 {
                     await Task.Delay(WAIT_BETWEEN_CHECKS);
 
