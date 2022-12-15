@@ -10,8 +10,8 @@ namespace KustoCopyConsole.Parameters
     {
         public bool IsEnabled { get; set; } = true;
 
-        public TimeSpan? BackfillHorizon { get; set; }
+        public string? BackfillHorizon { get; set; }
 
-        public TimeSpan Rpo { get; set; } = TimeSpan.FromMinutes(5);
+        public string? Rpo { get; set; }
     }
 }

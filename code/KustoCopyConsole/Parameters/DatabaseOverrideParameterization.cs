@@ -8,10 +8,10 @@ namespace KustoCopyConsole.Parameters
 {
     public class DatabaseOverrideParameterization
     {
-        public bool? IsEnabled { get; set; } = null;
+        public bool? IsEnabled { get; set; }
 
-        public TimeSpan? BackfillHorizon { get; set; }
+        public string? BackfillHorizon { get; set; }
 
-        public TimeSpan? Rpo { get; set; }
+        public string? Rpo { get; set; }
     }
 }

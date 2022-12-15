@@ -84,6 +84,7 @@ namespace KustoCopyConsole.Orchestrations
         private async Task RunAsync(CancellationToken ct)
         {
             var dbParameterizationIndex = _parameterization.Source!.Databases!
+                .Select(d => d.Override(_parameterization.Source!.DatabaseDefault))
                 .ToImmutableDictionary(d => d.Name!);
             var setupTasks = _dbStatusList
                 .Select(dbStatus => DestinationDbSetupOrchestration.SetupAsync(
