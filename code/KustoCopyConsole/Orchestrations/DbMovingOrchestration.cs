@@ -200,10 +200,12 @@ namespace KustoCopyConsole.Orchestrations
             IEnumerable<string> tableNames,
             KustoPriority priority)
         {
-            var tableListText = string.Join(", ", tableNames.Select(t => $"'{t}'"));
+            var tableListPredicate = tableNames.Any()
+                ? $"| where TableName in ({string.Join(", ", tableNames.Select(t => $"'{t}'"))})"
+                : string.Empty;
             var commandText = $@"
 .show tables
-| where TableName in ({tableListText})
+{tableListPredicate}
 | project TableName
 ";
             var existingTables = await _queuedClient.ExecuteCommandAsync(

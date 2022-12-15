@@ -79,7 +79,11 @@ namespace KustoCopyConsole.Orchestrations
 
                 do
                 {
-                    await PlanNewSubIterationAsync(iteration, tableNames, ct);
+                    await PlanNewSubIterationAsync(
+                        iteration,
+                        tableNames,
+                        dbTimespanConfig.BackfillHorizon,
+                        ct);
                 }
                 while (_dbStatus.GetIteration(iteration.IterationId).State
                 == StatusItemState.Initial);
@@ -109,55 +113,69 @@ Rpo=timespan({_dbParameterization.DatabaseOverrides!.Rpo})";
         private async Task PlanNewSubIterationAsync(
             StatusItem iteration,
             IImmutableList<string> tableNames,
+            TimeSpan? backfillHorizon,
             CancellationToken ct)
         {
             var newSubIterationId = _dbStatus.GetNewSubIterationId(iteration.IterationId);
-            var tablePlannings =
-                await PlanTablesAsync(iteration, newSubIterationId, tableNames, ct);
 
-            if (tablePlannings.Any())
+            if (iteration.IterationId == 1 && newSubIterationId == 1 && backfillHorizon != null)
             {
-                var maxIterationEndTime = tablePlannings
-                    .Where(t => t.IterationTableEndTime != null)
-                    .Select(t => t.IterationTableEndTime!.Value)
-                    .Max();
-                var maxSubIterationEndTime = ComputeMaxSubIterationEndTime(
-                    tablePlannings,
-                    maxIterationEndTime);
-                var clippedPlannings = ClipPlannings(tablePlannings, maxSubIterationEndTime);
                 var newSubIteration = StatusItem.CreateSubIteration(
                     iteration.IterationId,
                     newSubIterationId,
-                    maxSubIterationEndTime);
-                long currentRecordId = 1;
-                var recordBatches = clippedPlannings
-                    //  Align record batch IDs with table names
-                    .OrderBy(p => p.TableName)
-                    .Select(p => p.RecordBatches
-                    .Select(r => StatusItem.CreateRecordBatch(
-                        iteration.IterationId,
-                        newSubIterationId,
-                        currentRecordId++,
-                        p.TableName,
-                        r.IngestionTimes,
-                        r.CreationTime!.Value,
-                        r.RecordCount)))
-                    .SelectMany(r => r)
-                    .ToImmutableArray();
-                //  We define it but might not use it
-                var plannedIteration = iteration.UpdateState(StatusItemState.Planned);
-                var items = maxIterationEndTime == maxSubIterationEndTime
-                    ? recordBatches.Prepend(newSubIteration).Append(plannedIteration)
-                    : recordBatches.Prepend(newSubIteration);
+                    DateTime.Now.ToUtc().Subtract(backfillHorizon!.Value));
 
-                Trace.WriteLine($"Sub Iteration {newSubIterationId} planned");
-                await _dbStatus.PersistNewItemsAsync(items, ct);
+                await _dbStatus.PersistNewItemsAsync(new[] {newSubIteration}, ct);
             }
             else
             {
-                var plannedIteration = iteration.UpdateState(StatusItemState.Planned);
+                var tablePlannings =
+                    await PlanTablesAsync(iteration, newSubIterationId, tableNames, ct);
 
-                await _dbStatus.PersistNewItemsAsync(new[] { plannedIteration }, ct);
+                if (tablePlannings.Any())
+                {
+                    var maxIterationEndTime = tablePlannings
+                        .Where(t => t.IterationTableEndTime != null)
+                        .Select(t => t.IterationTableEndTime!.Value)
+                        .Max();
+                    var maxSubIterationEndTime = ComputeMaxSubIterationEndTime(
+                        tablePlannings,
+                        maxIterationEndTime);
+                    var clippedPlannings = ClipPlannings(tablePlannings, maxSubIterationEndTime);
+                    var newSubIteration = StatusItem.CreateSubIteration(
+                        iteration.IterationId,
+                        newSubIterationId,
+                        maxSubIterationEndTime);
+                    long currentRecordId = 1;
+                    var recordBatches = clippedPlannings
+                        //  Align record batch IDs with table names
+                        .OrderBy(p => p.TableName)
+                        .Select(p => p.RecordBatches
+                        .Select(r => StatusItem.CreateRecordBatch(
+                            iteration.IterationId,
+                            newSubIterationId,
+                            currentRecordId++,
+                            p.TableName,
+                            r.IngestionTimes,
+                            r.CreationTime!.Value,
+                            r.RecordCount)))
+                        .SelectMany(r => r)
+                        .ToImmutableArray();
+                    //  We define it but might not use it
+                    var plannedIteration = iteration.UpdateState(StatusItemState.Planned);
+                    var items = maxIterationEndTime == maxSubIterationEndTime
+                        ? recordBatches.Prepend(newSubIteration).Append(plannedIteration)
+                        : recordBatches.Prepend(newSubIteration);
+
+                    Trace.WriteLine($"Sub Iteration {newSubIterationId} planned");
+                    await _dbStatus.PersistNewItemsAsync(items, ct);
+                }
+                else
+                {
+                    var plannedIteration = iteration.UpdateState(StatusItemState.Planned);
+
+                    await _dbStatus.PersistNewItemsAsync(new[] { plannedIteration }, ct);
+                }
             }
         }
 
@@ -342,7 +360,7 @@ Rpo=timespan({_dbParameterization.DatabaseOverrides!.Rpo})";
 
                 if (waitPeriod > TimeSpan.Zero)
                 {   //  Wait for RPO
-                    await Task.Delay(waitPeriod);
+                    await Task.Delay(waitPeriod, ct);
                 }
 
                 var newIterationId = _dbStatus.GetNewIterationId();

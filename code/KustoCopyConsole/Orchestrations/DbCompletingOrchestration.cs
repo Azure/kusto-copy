@@ -182,14 +182,18 @@ namespace KustoCopyConsole.Orchestrations
                 .GetRecordBatches(subIterationKey.IterationId, subIterationKey.SubIterationId)
                 .Select(r => r.GetStagingTableName(subIteration))
                 .Distinct();
-            var tableNamesText = string.Join(", ", tableNames.Select(t => $"['{t}']"));
-            var commandText = $@".drop tables ({tableNamesText}) ifexists";
 
-            await _queuedClient.ExecuteCommandAsync(
-                priority,
-                DbStatus.DbName,
-                commandText,
-                r => r);
+            if (tableNames.Any())
+            {
+                var tableNamesText = string.Join(", ", tableNames.Select(t => $"['{t}']"));
+                var commandText = $@".drop tables ({tableNamesText}) ifexists";
+
+                await _queuedClient.ExecuteCommandAsync(
+                    priority,
+                    DbStatus.DbName,
+                    commandText,
+                    r => r);
+            }
         }
 
         private async Task DeleteSubIterationFolderAsync(StatusItem subIteration)
