@@ -46,6 +46,9 @@ namespace KustoCopyConsole
         [Option("ingestion-slots", Required = false, HelpText = "Number of concurrent ingestions on the clusters")]
         public int ConcurrentIngestionCount { get; set; } = 0;
 
+        [Option('r', "rpo", Required = false, HelpText = "Recovery Point Objectives:  the target timespan between 2 iterations")]
+        public string Rpo { get; set; } = "5m";
+
         [Option('b', "backfillHorizon", Required = false, HelpText = "Backfill horizon:  how long in the past should we start?")]
         public string? BackfillHorizon { get; set; }
     }

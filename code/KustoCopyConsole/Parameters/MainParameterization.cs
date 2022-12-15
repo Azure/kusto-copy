@@ -50,6 +50,11 @@ namespace KustoCopyConsole.Parameters
                     ClusterQueryConnectionString = options.SourceConnectionString,
                     ConcurrentQueryCount = options.ConcurrentQueryCount,
                     ConcurrentExportCommandCount = options.ConcurrentExportCommandCount,
+                    DatabaseDefault = new DatabaseConfigParameterization
+                    {
+                        BackfillHorizon = options.BackfillHorizon,
+                        Rpo = options.Rpo
+                    },
                     Databases = new[] { options.Db! }
                     .Select(db => new SourceDatabaseParameterization
                     {

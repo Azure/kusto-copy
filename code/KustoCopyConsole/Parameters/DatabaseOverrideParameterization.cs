@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Parameters
 {
     public class DatabaseOverrideParameterization
     {
-        public bool? IsEnabled { get; set; } = null;
+        public bool? IsEnabled { get; set; }
 
         public string? BackfillHorizon { get; set; }
 

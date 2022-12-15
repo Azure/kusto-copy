@@ -12,6 +12,6 @@ namespace KustoCopyConsole.Parameters
 
         public string? BackfillHorizon { get; set; }
 
-        public string Rpo { get; set; } = "5m";
+        public string? Rpo { get; set; }
     }
 }
