@@ -35,7 +35,8 @@ namespace KustoCopyConsole.KustoQuery
         private static readonly TimeSpan WAIT_BETWEEN_CHECKS = TimeSpan.FromSeconds(1);
 
         private readonly KustoQueuedClient _kustoClient;
-        private readonly AsyncBulkheadPolicy _bulkheadPolicy = Policy.BulkheadAsync(1, int.MaxValue);
+        private readonly AsyncBulkheadPolicy _bulkheadPolicy =
+            Policy.BulkheadAsync(1, int.MaxValue);
         private readonly ConcurrentDictionary<Guid, OperationState> _operations =
             new ConcurrentDictionary<Guid, OperationState>();
 

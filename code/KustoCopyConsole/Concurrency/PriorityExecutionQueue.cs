@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Polly;
+using Polly.Bulkhead;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,58 +12,69 @@ namespace KustoCopyConsole.Concurrency
     public class PriorityExecutionQueue<TPriority>
     {
         #region Inner Types
-        private class Request
+        private abstract class Request
         {
-            public TaskCompletionSource Source { get; } = new TaskCompletionSource();
+            public abstract Task ExecuteAsync();
+        }
 
+        private class Request<T> : Request
+        {
+            private readonly Func<Task<T>> _asyncAction;
+
+            public Request(Func<Task<T>> asyncAction)
+            {
+                _asyncAction = asyncAction;
+            }
+
+            public TaskCompletionSource<T> Source { get; } = new TaskCompletionSource<T>();
+
+            public override async Task ExecuteAsync()
+            {
+                var value = await _asyncAction();
+
+                Source.SetResult(value);
+            }
         }
         #endregion
 
-        private readonly int _parallelRunCount;
+        private readonly AsyncBulkheadPolicy _bulkheadPolicy;
         private readonly PriorityQueue<Request, TPriority> _requestQueue;
-        private volatile int _availableRunningSlots;
 
         public PriorityExecutionQueue(int parallelRunCount)
         {
-            _parallelRunCount = parallelRunCount;
+            _bulkheadPolicy = Policy.BulkheadAsync(parallelRunCount, int.MaxValue);
             _requestQueue = new PriorityQueue<Request, TPriority>();
-            _availableRunningSlots = _parallelRunCount;
         }
 
-        public int ParallelRunCount
-        {
-            get { return _parallelRunCount; }
-            set
-            {
-                throw new NotImplementedException();
-            }
-        }
+        public int ParallelRunCount => _bulkheadPolicy.BulkheadAvailableCount;
 
         public async Task<T> RequestRunAsync<T>(TPriority priority, Func<Task<T>> actionAsync)
         {
-            var request = new Request();
+            var request = new Request<T>(actionAsync);
 
             lock (_requestQueue)
-            {
+            {   //  Add our item in the queue
                 _requestQueue.Enqueue(request, priority);
             }
-            PumpRequestOut();
-
-            await request.Source.Task;
-
-            try
+            //  Remove/execute one item from the queue (when parallelism allows)
+            //  Either the item is "us" or someone before us
+            await _bulkheadPolicy.ExecuteAsync(async () =>
             {
-                return await actionAsync();
-            }
-            finally
-            {
+                Request? request;
+
                 lock (_requestQueue)
                 {
-                    //  Returning the slot as the request is over
-                    ++_availableRunningSlots;
-                    PumpRequestOut();
+                    if (!_requestQueue.TryDequeue(out request, out _))
+                    {
+                        throw new InvalidOperationException("Request queue is corrupted");
+                    }
                 }
-            }
+
+                await request.ExecuteAsync();
+            });
+
+            //  Wait for our own turn
+            return await request.Source.Task;
         }
 
         public async Task RequestRunAsync(TPriority priority, Func<Task> actionAsync)
@@ -72,25 +85,6 @@ namespace KustoCopyConsole.Concurrency
 
                 return 0;
             });
-        }
-
-        private void PumpRequestOut()
-        {
-            //  Priority queue aren't thread safe
-            lock (_requestQueue)
-            {
-                while (_requestQueue.Count > 0 && _availableRunningSlots > 0)
-                {
-                    Request? request;
-
-                    --_availableRunningSlots;
-                    if (_requestQueue.TryDequeue(out request, out _))
-                    {
-                        request.Source.SetResult();
-                        //  Keep pumping
-                    }
-                }
-            }
         }
     }
 }
