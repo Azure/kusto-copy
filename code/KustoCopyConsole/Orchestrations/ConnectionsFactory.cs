@@ -84,7 +84,7 @@ namespace KustoCopyConsole.Orchestrations
             return containerClient;
         }
 
-        private static KustoQueuedClient CreateKustoQueuedClient(
+        private static async Task<KustoQueuedClient> CreateKustoQueuedClientAsync(
             TokenCredential credentials,
             string clusterQueryConnectionString,
             int concurrentQueryCount)
@@ -92,11 +92,30 @@ namespace KustoCopyConsole.Orchestrations
             var sourceBuilder = new KustoConnectionStringBuilder(clusterQueryConnectionString);
             var sourceKustoClient = new KustoClient(
                 sourceBuilder.WithAadAzureTokenCredentialsAuthentication(credentials));
+            var actualConcurrentQueryCount = concurrentQueryCount == 0
+                ? await FetchQueryCountAsync(sourceKustoClient)
+                : concurrentQueryCount;
             var sourceQueuedClient = new KustoQueuedClient(
                 sourceKustoClient,
-                concurrentQueryCount);
+                actualConcurrentQueryCount);
 
             return sourceQueuedClient;
+        }
+
+        private static async Task<int> FetchQueryCountAsync(KustoClient client)
+        {
+            //  We create a queued client to beneficiate from retries
+            var queuedClient = new KustoQueuedClient(client, 1);
+            var commandText = ".show capacity queries | project Total";
+            var totals = await queuedClient.ExecuteCommandAsync(
+                KustoPriority.HighestPriority,
+                string.Empty,
+                commandText,
+                r => (long)r["Total"]);
+            var total = (int)totals.First();
+            var actual = Math.Min(1, total / 10);
+
+            return actual;
         }
 
         private static async Task<KustoExportQueue> CreateKustoExportQueueAsync(
@@ -105,7 +124,7 @@ namespace KustoCopyConsole.Orchestrations
             int concurrentQueryCount,
             int concurrentExportCommandCount)
         {
-            var queuedClient = CreateKustoQueuedClient(
+            var queuedClient = await CreateKustoQueuedClientAsync(
                 credentials,
                 clusterQueryConnectionString,
                 concurrentQueryCount);
@@ -141,7 +160,7 @@ namespace KustoCopyConsole.Orchestrations
             int concurrentQueryCount,
             int concurrentIngestionCount)
         {
-            var queuedClient = CreateKustoQueuedClient(
+            var queuedClient = await CreateKustoQueuedClientAsync(
                 credentials,
                 clusterQueryConnectionString,
                 concurrentQueryCount);
