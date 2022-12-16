@@ -1,4 +1,5 @@
-﻿using Kusto.Data.Linq;
+﻿using Kusto.Cloud.Platform.Utils;
+using Kusto.Data.Linq;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Storage;
 using System;
@@ -23,6 +24,9 @@ namespace KustoCopyConsole.Orchestrations
             long RecordCount,
             string ExtentId);
         #endregion
+
+        private const long MAX_MERGE_RECORD_COUNT = 1000000;
+        private static readonly TimeSpan MAX_MERGE_TIME_GAP = TimeSpan.FromHours(1);
 
         private readonly KustoPriority _kustoPriority;
         private readonly CursorWindow _cursorWindow;
@@ -111,10 +115,14 @@ namespace KustoCopyConsole.Orchestrations
                 else
                 {
                     var recordBatches = MapRecordBatches(protoRecordBatches, extentMap);
+                    var mergedRecordBatches = PlanRecordBatchState.Merge(
+                        recordBatches,
+                        MAX_MERGE_RECORD_COUNT,
+                        MAX_MERGE_TIME_GAP);
 
                     return new PlanningOutput(
                         iterationTableEndTime,
-                        recordBatches);
+                        mergedRecordBatches);
                 }
             }
             else
