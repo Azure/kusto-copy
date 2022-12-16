@@ -25,7 +25,7 @@ namespace KustoCopyConsole.Orchestrations
             string ExtentId);
         #endregion
 
-        private const long MAX_MERGE_RECORD_COUNT = 100000;
+        private const long MAX_MERGE_RECORD_COUNT = 200000;
         private static readonly TimeSpan MAX_MERGE_TIME_GAP = TimeSpan.FromHours(1);
 
         private readonly KustoPriority _kustoPriority;
