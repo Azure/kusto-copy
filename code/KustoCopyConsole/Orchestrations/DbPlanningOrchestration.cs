@@ -31,6 +31,7 @@ namespace KustoCopyConsole.Orchestrations
             IImmutableList<PlanRecordBatchState> RecordBatches);
         #endregion
 
+        private const long MIN_EXTENT_COUNT = 5;
         private const long MAX_EXTENT_COUNT = 10;
 
         private readonly bool _isContinuousRun;
@@ -272,6 +273,7 @@ Rpo=timespan({_dbParameterization.DatabaseOverrides!.Rpo})";
                     t),
                 cursorWindow,
                 startIngestionTimeExclusive,
+                MIN_EXTENT_COUNT,
                 MAX_EXTENT_COUNT,
                 _queuedClient,
                 ct);

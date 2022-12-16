@@ -1,4 +1,5 @@
-﻿using Kusto.Data.Linq;
+﻿using Kusto.Cloud.Platform.Utils;
+using Kusto.Data.Linq;
 using KustoCopyConsole.KustoQuery;
 using KustoCopyConsole.Storage;
 using System;
@@ -24,9 +25,13 @@ namespace KustoCopyConsole.Orchestrations
             string ExtentId);
         #endregion
 
+        private const long MAX_MERGE_RECORD_COUNT = 200000;
+        private static readonly TimeSpan MAX_MERGE_TIME_GAP = TimeSpan.FromHours(1);
+
         private readonly KustoPriority _kustoPriority;
         private readonly CursorWindow _cursorWindow;
         private readonly string _startTimePredicate;
+        private readonly long _minExtentCount;
         private readonly long _maxExtentCount;
         private readonly KustoQueuedClient _sourceQueuedClient;
 
@@ -35,6 +40,7 @@ namespace KustoCopyConsole.Orchestrations
             KustoPriority kustoPriority,
             CursorWindow cursorWindow,
             DateTime? startTimeExclusive,
+            long minExtentCount,
             long maxExtentCount,
             KustoQueuedClient sourceQueuedClient,
             CancellationToken ct)
@@ -43,6 +49,7 @@ namespace KustoCopyConsole.Orchestrations
                 kustoPriority,
                 cursorWindow,
                 startTimeExclusive,
+                minExtentCount,
                 maxExtentCount,
                 sourceQueuedClient);
             var batches = await orchestration.PlanAsync(ct);
@@ -54,6 +61,7 @@ namespace KustoCopyConsole.Orchestrations
             KustoPriority kustoPriority,
             CursorWindow cursorWindow,
             DateTime? startTimeExclusive,
+            long minExtentCount,
             long maxExtentCount,
             KustoQueuedClient sourceQueuedClient)
         {
@@ -62,13 +70,13 @@ namespace KustoCopyConsole.Orchestrations
             _startTimePredicate = startTimeExclusive == null
                 ? string.Empty
                 : $"| where ingestion_time() > {startTimeExclusive.Value.ToKql()}";
+            _minExtentCount = minExtentCount;
             _maxExtentCount = maxExtentCount;
             _sourceQueuedClient = sourceQueuedClient;
         }
         #endregion
 
-        private async Task<PlanningOutput> PlanAsync(
-            CancellationToken ct)
+        private async Task<PlanningOutput> PlanAsync(CancellationToken ct)
         {
             var iterationTableEndTime = await FetchIterationTableEndTimeAsync();
 
@@ -80,15 +88,58 @@ namespace KustoCopyConsole.Orchestrations
             }
             else
             {
-                return await PlanAsync(iterationTableEndTime.Value, ct);
+                return await PlanWithInterpolationAsync(iterationTableEndTime.Value, ct);
+            }
+        }
+
+        private async Task<PlanningOutput> PlanWithInterpolationAsync(
+            DateTime iterationTableEndTime,
+            CancellationToken ct)
+        {
+            PlanningOutput? bestOutput = null;
+            var nextExtentCount = _maxExtentCount;
+
+            while (true)
+            {
+                var output = await PlanAsync(iterationTableEndTime, nextExtentCount, ct);
+                var mergedRecordBatches = PlanRecordBatchState.Merge(
+                    output.RecordBatches,
+                    MAX_MERGE_RECORD_COUNT,
+                    MAX_MERGE_TIME_GAP);
+                var mergedOutput =
+                    new PlanningOutput(output.IterationTableEndTime, mergedRecordBatches);
+
+                if (
+                    //  There are no more extents to fetch from
+                    output.RecordBatches.Count < nextExtentCount
+                    //  We meet the target
+                    || (mergedRecordBatches.Count() >= _minExtentCount
+                    && mergedRecordBatches.Count() <= _maxExtentCount)
+                    //  We overshoted on first try
+                    || (mergedRecordBatches.Count() > _maxExtentCount
+                    && bestOutput == null))
+                {
+                    return mergedOutput;
+                }
+                else if (mergedRecordBatches.Count() > _maxExtentCount && bestOutput != null)
+                {   //  We overshoted, fall back on previous
+                    return bestOutput;
+                }
+                else
+                {
+                    bestOutput = mergedOutput;
+                    nextExtentCount = nextExtentCount * _maxExtentCount
+                        / mergedOutput.RecordBatches.Count();
+                }
             }
         }
 
         private async Task<PlanningOutput> PlanAsync(
             DateTime iterationTableEndTime,
+            long extentCount,
             CancellationToken ct)
         {
-            var protoRecordBatches = await LoadProtoRecordBatchesAsync();
+            var protoRecordBatches = await LoadProtoRecordBatchesAsync(extentCount);
 
             if (protoRecordBatches.Any())
             {
@@ -106,7 +157,7 @@ namespace KustoCopyConsole.Orchestrations
                         + $"'{protoRecordBatches.Count()}' vs '{extentMap.Count()}'.  "
                         + "Likely cause:  merge.  Mitigation:  retry.");
 
-                    return await PlanAsync(iterationTableEndTime, ct);
+                    return await PlanAsync(iterationTableEndTime, extentCount, ct);
                 }
                 else
                 {
@@ -161,11 +212,12 @@ namespace KustoCopyConsole.Orchestrations
             return maximum;
         }
 
-        private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchesAsync()
+        private async Task<IImmutableList<ProtoRecordBatch>> LoadProtoRecordBatchesAsync(
+            long extentCount)
         {
             var sourceQueuedClient = _sourceQueuedClient;
             var queryText = $@"
-let MaxExtentCount = {_maxExtentCount};
+let ExtentCount = {extentCount};
 let FramedTable = ['{_kustoPriority.TableName}']
     {_cursorWindow.ToCursorKustoPredicate()}
     {_startTimePredicate};
@@ -173,7 +225,7 @@ let Extremes = materialize(FramedTable
     | extend ExtentId=extent_id()
     | extend IngestionTime=ingestion_time()
     | summarize MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time()) by ExtentId
-    | top MaxExtentCount by MinIngestionTime asc
+    | top ExtentCount by MinIngestionTime asc
     | where isnotnull(MinIngestionTime)
     | where isnotnull(MaxIngestionTime)
     | summarize MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime));

@@ -38,7 +38,7 @@ namespace KustoCopyConsole
         public IEnumerable<string> TablesToExclude { get; set; } = new string[0];
 
         [Option("query-slots", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
-        public int ConcurrentQueryCount { get; set; } = 1;
+        public int ConcurrentQueryCount { get; set; } = 0;
 
         [Option("export-slots", Required = false, HelpText = "# export slots to use on source cluster")]
         public int ConcurrentExportCommandCount { get; set; } = 0;
