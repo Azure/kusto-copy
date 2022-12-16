@@ -400,7 +400,7 @@ namespace KustoCopyConsole.Storage
             {
                 var previousIteration = GetIteration(iterationId - 1);
 
-                return new CursorWindow(previousIteration.EndCursor, previousIteration.EndCursor);
+                return new CursorWindow(previousIteration.EndCursor, iteration.EndCursor);
             }
         }
 
