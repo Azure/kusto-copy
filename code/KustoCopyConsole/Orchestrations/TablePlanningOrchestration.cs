@@ -76,8 +76,7 @@ namespace KustoCopyConsole.Orchestrations
         }
         #endregion
 
-        private async Task<PlanningOutput> PlanAsync(
-            CancellationToken ct)
+        private async Task<PlanningOutput> PlanAsync(CancellationToken ct)
         {
             var iterationTableEndTime = await FetchIterationTableEndTimeAsync();
 
