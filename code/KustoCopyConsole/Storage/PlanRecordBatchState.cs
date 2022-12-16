@@ -44,6 +44,11 @@ namespace KustoCopyConsole.Storage
                     if (b.CreationTime - currentBatch.CreationTime <= maxCreationTimeGap)
                     {
                         currentBatch = currentBatch.Merge(b);
+                        if (currentBatch.RecordCount >= maxMergeRecordCount)
+                        {
+                            mergedList.Add(currentBatch);
+                            currentBatch = null;
+                        }
                     }
                     else
                     {
