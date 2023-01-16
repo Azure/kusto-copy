@@ -47,15 +47,15 @@ jobs:
     - name: Zip Linux executable
       run:  |
         cd linux-assets/bin
-        tar -czvf ../../final-assets/mirror-lake-kusto-linux.tar.gz *
-    - name: Zip Mac executable
-      run:  |
-        cd mac-assets/bin
-        tar -czvf ../../final-assets/mirror-lake-kusto-mac.tar.gz *
+        tar -czvf ../../final-assets/kusto-copy-linux.tar.gz *
+    # - name: Zip Mac executable
+    #   run:  |
+    #     cd mac-assets/bin
+    #     tar -czvf ../../final-assets/kusto-copy-mac.tar.gz *
     # - name: Zip Windows executable
     #   run:  |
     #     cd windows-assets/bin
-    #     tar -czvf ../../final-assets/mirror-lake-kusto-windows.tar.gz *
+    #     tar -czvf ../../final-assets/kusto-copy-windows.tar.gz *
     # Validate final assets
     - name: Final assets content
       run:  ls -l final-assets
