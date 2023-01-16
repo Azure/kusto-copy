@@ -20,7 +20,8 @@ jobs:
     # We do not need the source code but we need git for tags & release
     - uses: actions/checkout@v2
     # Retrieve assets
-    - uses: actions/download-artifact@master
+    - name: Download Linux Assets
+      uses: actions/download-artifact@master
       with:
         name: linux-assets
         path: linux-assets
@@ -28,10 +29,11 @@ jobs:
     #   with:
     #     name: windows-assets
     #     path: windows-assets
-    - uses: actions/download-artifact@master
-      with:
-        name: mac-assets
-        path: mac-assets
+    # - name: Download Linux Assets
+    #   uses: actions/download-artifact@master
+    #   with:
+    #     name: mac-assets
+    #     path: mac-assets
     # Validate asset content
     - name: Assets content
       run:  |
