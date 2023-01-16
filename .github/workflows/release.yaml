@@ -81,7 +81,7 @@ jobs:
       dotnetOs:  linux-x64
       assetsName:  linux-assets
       assetSuffix:  linux
-      execName:  kc
+      execName:  kusto-copy
 
     steps:
     - uses: actions/checkout@v2
