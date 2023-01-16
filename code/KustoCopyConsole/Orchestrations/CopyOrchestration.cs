@@ -13,8 +13,8 @@ namespace KustoCopyConsole.Orchestrations
     public class CopyOrchestration
     {
         private readonly MainParameterization _parameterization;
-        private readonly KustoExportQueue _sourceExportQueue;
-        private readonly KustoIngestQueue _destinationIngestQueue;
+        private readonly KustoExportQueue? _sourceExportQueue;
+        private readonly KustoIngestQueue? _destinationIngestQueue;
         private readonly IImmutableList<DatabaseStatus> _dbStatusList;
 
         #region Bootstrap
@@ -24,6 +24,7 @@ namespace KustoCopyConsole.Orchestrations
         {
             var connectionFactory = await ConnectionsFactory.CreateAsync(parameterization);
 
+            WriteInfoAboutConnections(connectionFactory);
             Trace.WriteLine("Acquiring lock on folder...");
             await using (var blobLock = await CreateLockAsync(
                 connectionFactory.LakeContainerClient,
@@ -52,8 +53,8 @@ namespace KustoCopyConsole.Orchestrations
                             .ToImmutableArray();
                         var orchestration = new CopyOrchestration(
                             parameterization,
-                            connectionFactory.SourceExportQueue!,
-                            connectionFactory.DestinationIngestQueue!,
+                            connectionFactory.SourceExportQueue,
+                            connectionFactory.DestinationIngestQueue,
                             dbStatusList);
 
                         Trace.WriteLine("Copying orchestration started");
@@ -68,10 +69,22 @@ namespace KustoCopyConsole.Orchestrations
             }
         }
 
+        private static void WriteInfoAboutConnections(ConnectionsFactory factory)
+        {
+            if (factory.SourceExportQueue == null)
+            {
+                Console.WriteLine("No source cluster was defined");
+            }
+            if (factory.DestinationIngestQueue==null)
+            {
+                Console.WriteLine("No destination cluster was defined");
+            }
+        }
+
         private CopyOrchestration(
             MainParameterization parameterization,
-            KustoExportQueue sourceExportQueue,
-            KustoIngestQueue destinationIngestQueue,
+            KustoExportQueue? sourceExportQueue,
+            KustoIngestQueue? destinationIngestQueue,
             IImmutableList<DatabaseStatus> dbStatusList)
         {
             _parameterization = parameterization;
@@ -89,7 +102,7 @@ namespace KustoCopyConsole.Orchestrations
             var setupTasks = _dbStatusList
                 .Select(dbStatus => DestinationDbSetupOrchestration.SetupAsync(
                     dbStatus,
-                    _destinationIngestQueue.Client,
+                    _destinationIngestQueue?.Client,
                     ct))
                 .ToImmutableArray();
             var planningTasks = _dbStatusList
@@ -97,7 +110,7 @@ namespace KustoCopyConsole.Orchestrations
                     _parameterization.IsContinuousRun,
                     dbParameterizationIndex[dbStatus.DbName],
                     dbStatus,
-                    _sourceExportQueue.Client,
+                    _sourceExportQueue?.Client,
                     ct))
                 .ToImmutableArray();
             var exportingTasks = _dbStatusList
@@ -117,19 +130,19 @@ namespace KustoCopyConsole.Orchestrations
                     ct))
                 .ToImmutableArray();
             var movingTasks = _dbStatusList
-                .Select(dbStatus => DbMovingOrchestration.StageAsync(
+                .Select(dbStatus => DbMovingOrchestration.MoveAsync(
                     _parameterization.IsContinuousRun,
                     Task.WhenAll(stagingTasks),
                     dbStatus,
-                    _destinationIngestQueue.Client,
+                    _destinationIngestQueue?.Client,
                     ct))
                 .ToImmutableArray();
             var completeTasks = _dbStatusList
-                .Select(dbStatus => DbCompletingOrchestration.StageAsync(
+                .Select(dbStatus => DbCompletingOrchestration.CompleteAsync(
                     _parameterization.IsContinuousRun,
                     Task.WhenAll(movingTasks),
                     dbStatus,
-                    _destinationIngestQueue.Client,
+                    _destinationIngestQueue?.Client,
                     ct))
                 .ToImmutableArray();
             var allTasks = setupTasks

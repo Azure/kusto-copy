@@ -9,15 +9,21 @@ namespace KustoCopyConsole.Orchestrations
 
         internal static async Task SetupAsync(
             DatabaseStatus dbStatus,
-            KustoQueuedClient destinationClient,
+            KustoQueuedClient? destinationClient,
             CancellationToken ct)
         {
-            var columnListText = string.Join(
-                ", ",
-                StatusItem.ExternalTableSchema
-                .Split(',')
-                .Select(c => c.Split(':').First()));
-            var createStatusViewFunction = $@".create-or-alter function with
+            if (destinationClient == null)
+            {
+                return;
+            }
+            else
+            {
+                var columnListText = string.Join(
+                    ", ",
+                    StatusItem.ExternalTableSchema
+                    .Split(',')
+                    .Select(c => c.Split(':').First()));
+                var createStatusViewFunction = $@".create-or-alter function with
 (docstring = 'Latest state view on checkpoint blob', folder='Kusto Copy')
 {STATUS_VIEW_NAME}(){{
 externaldata({StatusItem.ExternalTableSchema})
@@ -46,11 +52,12 @@ with(format='csv', ignoreFirstRecord=true)
     iif(isnotnull({nameof(StatusItem.RecordBatchId)}), {nameof(StatusItem.RecordBatchId)}, 0) asc
 }}";
 
-            await destinationClient.ExecuteCommandAsync(
-                KustoPriority.HighestPriority,
-                dbStatus.DbName,
-                createStatusViewFunction,
-                r => r);
+                await destinationClient.ExecuteCommandAsync(
+                    KustoPriority.HighestPriority,
+                    dbStatus.DbName,
+                    createStatusViewFunction,
+                    r => r);
+            }
         }
     }
 }

@@ -18,16 +18,23 @@ namespace KustoCopyConsole.Orchestrations
             bool isContinuousRun,
             Task planningTask,
             DatabaseStatus dbStatus,
-            KustoExportQueue sourceExportQueue,
+            KustoExportQueue? sourceExportQueue,
             CancellationToken ct)
         {
-            var orchestration = new DbExportingOrchestration(
-                isContinuousRun,
-                planningTask,
-                dbStatus,
-                sourceExportQueue);
+            if (sourceExportQueue == null)
+            {
+                return;
+            }
+            else
+            {
+                var orchestration = new DbExportingOrchestration(
+                    isContinuousRun,
+                    planningTask,
+                    dbStatus,
+                    sourceExportQueue);
 
-            await orchestration.RunAsync(ct);
+                await orchestration.RunAsync(ct);
+            }
         }
 
         private DbExportingOrchestration(

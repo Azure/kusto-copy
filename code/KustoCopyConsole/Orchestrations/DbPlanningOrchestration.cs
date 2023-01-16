@@ -44,16 +44,23 @@ namespace KustoCopyConsole.Orchestrations
             bool isContinuousRun,
             SourceDatabaseParameterization dbParameterization,
             DatabaseStatus dbStatus,
-            KustoQueuedClient queuedClient,
+            KustoQueuedClient? queuedClient,
             CancellationToken ct)
         {
-            var orchestration = new DbPlanningOrchestration(
-                isContinuousRun,
-                dbParameterization,
-                dbStatus,
-                queuedClient);
+            if (queuedClient == null)
+            {
+                return;
+            }
+            else
+            {
+                var orchestration = new DbPlanningOrchestration(
+                    isContinuousRun,
+                    dbParameterization,
+                    dbStatus,
+                    queuedClient);
 
-            await orchestration.RunAsync(ct);
+                await orchestration.RunAsync(ct);
+            }
         }
 
         private DbPlanningOrchestration(
@@ -126,7 +133,7 @@ Rpo=timespan({_dbParameterization.DatabaseOverrides!.Rpo})";
                     newSubIterationId,
                     DateTime.Now.ToUtc().Subtract(backfillHorizon!.Value));
 
-                await _dbStatus.PersistNewItemsAsync(new[] {newSubIteration}, ct);
+                await _dbStatus.PersistNewItemsAsync(new[] { newSubIteration }, ct);
             }
             else
             {

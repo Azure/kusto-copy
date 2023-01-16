@@ -54,20 +54,27 @@ namespace KustoCopyConsole.Orchestrations
             new ConcurrentDictionary<SubIterationKey, StatusItem>();
 
         #region Constructor
-        public static async Task StageAsync(
+        public static async Task CompleteAsync(
             bool isContinuousRun,
             Task movingTask,
             DatabaseStatus dbStatus,
-            KustoQueuedClient queuedClient,
+            KustoQueuedClient? queuedClient,
             CancellationToken ct)
         {
-            var orchestration = new DbCompletingOrchestration(
-                isContinuousRun,
-                movingTask,
-                dbStatus,
-                queuedClient);
+            if (queuedClient == null)
+            {
+                return;
+            }
+            else
+            {
+                var orchestration = new DbCompletingOrchestration(
+                    isContinuousRun,
+                    movingTask,
+                    dbStatus,
+                    queuedClient);
 
-            await orchestration.RunAsync(ct);
+                await orchestration.RunAsync(ct);
+            }
         }
 
         private DbCompletingOrchestration(

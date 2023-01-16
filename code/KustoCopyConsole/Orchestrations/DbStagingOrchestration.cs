@@ -58,16 +58,23 @@ namespace KustoCopyConsole.Orchestrations
             bool isContinuousRun,
             Task exportingTask,
             DatabaseStatus dbStatus,
-            KustoIngestQueue ingestQueue,
+            KustoIngestQueue? ingestQueue,
             CancellationToken ct)
         {
-            var orchestration = new DbStagingOrchestration(
-                isContinuousRun,
-                exportingTask,
-                dbStatus,
-                ingestQueue);
+            if (ingestQueue == null)
+            {
+                return;
+            }
+            else
+            {
+                var orchestration = new DbStagingOrchestration(
+                    isContinuousRun,
+                    exportingTask,
+                    dbStatus,
+                    ingestQueue);
 
-            await orchestration.RunAsync(ct);
+                await orchestration.RunAsync(ct);
+            }
         }
 
         private DbStagingOrchestration(
