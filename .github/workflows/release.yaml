@@ -13,8 +13,8 @@ jobs:
     # This integrates the artefacts from the other jobs
     needs:
     - linux
-    # - windows
-    # - mac
+    - windows
+    - mac
     runs-on: ubuntu-latest
     steps:
     # We do not need the source code but we need git for tags & release
@@ -25,15 +25,16 @@ jobs:
       with:
         name: linux-assets
         path: linux-assets
-    # - uses: actions/download-artifact@master
-    #   with:
-    #     name: windows-assets
-    #     path: windows-assets
-    # - name: Download Linux Assets
-    #   uses: actions/download-artifact@master
-    #   with:
-    #     name: mac-assets
-    #     path: mac-assets
+    - name: Download Mac Assets
+      uses: actions/download-artifact@master
+      with:
+        name: mac-assets
+        path: mac-assets
+    - name: Download Windows Assets
+      uses: actions/download-artifact@master
+      with:
+        name: windows-assets
+        path: windows-assets
     # Validate asset content
     - name: Assets content
       run:  |
@@ -50,14 +51,14 @@ jobs:
       run:  |
         cd linux-assets/bin
         tar -czvf ../../final-assets/kusto-copy-linux.tar.gz *
-    # - name: Zip Mac executable
-    #   run:  |
-    #     cd mac-assets/bin
-    #     tar -czvf ../../final-assets/kusto-copy-mac.tar.gz *
-    # - name: Zip Windows executable
-    #   run:  |
-    #     cd windows-assets/bin
-    #     tar -czvf ../../final-assets/kusto-copy-windows.tar.gz *
+    - name: Zip Mac executable
+      run:  |
+        cd mac-assets/bin
+        tar -czvf ../../final-assets/kusto-copy-mac.tar.gz *
+    - name: Zip Windows executable
+      run:  |
+        cd windows-assets/bin
+        tar -czvf ../../final-assets/kusto-copy-windows.tar.gz *
     # Validate final assets
     - name: Final assets content
       run:  ls -l final-assets
@@ -137,64 +138,127 @@ jobs:
         path: ${{ env.assetsName }}
 
   # Mac job
-  # mac:
+  mac:
 
-  #   runs-on: macos-latest
+    runs-on: macos-latest
     
-  #   env:
-  #     # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
-  #     dotnetOs:  osx-x64
-  #     assetsName:  mac-assets
-  #     assetSuffix:  mac
-  #     execName:  mlk
+    env:
+      # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
+      dotnetOs:  osx-x64
+      assetsName:  mac-assets
+      assetSuffix:  mac
+      execName:  kusto-copy
 
-  #   steps:
-  #   - uses: actions/checkout@v2
-  #   - name: Setup .NET Core
-  #     uses: actions/setup-dotnet@v1
-  #     with:
-  #       dotnet-version: 6.x
-  #   - name: Patch version
-  #     id:  patch-version
-  #     run: python3 deployment/patch-version.py code/mirror-lake-kusto/mirror-lake-kusto.csproj ${{ github.run_number }}
-  #   - name:  Output full version
-  #     shell:  bash
-  #     run:  |
-  #       echo "Full version:  ${{ steps.patch-version.outputs.full-version }}"
-  #   - name: Create artefact directory
-  #     shell:  bash
-  #     run:  |
-  #       mkdir $assetsName
-  #       mkdir $assetsName/bin
-  #       mkdir bin
-  #   # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-restore
-  #   - name: Install dependencies
-  #     shell:  bash
-  #     run: dotnet restore code
-  #   # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-build
-  #   - name: Build
-  #     shell:  bash
-  #     run: dotnet build code --configuration Release --no-restore
-  #   # See https://github.com/dotnet/designs/blob/main/accepted/2020/single-file/design.md#user-experience
-  #   # & https://docs.microsoft.com/en-us/dotnet/core/deploying/single-file
-  #   # & https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-publish
-  #   - name: Build single file executable
-  #     shell:  bash
-  #     run: |
-  #       dotnet publish code/mirror-lake-kusto -c release -r $dotnetOs \
-  #         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-  #         -p:PublishTrimmed=true -p:PublishReadyToRun=true \
-  #         -o bin
-  #   - name: Copy executable to assets
-  #     shell:  bash
-  #     run:  cp bin/$execName $assetsName/bin/$execName
-  #   # Output variables can't be shared accross jobs, so we push it to artefacts
-  #   - name: Push full version to file
-  #     shell:  bash
-  #     run:  echo ${{ steps.patch-version.outputs.full-version }} >> $assetsName/full-version.txt
-  #   # Push archive + version to a sharable artefact
-  #   # See https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
-  #   - uses: actions/upload-artifact@master
-  #     with:
-  #       name: ${{ env.assetsName }}
-  #       path: ${{ env.assetsName }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.x
+    - name: Patch version
+      id:  patch-version
+      run: python3 deployment/patch-version.py code/KustoCopyConsole/KustoCopyConsole.csproj ${{ github.run_number }}
+    - name:  Output full version
+      shell:  bash
+      run:  |
+        echo "Full version:  ${{ steps.patch-version.outputs.full-version }}"
+    - name: Create artefact directory
+      shell:  bash
+      run:  |
+        mkdir $assetsName
+        mkdir $assetsName/bin
+        mkdir bin
+    # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-restore
+    - name: Install dependencies
+      shell:  bash
+      run: dotnet restore code
+    # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-build
+    - name: Build
+      shell:  bash
+      run: dotnet build code --configuration Release --no-restore
+    # See https://github.com/dotnet/designs/blob/main/accepted/2020/single-file/design.md#user-experience
+    # & https://docs.microsoft.com/en-us/dotnet/core/deploying/single-file
+    # & https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-publish
+    - name: Build single file executable
+      shell:  bash
+      run: |
+        dotnet publish code/KustoCopyConsole -c release -r $dotnetOs \
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+          -p:PublishTrimmed=true -p:PublishReadyToRun=true --self-contained \
+          -o bin
+    - name: Copy executable to assets
+      shell:  bash
+      run:  cp bin/$execName $assetsName/bin/$execName
+    # Output variables can't be shared accross jobs, so we push it to artefacts
+    - name: Push full version to file
+      shell:  bash
+      run:  echo ${{ steps.patch-version.outputs.full-version }} >> $assetsName/full-version.txt
+    # Push archive + version to a sharable artefact
+    # See https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
+    - uses: actions/upload-artifact@master
+      with:
+        name: ${{ env.assetsName }}
+        path: ${{ env.assetsName }}
+
+  # Windows job
+  windows:
+
+    runs-on: windows-latest
+    
+    env:
+      # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
+      dotnetOs:  win-x64
+      assetsName:  windows-assets
+      assetSuffix:  windows
+      execName:  kusto-copy
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.x
+    - name: Patch version
+      id:  patch-version
+      run: python3 deployment/patch-version.py code/KustoCopyConsole/KustoCopyConsole.csproj ${{ github.run_number }}
+    - name:  Output full version
+      shell:  bash
+      run:  |
+        echo "Full version:  ${{ steps.patch-version.outputs.full-version }}"
+    - name: Create artefact directory
+      shell:  bash
+      run:  |
+        mkdir $assetsName
+        mkdir $assetsName/bin
+        mkdir bin
+    # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-restore
+    - name: Install dependencies
+      shell:  bash
+      run: dotnet restore code
+    # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-build
+    - name: Build
+      shell:  bash
+      run: dotnet build code --configuration Release --no-restore
+    # See https://github.com/dotnet/designs/blob/main/accepted/2020/single-file/design.md#user-experience
+    # & https://docs.microsoft.com/en-us/dotnet/core/deploying/single-file
+    # & https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-publish
+    - name: Build single file executable
+      shell:  bash
+      run: |
+        dotnet publish code/KustoCopyConsole -c release -r $dotnetOs \
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+          -p:PublishTrimmed=true -p:PublishReadyToRun=true --self-contained \
+          -o bin
+    - name: Copy executable to assets
+      shell:  bash
+      run:  cp bin/$execName $assetsName/bin/$execName
+    # Output variables can't be shared accross jobs, so we push it to artefacts
+    - name: Push full version to file
+      shell:  bash
+      run:  echo ${{ steps.patch-version.outputs.full-version }} >> $assetsName/full-version.txt
+    # Push archive + version to a sharable artefact
+    # See https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
+    - uses: actions/upload-artifact@master
+      with:
+        name: ${{ env.assetsName }}
+        path: ${{ env.assetsName }}
