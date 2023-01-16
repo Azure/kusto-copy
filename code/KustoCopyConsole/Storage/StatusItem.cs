@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Storage
         private class InternalStateConverter : DefaultTypeConverter
         {
             public override object? ConvertFromString(
-                string text,
+                string? text,
                 IReaderRow row,
                 MemberMapData memberMapData)
             {
@@ -61,11 +61,11 @@ namespace KustoCopyConsole.Storage
             }
 
             public override string? ConvertToString(
-                object value,
+                object? value,
                 IWriterRow row,
                 MemberMapData memberMapData)
             {
-                var state = (InternalState)value;
+                var state = (InternalState?)value;
 
                 if (state != null)
                 {
