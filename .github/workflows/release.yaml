@@ -121,7 +121,7 @@ jobs:
       run: |
         dotnet publish code/KustoCopyConsole -c release -r $dotnetOs \
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-          -p:PublishTrimmed=true -p:PublishReadyToRun=true --self-contained \
+          -p:PublishTrimmed=true -p:PublishReadyToRun=true \
           -o bin
     - name: Copy executable to assets
       shell:  bash
