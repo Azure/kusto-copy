@@ -18,7 +18,7 @@ The tool has the following known limitations:
 
 Kusto Copy is a command line interface (CLI) tool.
 
-You can find the binary executable [here](releases) for Linux, Windows & Mac.
+You can find the binary executable [here](https://github.com/Azure/kusto-copy/releases) for Linux, Windows & Mac.
 
 Here is an example of usage:
 
