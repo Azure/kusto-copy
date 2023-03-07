@@ -14,24 +14,67 @@ The tool has the following known limitations:
 *   Update policies aren't taken into account ; tables are replicated assuming it is all "original content"
 *   If some records have no ingestion-time (e.g. ingestion time policy was disabled), records won't be copied over
 
-## Contributing
+## Getting started
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+Kusto Copy is a command line interface (CLI) tool.
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+You can find the binary executable [here](releases) for Linux, Windows & Mac.
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+Here is an example of usage:
 
-## Trademarks
+```
+kusto-copy -l https://vpdeltalake.blob.core.windows.net/copy/laptop/d16 -s https://help.kusto.windows.net/ -d https://vpdeltalake.eastus.kusto.windows.net --db Samples --tables-include StormEvents demo_make_series1 ConferenceSessions US_States
+```
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+That CLI invocation is configured as followed:
+
+* The data lake checkpoint folder is located at https://vpdeltalake.blob.core.windows.net/copy/laptop/d16
+* The source cluster is https://help.kusto.windows.net/
+* The destination cluster is https://vpdeltalake.eastus.kusto.windows.net
+* The database that will be copied is `Samples`
+* The tables inside that database that will be copied are:  `StormEvents`, `demo_make_series1`, `ConferenceSessions` & `US_States`
+* It will use the "current user" authentication to run queries / commands on both clusters
+
+The CLI will start copying the data from the source to destination cluster.  You can monitor the process by querying the `KC_Status` view in the destination database.  That view is surfacing the checkpoint file in the data lake folder.
+
+Here are the command line options:
+
+Short name|Long name|Is required|Description
+-|-|-|-
+v|verbose|No|Set output to verbose messages.
+-|continuous|No|Continuous run.  If set, runs continuously. Otherwise, stop after first batch.
+l|lake|Yes|Data Lake (ADLS gen 2) folder URL or Kusto-style connection string
+s|source|Yes|Source Cluster Query Connection String
+d|destination|Yes|Destination Cluster Query Connection String
+-|db|Yes|Database to copy
+-|tables-include|No|Tables to include (default:  copies all tables)
+-|tables-exclude|No|Tables to exclude (default:  copies all tables)
+-|query-slots|No|Number of concurrent queries / commands on the clusters (default:  %10 of query capacity)
+-|export-slots|No|# export slots to use on source cluster (default:  %100 of export capacity)
+-|ingestion-slots|No|Number of concurrent ingestions on the clusters (default:  %100 of ingestion capacity)
+r|rpo|No|Recovery Point Objectives:  the target timespan between 2 iterations (default:  5 minutes)
+b|backfillHorizon|No|Backfill horizon:  how long in the past should we start? (default:  no horizon, i.e. backfill everything)
+
+## Authentication
+
+Kusto Copy leverages [Kusto Connection strings](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto).
+
+This can be used to specify the authentication mechanism to connect to the source cluster, the destination cluster and even the data lake.
+
+If no authentication mechanism is specified, the `Azure Default` will be used, which go through the followings:
+
+* Azure.Identity.EnvironmentCredential
+* Azure.Identity.ManagedIdentityCredential
+* Azure.Identity.SharedTokenCacheCredential
+* Azure.Identity.VisualStudioCredential
+* Azure.Identity.VisualStudioCodeCredential
+* Azure.Identity.AzureCliCredential
+* Azure.Identity.InteractiveBrowserCredential
+
+A popular authentication alternative is to use a service principal.  The connection string would then look as followed:
+
+```
+Data Source={serviceUri};Database=NetDefaultDB;Fed=True;AppClientId={applicationClientId};AppKey={applicationKey};Authority Id={authority}
+```
+
+Look at [Kusto Connection strings](https://learn.microsoft.com/en-us/azure/data-explorer/kusto/api/connection-strings/kusto) for more details / alternatives.
