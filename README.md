@@ -1,5 +1,7 @@
 #   Kusto Copy
 
+** This project is suspended right now.  The code isn't at a usable level yet. **
+
 This project aims at building a tool to provide copying capabilities between Azure Data Explorer (Kusto) databases.  This enables scenarios such as table copy, cluster migration, replication across region (BCDR) & others.
 
 The solution is based on exporting data on one side and ingesting it on the other.  The tool takes care of orchestrating the data movement.  It is fault tolerant (i.e. the tool can be interupted and restarted) and guarantees exact copies.  It also tries to give a consistant replica at one point in time using database cursors and ingestion-time windows.
