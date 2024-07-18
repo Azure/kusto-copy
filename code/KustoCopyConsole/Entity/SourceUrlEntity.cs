@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Storage.Entity
+namespace KustoCopyConsole.Entity
 {
     internal class SourceUrlEntity : IterationEntityBase
     {

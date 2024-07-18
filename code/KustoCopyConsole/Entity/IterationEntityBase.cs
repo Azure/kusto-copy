@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Storage.Entity
+﻿namespace KustoCopyConsole.Entity
 {
     internal abstract class IterationEntityBase
     {

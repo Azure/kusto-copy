@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using KustoCopyConsole.Storage.Entity.State;
+using KustoCopyConsole.Entity.State;
 
-namespace KustoCopyConsole.Storage.Entity
+namespace KustoCopyConsole.Entity
 {
     internal abstract class DestinationDatabaseEntityBase : IterationEntityBase
     {

@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Storage.Entity.State
+﻿namespace KustoCopyConsole.Entity.State
 {
     public enum DestinationTableState
     {

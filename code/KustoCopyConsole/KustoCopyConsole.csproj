@@ -15,38 +15,34 @@
   <ItemGroup>
     <!-- Remove Legacy files from being compiled -->
     <Compile Remove="Legacy\**\*.cs" />
+    <Compile Remove="Storage\Entity\**" />
+    <EmbeddedResource Remove="Storage\Entity\**" />
+    <None Remove="Storage\Entity\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Entity\DatabaseReference.cs" />
+    <Compile Remove="Entity\DestinationBlockEntity.cs" />
+    <Compile Remove="Entity\DestinationDatabaseEntity.cs" />
+    <Compile Remove="Entity\DestinationDatabaseEntityBase.cs" />
+    <Compile Remove="Entity\DestinationTableEntity.cs" />
+    <Compile Remove="Entity\IterationEntityBase.cs" />
+    <Compile Remove="Entity\SourceBlockEntity.cs" />
+    <Compile Remove="Entity\SourceDatabaseEntity.cs" />
+    <Compile Remove="Entity\SourceTableEntity.cs" />
+    <Compile Remove="Entity\SourceUrlEntity.cs" />
+    <Compile Remove="Entity\State\DestinationBlockState.cs" />
+    <Compile Remove="Entity\State\DestinationDatabaseState.cs" />
+    <Compile Remove="Entity\State\DestinationTableState.cs" />
+    <Compile Remove="Entity\State\SourceBlockState.cs" />
+    <Compile Remove="Entity\State\SourceDatabaseState.cs" />
+    <Compile Remove="Entity\State\SourceTableState.cs" />
+    <Compile Remove="Entity\State\SourceUrlState.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Explicitly include Legacy files as None -->
     <None Update="Legacy\**\*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="Storage\Entity\DatabaseReference.cs" />
-    <Compile Remove="Storage\Entity\DestinationBlockEntity.cs" />
-    <Compile Remove="Storage\Entity\DestinationDatabaseEntity.cs" />
-    <Compile Remove="Storage\Entity\DestinationDatabaseEntityBase.cs" />
-    <Compile Remove="Storage\Entity\DestinationTableEntity.cs" />
-    <Compile Remove="Storage\Entity\IterationEntityBase.cs" />
-    <Compile Remove="Storage\Entity\SourceBlockEntity.cs" />
-    <Compile Remove="Storage\Entity\SourceDatabaseEntity.cs" />
-    <Compile Remove="Storage\Entity\SourceTableEntity.cs" />
-    <Compile Remove="Storage\Entity\SourceUrlEntity.cs" />
-    <Compile Remove="Storage\Entity\SourceUrlState.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Storage\Entity\DatabaseReference.cs" />
-    <None Include="Storage\Entity\DestinationBlockEntity.cs" />
-    <None Include="Storage\Entity\DestinationDatabaseEntity.cs" />
-    <None Include="Storage\Entity\DestinationDatabaseEntityBase.cs" />
-    <None Include="Storage\Entity\DestinationTableEntity.cs" />
-    <None Include="Storage\Entity\IterationEntityBase.cs" />
-    <None Include="Storage\Entity\SourceBlockEntity.cs" />
-    <None Include="Storage\Entity\SourceDatabaseEntity.cs" />
-    <None Include="Storage\Entity\SourceTableEntity.cs" />
-    <None Include="Storage\Entity\SourceUrlEntity.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -56,6 +52,30 @@
     <PackageReference Include="Microsoft.Azure.Kusto.Data" Version="12.2.3" />
     <PackageReference Include="Polly" Version="8.4.1" />
     <PackageReference Include="YamlDotNet" Version="16.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Storage\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Entity\DatabaseReference.cs" />
+    <None Include="Entity\DestinationBlockEntity.cs" />
+    <None Include="Entity\DestinationDatabaseEntity.cs" />
+    <None Include="Entity\DestinationDatabaseEntityBase.cs" />
+    <None Include="Entity\DestinationTableEntity.cs" />
+    <None Include="Entity\IterationEntityBase.cs" />
+    <None Include="Entity\SourceBlockEntity.cs" />
+    <None Include="Entity\SourceDatabaseEntity.cs" />
+    <None Include="Entity\SourceTableEntity.cs" />
+    <None Include="Entity\SourceUrlEntity.cs" />
+    <None Include="Entity\State\DestinationBlockState.cs" />
+    <None Include="Entity\State\DestinationDatabaseState.cs" />
+    <None Include="Entity\State\DestinationTableState.cs" />
+    <None Include="Entity\State\SourceBlockState.cs" />
+    <None Include="Entity\State\SourceDatabaseState.cs" />
+    <None Include="Entity\State\SourceTableState.cs" />
+    <None Include="Entity\State\SourceUrlState.cs" />
   </ItemGroup>
 
 </Project>
