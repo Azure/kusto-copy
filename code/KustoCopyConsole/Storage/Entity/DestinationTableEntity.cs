@@ -9,6 +9,11 @@ namespace KustoCopyConsole.Storage.Entity
 {
     internal class DestinationTableEntity : DestinationDatabaseEntityBase
     {
+        public DestinationTableEntity()
+        {
+            throw new NotImplementedException();
+        }
+
         public DestinationTableState State { get; }
 
         public string TableName { get; }

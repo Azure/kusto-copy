@@ -13,8 +13,40 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="Legacy\**" />
-    <Compile Remove="Legacy\**" />
+    <!-- Explicitly include Legacy files as None -->
+    <None Update="Legacy\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Remove Legacy files from being compiled -->
+    <Compile Remove="Legacy\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Storage\Entity\DatabaseReference.cs" />
+    <Compile Remove="Storage\Entity\DestinationBlockEntity.cs" />
+    <Compile Remove="Storage\Entity\DestinationDatabaseEntity.cs" />
+    <Compile Remove="Storage\Entity\DestinationDatabaseEntityBase.cs" />
+    <Compile Remove="Storage\Entity\DestinationTableEntity.cs" />
+    <Compile Remove="Storage\Entity\IterationEntityBase.cs" />
+    <Compile Remove="Storage\Entity\SourceBlockEntity.cs" />
+    <Compile Remove="Storage\Entity\SourceDatabaseEntity.cs" />
+    <Compile Remove="Storage\Entity\SourceTableEntity.cs" />
+    <Compile Remove="Storage\Entity\SourceUrlEntity.cs" />
+    <Compile Remove="Storage\Entity\SourceUrlState.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Storage\Entity\DatabaseReference.cs" />
+    <None Include="Storage\Entity\DestinationBlockEntity.cs" />
+    <None Include="Storage\Entity\DestinationDatabaseEntity.cs" />
+    <None Include="Storage\Entity\DestinationDatabaseEntityBase.cs" />
+    <None Include="Storage\Entity\DestinationTableEntity.cs" />
+    <None Include="Storage\Entity\IterationEntityBase.cs" />
+    <None Include="Storage\Entity\SourceBlockEntity.cs" />
+    <None Include="Storage\Entity\SourceDatabaseEntity.cs" />
+    <None Include="Storage\Entity\SourceTableEntity.cs" />
+    <None Include="Storage\Entity\SourceUrlEntity.cs" />
   </ItemGroup>
 
   <ItemGroup>

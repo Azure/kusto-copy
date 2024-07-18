@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Storage.Entity
+﻿namespace KustoCopyConsole.Storage.Entity.State
 {
     public enum SourceUrlState
     {

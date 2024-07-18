@@ -8,6 +8,11 @@ namespace KustoCopyConsole.Storage.Entity
 {
     internal class VersionEntity
     {
+        public VersionEntity(Version version)
+        {
+            Version = version;
+        }
+
         public Version Version { get; }
     }
 }

@@ -11,5 +11,10 @@ namespace KustoCopyConsole.JobParameters
     {
         public IImmutableList<SourceClusterParameterization> SourceClusters { get; set; } =
             ImmutableArray<SourceClusterParameterization>.Empty;
+
+        internal void Validate()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

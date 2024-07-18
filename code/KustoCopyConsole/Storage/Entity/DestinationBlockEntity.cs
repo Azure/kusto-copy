@@ -10,6 +10,11 @@ namespace KustoCopyConsole.Storage.Entity
 {
     internal class DestinationBlockEntity : DestinationDatabaseEntityBase
     {
+        public DestinationBlockEntity()
+        {
+            throw new NotImplementedException();
+        }
+
         public DestinationBlockState State { get; }
 
         public int BlockId { get; }

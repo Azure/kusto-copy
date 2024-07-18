@@ -10,6 +10,11 @@ namespace KustoCopyConsole.Storage.Entity
 {
     internal class SourceUrlEntity : IterationEntityBase
     {
+        public SourceUrlEntity()
+        {
+            throw new NotImplementedException();
+        }
+
         public SourceBlockState State { get; }
 
         public string TableName { get; }

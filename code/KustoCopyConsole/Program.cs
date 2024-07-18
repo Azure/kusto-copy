@@ -1,7 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
-using KustoCopyConsole.Orchestrations;
-using KustoCopyConsole.Parameters;
+using KustoCopyConsole.JobParameters;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -91,13 +90,13 @@ namespace KustoCopyConsole
 
             try
             {
-                var result = parser.ParseArguments<CommandLineOptions>(args);
+                var options = parser.ParseArguments<CommandLineOptions>(args);
 
-                await result
-                    .WithNotParsed(errors => HandleParseError(result, errors))
+                await options
+                    .WithNotParsed(errors => HandleParseError(options, errors))
                     .WithParsedAsync(RunOptionsAsync);
 
-                return result.Tag == ParserResultType.Parsed
+                return options.Tag == ParserResultType.Parsed
                     ? 0
                     : 1;
             }
@@ -149,7 +148,7 @@ namespace KustoCopyConsole
             Trace.WriteLine("");
             Trace.WriteLine("Initialization...");
 
-            var parameterization = MainParameterization.Create(options);
+            var parameterization = CreateParameterization(options);
             var cancellationTokenSource = new CancellationTokenSource();
             var taskCompletionSource = new TaskCompletionSource();
 
@@ -163,14 +162,20 @@ namespace KustoCopyConsole
             try
             {
                 parameterization.Validate();
-                await CopyOrchestration.CopyAsync(
-                    parameterization,
-                    cancellationTokenSource.Token);
+                await Task.CompletedTask;
+                //await CopyOrchestration.CopyAsync(
+                //    parameterization,
+                //    cancellationTokenSource.Token);
             }
             finally
             {
                 taskCompletionSource.SetResult();
             }
+        }
+
+        private static MainJobParameterization CreateParameterization(CommandLineOptions options)
+        {
+            throw new NotImplementedException();
         }
 
         private static void ConfigureTrace(bool isVerbose)
