@@ -145,13 +145,15 @@ namespace KustoCopyConsole
         {
             ConfigureTrace(options.Verbose);
 
-            Trace.WriteLine("");
-            Trace.WriteLine("Initialization...");
-
             var parameterization = CreateParameterization(options);
             var cancellationTokenSource = new CancellationTokenSource();
             var taskCompletionSource = new TaskCompletionSource();
 
+            Trace.WriteLine("");
+            Trace.WriteLine("Parameterization:");
+            Trace.WriteLine("");
+            Trace.WriteLine(parameterization.ToYaml());
+            Trace.WriteLine("");
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
                 Trace.TraceInformation("Exiting process...");
@@ -161,7 +163,8 @@ namespace KustoCopyConsole
 
             try
             {
-                Console.WriteLine(parameterization.ToYaml());
+                Trace.WriteLine("Processing...");
+                Trace.WriteLine("");
                 parameterization.Validate();
                 await Task.CompletedTask;
                 //await CopyOrchestration.CopyAsync(
@@ -225,7 +228,7 @@ namespace KustoCopyConsole
                     SourceClusters = ImmutableList.Create(
                         new SourceClusterParameterization
                         {
-                            SourceClusterUri = sourceBuilder.Uri,
+                            SourceClusterUri = sourceBuilder.ToString(),
                             Databases = ImmutableList.Create(new SourceDatabaseParameterization
                             {
                                 DatabaseName = sourceDb,
@@ -235,7 +238,7 @@ namespace KustoCopyConsole
                                 }),
                                 Destinations = ImmutableList.Create(new DestinationParameterization
                                 {
-                                    DestinationClusterUri = destinationBuilder.Uri,
+                                    DestinationClusterUri = destinationBuilder.ToString(),
                                     DatabaseName = destinationDb
                                 })
                             })

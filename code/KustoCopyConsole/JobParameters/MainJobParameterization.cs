@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using YamlDotNet.Serialization;
 
 namespace KustoCopyConsole.JobParameters
 {
@@ -14,12 +15,14 @@ namespace KustoCopyConsole.JobParameters
 
         internal void Validate()
         {
-            throw new NotImplementedException();
         }
 
         internal string ToYaml()
         {
-            throw new NotImplementedException();
+            var serializer = new SerializerBuilder().Build();
+            var yaml = serializer.Serialize(this);
+
+            return yaml;
         }
     }
 }
