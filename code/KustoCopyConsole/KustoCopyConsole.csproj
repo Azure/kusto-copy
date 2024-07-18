@@ -13,13 +13,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Explicitly include Legacy files as None -->
-    <None Update="Legacy\**\*.cs" />
+    <!-- Remove Legacy files from being compiled -->
+    <Compile Remove="Legacy\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Remove Legacy files from being compiled -->
-    <Compile Remove="Legacy\**\*.cs" />
+    <!-- Explicitly include Legacy files as None -->
+    <None Update="Legacy\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

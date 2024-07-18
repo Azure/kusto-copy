@@ -21,7 +21,7 @@ namespace KustoCopyConsole
             'd',
             "destination",
             Required = false,
-            HelpText = "Set the destination database in the format uri cluster uri/database, e.g. https://vppartitioning.eastus.kusto.windows.net/mydb")]
+            HelpText = "Set the destination database in the format uri cluster uri/database, e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
         public string Destination { get; set; } = string.Empty;
 
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
@@ -30,7 +30,7 @@ namespace KustoCopyConsole
         [Option(
             'l',
             "storage",
-            Required = true,
+            Required = false,
             HelpText = "Set ADLS gen 2 storage account URLs (at least one), separated by commas")]
         public string StorageUrls { get; set; } = string.Empty;
 

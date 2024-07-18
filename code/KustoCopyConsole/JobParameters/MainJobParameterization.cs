@@ -16,5 +16,10 @@ namespace KustoCopyConsole.JobParameters
         {
             throw new NotImplementedException();
         }
+
+        internal string ToYaml()
+        {
+            throw new NotImplementedException();
+        }
     }
 }
