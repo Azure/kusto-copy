@@ -55,10 +55,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Storage\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Include="Entity\DatabaseReference.cs" />
     <None Include="Entity\DestinationBlockEntity.cs" />
     <None Include="Entity\DestinationDatabaseEntity.cs" />
