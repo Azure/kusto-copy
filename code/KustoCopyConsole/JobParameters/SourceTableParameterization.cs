@@ -1,8 +1,8 @@
 ﻿namespace KustoCopyConsole.JobParameters
 {
-    public class TableParameterization
+    public class SourceTableParameterization
     {
-        public string Name { get; set; } = string.Empty;
+        public string TableName { get; set; } = string.Empty;
 
         public TimeSpan ExtentTimeRange { get; set; } = TimeSpan.FromDays(1);
 

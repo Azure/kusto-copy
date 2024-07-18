@@ -9,7 +9,7 @@ namespace KustoCopyConsole.JobParameters
 {
     internal class MainJobParameterization
     {
-        public IImmutableList<ClusterParameterization> Clusters { get; set; } =
-            ImmutableArray<ClusterParameterization>.Empty;
+        public IImmutableList<SourceClusterParameterization> SourceClusters { get; set; } =
+            ImmutableArray<SourceClusterParameterization>.Empty;
     }
 }

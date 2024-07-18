@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.JobParameters
 {
-    internal class ClusterParameterization
+    internal class SourceClusterParameterization
     {
         public Uri SourceClusterUri { get; set; }
 
@@ -15,7 +15,7 @@ namespace KustoCopyConsole.JobParameters
 
         public int ConcurrentExportCommandCount { get; set; } = 0;
 
-        public IImmutableList<DatabaseParameterization> Databases { get; set; } =
-            ImmutableArray<DatabaseParameterization>.Empty;
+        public IImmutableList<SourceDatabaseParameterization> Databases { get; set; } =
+            ImmutableArray<SourceDatabaseParameterization>.Empty;
     }
 }
