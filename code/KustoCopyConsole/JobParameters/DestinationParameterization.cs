@@ -2,7 +2,7 @@
 {
     public class DestinationParameterization
     {
-        public Uri DestinationClusterUri { get; set; } = new Uri();
+        public Uri DestinationClusterUri { get; set; } = new Uri(string.Empty);
 
         public string DatabaseName { get; set; } = string.Empty;
     }

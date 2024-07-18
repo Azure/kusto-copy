@@ -79,9 +79,8 @@ namespace KustoCopyConsole
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
 
             Console.WriteLine();
-            Console.WriteLine("Kusto Copy");
+            Console.WriteLine($"Kusto Copy {AssemblyVersion}");
             Console.WriteLine();
-            Console.WriteLine($"kc {AssemblyVersion}");
 
             //  Use CommandLineParser NuGet package to parse command line
             //  See https://github.com/commandlineparser/commandline

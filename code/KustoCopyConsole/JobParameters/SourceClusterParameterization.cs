@@ -5,7 +5,7 @@ namespace KustoCopyConsole.JobParameters
 {
     internal class SourceClusterParameterization
     {
-        public Uri SourceClusterUri { get; set; } = new Uri();
+        public Uri SourceClusterUri { get; set; } = new Uri(string.Empty);
 
         public ExportMode ExportMode { get; set; } = ExportMode.BackFillAndNew;
 

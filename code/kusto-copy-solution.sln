@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KustoCopyConsole", "KustoCopyConsole\KustoCopyConsole.csproj", "{18B916CD-8E6F-42C0-8CF3-45BE3A79220E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KustoCopyConsole", "KustoCopyConsole\KustoCopyConsole.csproj", "{A645FEB6-763F-4F4D-8250-78A450BAD716}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{18B916CD-8E6F-42C0-8CF3-45BE3A79220E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{18B916CD-8E6F-42C0-8CF3-45BE3A79220E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{18B916CD-8E6F-42C0-8CF3-45BE3A79220E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{18B916CD-8E6F-42C0-8CF3-45BE3A79220E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
