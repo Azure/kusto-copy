@@ -8,9 +8,12 @@ namespace KustoCopyConsole
 {
     public class CopyException : Exception
     {
-        public CopyException(string message, Exception? innerException = null)
+        public CopyException(string message, bool isTransient, Exception? innerException = null)
             : base(message, innerException)
         {
+            IsTransient = isTransient;
         }
+
+        public bool IsTransient { get; }
     }
 }

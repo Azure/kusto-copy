@@ -1,0 +1,18 @@
+# Provided in parameters or environment variables:
+# * Data lake accounts
+# * Authentication
+
+- sourceClusterUri: https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+  exportMode:  "backfillOnly"    #   One of the following values:  backfillOnly, newOnly, backFillAndNew
+  iterationWait:  00:05:00  # Time to wait between two iterations
+  concurrentQueryCount:  5    #   Number of queries / commands sent in parallel to a given cluster (Default is %10 of query slots)
+  concurrentExportCommandCount:  20    #   Number of export commands sent in parallel to a given cluster (Default will max export slots)
+  databases:
+  - name:  github
+    tables:
+    - name:  Table1
+      extentTimeRange:  24:00:00  # The max range of extent creation time to be merge together
+      query:  "| project ColA, ColB"
+    destinations:
+      - destinationClusterUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+        database:  github

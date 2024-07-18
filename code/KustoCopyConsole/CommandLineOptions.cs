@@ -10,46 +10,40 @@ namespace KustoCopyConsole
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
         public bool Verbose { get; set; }
 
-        [Option('p', "parameter", Required = false, HelpText = "Set parameter file path.")]
-        public string? ParameterFilePath { get; set; }
+        [Option(
+            's',
+            "source",
+            Required = false,
+            HelpText = "Set the source in the format cluster uri/database/table, e.g. https://help.kusto.windows.net/Samples/nyc_taxi")]
+        public string Source { get; set; }
+
+        [Option(
+            'd',
+            "destination",
+            Required = false,
+            HelpText = "Set the destination database in the format uri cluster uri/database, e.g. https://vppartitioning.eastus.kusto.windows.net/mydb")]
+        public string Destination { get; set; }
+
+        [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
+        public string Authentication { get; set; } = "AzCli";
+
+        [Option(
+            'l',
+            "storage",
+            Required = true,
+            HelpText = "Set ADLS gen 2 storage account URLs (at least one), separated by commas")]
+        public string StorageUrls { get; set; }
 
         [Option(
             "continuous",
             Required = false,
-            HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after first batch")]
+            HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool ContinuousRun { get; set; } = false;
 
-        [Option('l', "lake", Required = true, HelpText = "Data Lake (ADLS gen 2) folder URL or Kusto-style connection string")]
-        public string? LakeFolderConnectionString { get; set; }
+        [Option("job-name", Required = false, HelpText = "Set job name.")]
+        public string JobName { get; set; } = "default";
 
-        [Option('s', "source", Required = false, HelpText = "Source Cluster Query Connection String")]
-        public string SourceConnectionString { get; set; } = string.Empty;
-
-        [Option('d', "destination", Required = false, HelpText = "Destination Cluster Query Connection String")]
-        public string DestinationConnectionString { get; set; } = string.Empty;
-
-        [Option("db", Required = false, HelpText = "Database to copy")]
-        public string? Db { get; set; }
-
-        [Option("tables-include", Required = false, HelpText = "Tables to include", Default = new string[0])]
-        public IEnumerable<string> TablesToInclude { get; set; } = new string[0];
-
-        [Option("tables-exclude", Required = false, HelpText = "Tables to exclude", Default = new string[0])]
-        public IEnumerable<string> TablesToExclude { get; set; } = new string[0];
-
-        [Option("query-slots", Required = false, HelpText = "Number of concurrent queries / commands on the clusters")]
-        public int ConcurrentQueryCount { get; set; } = 0;
-
-        [Option("export-slots", Required = false, HelpText = "# export slots to use on source cluster")]
-        public int ConcurrentExportCommandCount { get; set; } = 0;
-
-        [Option("ingestion-slots", Required = false, HelpText = "Number of concurrent ingestions on the clusters")]
-        public int ConcurrentIngestionCount { get; set; } = 0;
-
-        [Option('r', "rpo", Required = false, HelpText = "Recovery Point Objectives:  the target timespan between 2 iterations")]
-        public string Rpo { get; set; } = "5m";
-
-        [Option('b', "backfillHorizon", Required = false, HelpText = "Backfill horizon:  how long in the past should we start?")]
-        public string? BackfillHorizon { get; set; }
+        [Option("job-path", Required = false, HelpText = "Set job file local path.")]
+        public string JobFilePath { get; set; }
     }
 }
