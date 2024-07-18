@@ -9,13 +9,6 @@
     <!--	Important to avoid the trimming warning hell ; since we automate-test everything, we do not need static analysis	-->
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
     <AssemblyName>kc</AssemblyName>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
   </PropertyGroup>
 
