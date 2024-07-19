@@ -157,7 +157,7 @@ namespace KustoCopyConsole
             };
             try
             {
-                var orchestration = await CopyOrchestration.CreateAsync(
+                var orchestration = await MainOrchestration.CreateAsync(
                     options,
                     cancellationTokenSource.Token);
 

@@ -7,12 +7,12 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Orchestration
 {
-    internal class CopyOrchestration : IAsyncDisposable
+    internal class MainOrchestration : IAsyncDisposable
     {
         private readonly RowItemGateway _rowItemGateway;
 
         #region Constructors
-        internal static async Task<CopyOrchestration> CreateAsync(
+        internal static async Task<MainOrchestration> CreateAsync(
             CommandLineOptions options,
             CancellationToken ct)
         {
@@ -22,10 +22,10 @@ namespace KustoCopyConsole.Orchestration
 
             await Task.CompletedTask;
 
-            return new CopyOrchestration(parameterization, rowItemGateway);
+            return new MainOrchestration(parameterization, rowItemGateway);
         }
 
-        private CopyOrchestration(
+        private MainOrchestration(
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway)
         {
