@@ -8,23 +8,21 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage.LocalDisk
 {
-    internal class LocalItemGateway : IItemGateway
+    internal class LocalAppendStorage : IAppendStorage
     {
         //using (FileStream stream = new FileStream(journalFilePath, FileMode.Append, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
- 
-        int IItemGateway.MaxBatchSize => 4086;
 
-        Task IItemGateway.AppendItemsAsync(IEnumerable<RowItem> rowItems)
+        Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
         {
             throw new NotImplementedException();
         }
 
-        Task<IImmutableList<RowItem>> IItemGateway.LoadAllAsync()
+        Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)
         {
             throw new NotImplementedException();
         }
 
-        Task IItemGateway.ReplaceAllAsync(IEnumerable<RowItem> rowItems)
+        byte[] IAppendStorage.LoadAllAsync(CancellationToken ct)
         {
             throw new NotImplementedException();
         }

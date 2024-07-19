@@ -145,109 +145,33 @@ namespace KustoCopyConsole
         {
             ConfigureTrace(options.Verbose);
 
-            var parameterization = CreateParameterization(options);
             var cancellationTokenSource = new CancellationTokenSource();
             var taskCompletionSource = new TaskCompletionSource();
 
-            Trace.WriteLine("");
-            Trace.WriteLine("Parameterization:");
-            Trace.WriteLine("");
-            Trace.WriteLine(parameterization.ToYaml());
-            Trace.WriteLine("");
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
                 Trace.TraceInformation("Exiting process...");
                 cancellationTokenSource.Cancel();
                 taskCompletionSource.Task.Wait();
             };
-
             try
             {
+                var orchestration = await CopyOrchestration.CreateAsync(
+                    options,
+                    cancellationTokenSource.Token);
+
+                Trace.WriteLine("");
+                Trace.WriteLine("Parameterization:");
+                Trace.WriteLine("");
+                Trace.WriteLine(orchestration.Parameterization.ToYaml());
+                Trace.WriteLine("");
                 Trace.WriteLine("Processing...");
                 Trace.WriteLine("");
-                parameterization.Validate();
-                await Task.CompletedTask;
-                //await CopyOrchestration.CopyAsync(
-                //    parameterization,
-                //    cancellationTokenSource.Token);
+                await orchestration.ProcessAsync(cancellationTokenSource.Token);
             }
             finally
             {
                 taskCompletionSource.SetResult();
-            }
-        }
-
-        private static MainJobParameterization CreateParameterization(CommandLineOptions options)
-        {
-            if (!string.IsNullOrWhiteSpace(options.Source))
-            {
-                if (string.IsNullOrWhiteSpace(options.Destination))
-                {
-                    throw new CopyException(
-                        $"Source is specified ('options.Source'):  destination is expected",
-                        false);
-                }
-
-                if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
-                {
-                    throw new CopyException($"Can't parse source:  '{options.Source}'", false);
-                }
-                if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
-                {
-                    throw new CopyException(
-                        $"Can't parse destination:  '{options.Destination}'",
-                        false);
-                }
-                var sourceBuilder = new UriBuilder(source);
-                var sourcePathParts = sourceBuilder.Path.Split('/');
-                var destinationBuilder = new UriBuilder(destination);
-                var destinationPathParts = destinationBuilder.Path.Split('/');
-
-                if (sourcePathParts.Length != 3)
-                {
-                    throw new CopyException(
-                        $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
-                        false);
-                }
-                if (destinationPathParts.Length != 2)
-                {
-                    throw new CopyException(
-                        $"Destination ('{options.Destination}') should be of the form 'https://mycluster.eastus.kusto.windows.net/mydb'",
-                        false);
-                }
-
-                var sourceDb = sourcePathParts[1];
-                var sourceTable = sourcePathParts[2];
-                var destinationDb = sourcePathParts[1];
-
-                sourceBuilder.Path = string.Empty;
-                destinationBuilder.Path = string.Empty;
-
-                return new MainJobParameterization
-                {
-                    SourceClusters = ImmutableList.Create(
-                        new SourceClusterParameterization
-                        {
-                            SourceClusterUri = sourceBuilder.ToString(),
-                            Databases = ImmutableList.Create(new SourceDatabaseParameterization
-                            {
-                                DatabaseName = sourceDb,
-                                Tables = ImmutableList.Create(new SourceTableParameterization
-                                {
-                                    TableName = sourceTable
-                                }),
-                                Destinations = ImmutableList.Create(new DestinationParameterization
-                                {
-                                    DestinationClusterUri = destinationBuilder.ToString(),
-                                    DatabaseName = destinationDb
-                                })
-                            })
-                        })
-                };
-            }
-            else
-            {
-                throw new NotImplementedException();
             }
         }
 

@@ -38,7 +38,7 @@ namespace KustoCopyConsole
             "continuous",
             Required = false,
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
-        public bool ContinuousRun { get; set; } = false;
+        public bool IsContinuousRun { get; set; } = false;
 
         [Option("job-name", Required = false, HelpText = "Set job name.")]
         public string JobName { get; set; } = "default";

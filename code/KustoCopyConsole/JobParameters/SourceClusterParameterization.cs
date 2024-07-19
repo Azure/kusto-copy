@@ -5,6 +5,8 @@ namespace KustoCopyConsole.JobParameters
 {
     internal class SourceClusterParameterization
     {
+        public bool IsContinuousRun { get; set; } = false;
+     
         public string SourceClusterUri { get; set; } = string.Empty;
 
         public ExportMode ExportMode { get; set; } = ExportMode.BackFillAndNew;
