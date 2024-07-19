@@ -7,7 +7,7 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole
 {
-    internal class CopyOrchestration
+    internal class CopyOrchestration : IAsyncDisposable
     {
         private readonly RowItemGateway _rowItemGateway;
 
@@ -114,6 +114,11 @@ namespace KustoCopyConsole
         }
         #endregion
 
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            await ((IAsyncDisposable)_rowItemGateway).DisposeAsync();
+        }
+
         public MainJobParameterization Parameterization { get; }
 
         internal async Task ProcessAsync(CancellationToken ct)
@@ -123,7 +128,7 @@ namespace KustoCopyConsole
             throw new NotImplementedException();
         }
 
-        private static IEnumerable<RowItem> CompactItems(IImmutableList<RowItem> items)
+        private static IEnumerable<RowItem> CompactItems(IEnumerable<RowItem> items)
         {
             return items;
         }

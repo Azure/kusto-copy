@@ -8,13 +8,16 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage
 {
-    internal interface IAppendStorage
+    internal interface IAppendStorage : IAsyncDisposable
     {
+        /// <summary>Maximum size of buffer that can be written.</summary>
+        int MaxBufferSize { get; }
+
         /// <summary>Returns the full content of the storage.</summary>
         /// <param name="ct"></param>
         /// <returns></returns>
         Task<byte[]> LoadAllAsync(CancellationToken ct);
-     
+
         /// <summary>Replace atomically the content of the storage.</summary>
         /// <param name="buffer"></param>
         /// <param name="ct"></param>

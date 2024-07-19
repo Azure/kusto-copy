@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.State;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,13 +7,21 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity
 {
-    internal class VersionEntity
+    internal class VersionEntity : IRowItemSerializable
     {
-        public VersionEntity(Version version)
+        public VersionEntity(Version fileVersion)
         {
-            Version = version;
+            FileVersion = fileVersion;
         }
 
-        public Version Version { get; }
+        public Version FileVersion { get; }
+
+        RowItem IRowItemSerializable.Serialize()
+        {
+            return new RowItem
+            {
+                FileVersion = FileVersion.ToString()
+            };
+        }
     }
 }

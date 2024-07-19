@@ -11,50 +11,66 @@ namespace KustoCopyConsole.Storage.LocalDisk
     internal class LocalAppendStorage : IAppendStorage
     {
         private readonly string _path;
-        private readonly Stream _stream;
+        private Stream _fileStream;
+        private volatile int _writeCount = 0;
 
         public LocalAppendStorage(string path)
         {
             _path = path;
-            _stream = OpenFile(_path);
+            _fileStream = OpenFile(_path);
         }
+
+        int IAppendStorage.MaxBufferSize => 4096;
 
         async Task<byte[]> IAppendStorage.LoadAllAsync(CancellationToken ct)
         {
-            var length = _stream.Length;
-            var buffer = new byte[length];
+            await _fileStream.DisposeAsync();
 
-            _stream.Position = 0;
+            var buffer = await File.ReadAllBytesAsync(_path, ct);
 
-            var readLength = await _stream.ReadAsync(buffer, ct);
-
-            if (readLength != length)
-            {
-                throw new CopyException($"File '{_path}' corrupted", false);
-            }
+            _fileStream = OpenFile(_path);
 
             return buffer;
         }
 
-        Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)
+        async Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var tempPath = Path.GetTempFileName();
+
+            await File.WriteAllBytesAsync(tempPath, buffer, ct);
+            await _fileStream.DisposeAsync();
+            File.Move(tempPath, _path, true);
+            _fileStream = OpenFile(_path);
         }
 
-        Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
+        async Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
         {
-            throw new NotImplementedException();
+            if (Interlocked.Increment(ref _writeCount) >= 10)
+            {
+                return false;
+            }
+            else
+            {
+                await _fileStream.WriteAsync(buffer);
+
+                return true;
+            }
         }
 
         private Stream OpenFile(string path)
         {
             return new FileStream(
                 path,
-                FileMode.OpenOrCreate,
-                FileAccess.ReadWrite,
+                FileMode.Append,
+                FileAccess.Write,
                 FileShare.None,
-                4096,
-                FileOptions.WriteThrough);
+                0,
+                FileOptions.WriteThrough | FileOptions.Asynchronous);
+        }
+
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            await _fileStream.DisposeAsync();
         }
     }
 }

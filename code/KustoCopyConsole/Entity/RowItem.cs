@@ -10,12 +10,12 @@ namespace KustoCopyConsole.Entity
     internal class RowItem
     {
         [Index(0)]
-        public DateTime Created { get; set; } = DateTime.Now;
+        public string FileVersion { get; set; } = string.Empty;
 
         [Index(1)]
-        public DateTime Updated { get; set; } = DateTime.Now;
+        public DateTime Created { get; set; } = DateTime.Now;
 
         [Index(2)]
-        public string Version { get; set; } = string.Empty;
+        public DateTime Updated { get; set; } = DateTime.Now;
     }
 }
