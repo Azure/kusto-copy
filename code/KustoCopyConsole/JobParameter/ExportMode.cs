@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.JobParameters
+﻿namespace KustoCopyConsole.JobParameter
 {
     public enum ExportMode
     {

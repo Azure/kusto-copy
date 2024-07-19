@@ -1,6 +1,6 @@
 ﻿
 using KustoCopyConsole.Entity;
-using KustoCopyConsole.JobParameters;
+using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.LocalDisk;
 using System.Collections.Immutable;

@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
 
-namespace KustoCopyConsole.JobParameters
+namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {

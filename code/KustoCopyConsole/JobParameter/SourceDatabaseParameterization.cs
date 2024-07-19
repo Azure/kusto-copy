@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-namespace KustoCopyConsole.JobParameters
+namespace KustoCopyConsole.JobParameter
 {
     public class SourceDatabaseParameterization
     {

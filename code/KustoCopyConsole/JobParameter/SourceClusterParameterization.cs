@@ -1,7 +1,7 @@
 ﻿using Kusto.Cloud.Platform.Utils;
 using System.Collections.Immutable;
 
-namespace KustoCopyConsole.JobParameters
+namespace KustoCopyConsole.JobParameter
 {
     internal class SourceClusterParameterization
     {
