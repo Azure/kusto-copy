@@ -21,8 +21,10 @@ namespace KustoCopyConsole.Storage
             _compactFunc = compactFunc;
         }
 
-        public Task MigrateToLatestVersionAsync()
+        public async Task MigrateToLatestVersionAsync(CancellationToken ct)
         {
+            var buffer = await _appendStorage.LoadAllAsync(ct);
+
             throw new NotImplementedException();
         }
 

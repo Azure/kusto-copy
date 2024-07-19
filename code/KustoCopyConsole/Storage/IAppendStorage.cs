@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Storage
         /// <summary>Returns the full content of the storage.</summary>
         /// <param name="ct"></param>
         /// <returns></returns>
-        byte[] LoadAllAsync(CancellationToken ct);
+        Task<byte[]> LoadAllAsync(CancellationToken ct);
      
         /// <summary>Replace atomically the content of the storage.</summary>
         /// <param name="buffer"></param>

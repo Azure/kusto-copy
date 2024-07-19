@@ -2,6 +2,7 @@
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.JobParameters;
 using KustoCopyConsole.Storage;
+using KustoCopyConsole.Storage.LocalDisk;
 using System.Collections.Immutable;
 
 namespace KustoCopyConsole
@@ -19,7 +20,7 @@ namespace KustoCopyConsole
             var appendStorage = CreateAppendStorage();
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
 
-            await rowItemGateway.MigrateToLatestVersionAsync();
+            await rowItemGateway.MigrateToLatestVersionAsync(ct);
 
             return new CopyOrchestration(parameterization, rowItemGateway);
         }
@@ -34,7 +35,7 @@ namespace KustoCopyConsole
 
         private static IAppendStorage CreateAppendStorage()
         {
-            throw new NotImplementedException();
+            return new LocalAppendStorage("kusto-copy.log");
         }
 
         private static MainJobParameterization CreateParameterization(CommandLineOptions options)
