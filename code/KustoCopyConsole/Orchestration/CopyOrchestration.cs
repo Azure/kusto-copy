@@ -5,7 +5,7 @@ using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.LocalDisk;
 using System.Collections.Immutable;
 
-namespace KustoCopyConsole
+namespace KustoCopyConsole.Orchestration
 {
     internal class CopyOrchestration : IAsyncDisposable
     {
@@ -20,7 +20,7 @@ namespace KustoCopyConsole
             var appendStorage = CreateAppendStorage();
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
 
-            await rowItemGateway.MigrateToLatestVersionAsync(ct);
+            await Task.CompletedTask;
 
             return new CopyOrchestration(parameterization, rowItemGateway);
         }
@@ -123,7 +123,10 @@ namespace KustoCopyConsole
 
         internal async Task ProcessAsync(CancellationToken ct)
         {
-            await Task.CompletedTask;
+            var items = await _rowItemGateway.MigrateToLatestVersionAsync(ct);
+
+            //  Allow GC
+            items = null;
 
             throw new NotImplementedException();
         }

@@ -35,9 +35,9 @@ namespace KustoCopyConsole.Storage
             await _appendStorage.DisposeAsync();
         }
 
-        public async Task MigrateToLatestVersionAsync(CancellationToken ct)
+        public async Task<IImmutableList<RowItem>> MigrateToLatestVersionAsync(CancellationToken ct)
         {
-            await CompactAsync(ct);
+            return await CompactAsync(ct);
         }
 
         public Task AppendAsync(RowItem item, CancellationToken ct)
@@ -55,13 +55,14 @@ namespace KustoCopyConsole.Storage
             await Task.CompletedTask;
         }
 
-        private async Task CompactAsync(CancellationToken ct)
+        private async Task<IImmutableList<RowItem>> CompactAsync(CancellationToken ct)
         {
             var readBuffer = await _appendStorage.LoadAllAsync(ct);
 
             if (readBuffer.Length == 0)
             {
                 var versionEntity = new VersionEntity(CURRENT_FILE_VERSION) as IRowItemSerializable;
+                var versionItem = versionEntity.Serialize();
 
                 using (var tempMemoryStream = new MemoryStream())
                 using (var writer = new StreamWriter(tempMemoryStream))
@@ -69,7 +70,7 @@ namespace KustoCopyConsole.Storage
                 {
                     csv.WriteHeader<RowItem>();
                     csv.NextRecord();
-                    csv.WriteRecord(versionEntity.Serialize());
+                    csv.WriteRecord(versionItem);
                     csv.NextRecord();
                     csv.Flush();
                     writer.Flush();
@@ -81,6 +82,8 @@ namespace KustoCopyConsole.Storage
                     {
                         throw new CopyException("Initial log write fails", false);
                     }
+
+                    return ImmutableList.Create(versionItem);
                 }
             }
             else
@@ -101,11 +104,13 @@ namespace KustoCopyConsole.Storage
                     var writeBuffer = tempMemoryStream.ToArray();
 
                     await _appendStorage.AtomicReplaceAsync(writeBuffer, ct);
+                 
+                    return items;
                 }
             }
         }
 
-        private IEnumerable<RowItem> CompactBuffer(byte[] readBuffer)
+        private IImmutableList<RowItem> CompactBuffer(byte[] readBuffer)
         {
             using (var bufferStream = new MemoryStream(readBuffer))
             using (var reader = new StreamReader(bufferStream))

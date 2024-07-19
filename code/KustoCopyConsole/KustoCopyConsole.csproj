@@ -74,4 +74,8 @@
     <None Include="Entity\State\SourceUrlState.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Orchestration\" />
+  </ItemGroup>
+
 </Project>

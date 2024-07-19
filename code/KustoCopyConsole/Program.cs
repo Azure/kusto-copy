@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using KustoCopyConsole.JobParameters;
+using KustoCopyConsole.Orchestration;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
