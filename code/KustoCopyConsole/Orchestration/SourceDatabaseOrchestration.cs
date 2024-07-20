@@ -13,6 +13,7 @@ namespace KustoCopyConsole.Orchestration
     {
         private readonly SourceClusterParameterization _sourceCluster;
         private readonly SourceDatabaseParameterization _sourceDb;
+        private readonly List<SourceDatabaseEntity> _sourceDatabaseEntities;
 
         public SourceDatabaseOrchestration(
             RowItemGateway rowItemGateway,
@@ -23,7 +24,11 @@ namespace KustoCopyConsole.Orchestration
         {
             _sourceCluster = sourceCluster;
             _sourceDb = sourceDb;
-            items.Select(i => SourceDatabaseEntity.Create(i));
+            _sourceDatabaseEntities = items
+                .Select(i => SourceDatabaseEntity.Create(i))
+                .Where(e => e != null)
+                .Select(e => e!)
+                .ToList();
         }
     }
 }

@@ -20,7 +20,9 @@ namespace KustoCopyConsole.Entity
         {
             return new RowItem
             {
-                FileVersion = FileVersion.ToString()
+                FileVersion = FileVersion.ToString(),
+                Created = DateTime.Now,
+                Updated = DateTime.Now
             };
         }
     }
