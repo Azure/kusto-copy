@@ -1,6 +1,5 @@
 ﻿using CsvHelper;
 using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -42,11 +41,14 @@ namespace KustoCopyConsole.Storage
 
         public Task AppendAsync(RowItem item, CancellationToken ct)
         {
+            item.Validate();
             throw new NotImplementedException();
         }
 
         public Task AppendAtomicallyAsync(IEnumerable<RowItem> items, CancellationToken ct)
         {
+            //item.Validate();
+
             throw new NotImplementedException();
         }
 
@@ -61,9 +63,13 @@ namespace KustoCopyConsole.Storage
 
             if (readBuffer.Length == 0)
             {
-                var versionEntity = new VersionEntity(CURRENT_FILE_VERSION) as IRowItemSerializable;
-                var versionItem = versionEntity.Serialize();
+                var versionItem = new RowItem
+                {
+                    FileVersion = CURRENT_FILE_VERSION.ToString(),
+                    RowType = RowType.FileVersion,
+                };
 
+                versionItem.Validate();
                 using (var tempMemoryStream = new MemoryStream())
                 using (var writer = new StreamWriter(tempMemoryStream))
                 using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
@@ -131,6 +137,11 @@ namespace KustoCopyConsole.Storage
                 var otherItems = csv.GetRecords<RowItem>();
                 var compactedItems = _compactFunc(otherItems);
                 var allNewItems = compactedItems.Prepend(versionItem);
+
+                foreach (var item in allNewItems)
+                {
+                    item.Validate();
+                }
 
                 return allNewItems.ToImmutableArray();
             }

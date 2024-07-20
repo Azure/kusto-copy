@@ -21,16 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Entity\DestinationBlockEntity.cs" />
-    <Compile Remove="Entity\DestinationDatabaseEntity.cs" />
-    <Compile Remove="Entity\DestinationDatabaseEntityBase.cs" />
-    <Compile Remove="Entity\DestinationTableEntity.cs" />
-    <Compile Remove="Entity\SourceBlockEntity.cs" />
-    <Compile Remove="Entity\SourceTableEntity.cs" />
-    <Compile Remove="Entity\SourceUrlEntity.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- Explicitly include Legacy files as None -->
     <None Update="Legacy\**\*.cs" />
   </ItemGroup>
@@ -42,16 +32,6 @@
     <PackageReference Include="Microsoft.Azure.Kusto.Data" Version="12.2.3" />
     <PackageReference Include="Polly" Version="8.4.1" />
     <PackageReference Include="YamlDotNet" Version="16.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Entity\DestinationBlockEntity.cs" />
-    <None Include="Entity\DestinationDatabaseEntity.cs" />
-    <None Include="Entity\DestinationDatabaseEntityBase.cs" />
-    <None Include="Entity\DestinationTableEntity.cs" />
-    <None Include="Entity\SourceBlockEntity.cs" />
-    <None Include="Entity\SourceTableEntity.cs" />
-    <None Include="Entity\SourceUrlEntity.cs" />
   </ItemGroup>
 
 </Project>
