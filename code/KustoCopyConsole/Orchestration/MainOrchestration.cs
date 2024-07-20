@@ -124,7 +124,13 @@ namespace KustoCopyConsole.Orchestration
         internal async Task ProcessAsync(CancellationToken ct)
         {
             var items = await _rowItemGateway.MigrateToLatestVersionAsync(ct);
-
+            var q = Parameterization.SourceClusters
+                .Select(sc => sc.Databases.Select(db => new SourceDatabaseOrchestration(
+                    _rowItemGateway,
+                    sc,
+                    db,
+                    items)));
+                //
             //  Allow GC
             items = null;
 

@@ -21,23 +21,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Entity\DatabaseReference.cs" />
     <Compile Remove="Entity\DestinationBlockEntity.cs" />
     <Compile Remove="Entity\DestinationDatabaseEntity.cs" />
     <Compile Remove="Entity\DestinationDatabaseEntityBase.cs" />
     <Compile Remove="Entity\DestinationTableEntity.cs" />
-    <Compile Remove="Entity\IterationEntityBase.cs" />
     <Compile Remove="Entity\SourceBlockEntity.cs" />
-    <Compile Remove="Entity\SourceDatabaseEntity.cs" />
     <Compile Remove="Entity\SourceTableEntity.cs" />
     <Compile Remove="Entity\SourceUrlEntity.cs" />
-    <Compile Remove="Entity\State\DestinationBlockState.cs" />
-    <Compile Remove="Entity\State\DestinationDatabaseState.cs" />
-    <Compile Remove="Entity\State\DestinationTableState.cs" />
-    <Compile Remove="Entity\State\SourceBlockState.cs" />
-    <Compile Remove="Entity\State\SourceDatabaseState.cs" />
-    <Compile Remove="Entity\State\SourceTableState.cs" />
-    <Compile Remove="Entity\State\SourceUrlState.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -55,27 +45,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Entity\DatabaseReference.cs" />
     <None Include="Entity\DestinationBlockEntity.cs" />
     <None Include="Entity\DestinationDatabaseEntity.cs" />
     <None Include="Entity\DestinationDatabaseEntityBase.cs" />
     <None Include="Entity\DestinationTableEntity.cs" />
-    <None Include="Entity\IterationEntityBase.cs" />
     <None Include="Entity\SourceBlockEntity.cs" />
-    <None Include="Entity\SourceDatabaseEntity.cs" />
     <None Include="Entity\SourceTableEntity.cs" />
     <None Include="Entity\SourceUrlEntity.cs" />
-    <None Include="Entity\State\DestinationBlockState.cs" />
-    <None Include="Entity\State\DestinationDatabaseState.cs" />
-    <None Include="Entity\State\DestinationTableState.cs" />
-    <None Include="Entity\State\SourceBlockState.cs" />
-    <None Include="Entity\State\SourceDatabaseState.cs" />
-    <None Include="Entity\State\SourceTableState.cs" />
-    <None Include="Entity\State\SourceUrlState.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Orchestration\" />
   </ItemGroup>
 
 </Project>
