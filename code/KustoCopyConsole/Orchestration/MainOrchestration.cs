@@ -123,18 +123,22 @@ namespace KustoCopyConsole.Orchestration
 
         internal async Task ProcessAsync(CancellationToken ct)
         {
-            var items = await _rowItemGateway.MigrateToLatestVersionAsync(ct);
-            var q = Parameterization.SourceClusters
+            var allItems = await _rowItemGateway.MigrateToLatestVersionAsync(ct);
+            var sourceDbs = Parameterization.SourceClusters
                 .Select(sc => sc.Databases.Select(db => new SourceDatabaseOrchestration(
                     _rowItemGateway,
                     sc,
-                    db,
-                    items)));
-                //
-            //  Allow GC
-            items = null;
+                    db)))
+                .SelectMany(e => e)
+                .ToImmutableArray();
+            var dbTasks = sourceDbs
+                .Select(d => d.ProcessAsync(allItems, ct))
+                .ToImmutableArray();
 
-            throw new NotImplementedException();
+            //  Allow GC
+            allItems = null;
+            //  Let every database orchestration complete
+            await Task.WhenAll(dbTasks);
         }
 
         private static IEnumerable<RowItem> CompactItems(IEnumerable<RowItem> items)

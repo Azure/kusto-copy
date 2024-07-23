@@ -3,6 +3,7 @@
     public enum RowType
     {
         Unspecified,
-        FileVersion
+        FileVersion,
+        SourceDatabase
     }
 }

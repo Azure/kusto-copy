@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Storage;
+﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,5 +16,7 @@ namespace KustoCopyConsole.Orchestration
         }
 
         protected RowItemGateway RowItemGateway { get; }
+
+        public abstract Task ProcessAsync(IEnumerable<RowItem> allItems, CancellationToken ct);
     }
 }

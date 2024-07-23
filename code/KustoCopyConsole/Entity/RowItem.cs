@@ -93,6 +93,7 @@ namespace KustoCopyConsole.Entity
         [Index(9)]
         public string TableName { get; set; } = string.Empty;
 
+        /// <summary>Zero-based index with zero being the backfill.</summary>>
         [Index(10)]
         public long? IterationId { get; set; }
 
