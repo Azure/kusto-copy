@@ -18,13 +18,14 @@ namespace KustoCopyConsole.Kusto
     internal class DbClientFactory
     {
         private readonly ProviderFactory _providerFactory;
-        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
-        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterQueryQueueMap;
+        private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
+        private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterQueryQueueMap;
 
         #region Constructor
         public static async Task<DbClientFactory> CreateAsync(
             MainJobParameterization parameterization,
-            TokenCredential credentials)
+            TokenCredential credentials,
+            CancellationToken ct)
         {
             var providerFactory = new ProviderFactory(parameterization, credentials);
             var sourceClusters = parameterization.SourceClusters
@@ -37,7 +38,7 @@ namespace KustoCopyConsole.Kusto
             var countTasks = sourceClusters
                 .Select(s => new
                 {
-                    Task = GetCounts(providerFactory.GetCommandProvider(s.Uri)),
+                    Task = GetCounts(providerFactory.GetCommandProvider(s.Uri), ct),
                     Source = s
                 })
                 .ToImmutableArray();
@@ -88,7 +89,9 @@ namespace KustoCopyConsole.Kusto
             _sourceClusterQueryQueueMap = sourceClusterQueryQueueMap;
         }
 
-        private static async Task<(long Export, long Query)> GetCounts(ICslAdminProvider provider)
+        private static async Task<(long Export, long Query)> GetCountsAsync(
+            ICslAdminProvider provider,
+            CancellationToken ct)
         {
             var commandText = @"
 .show capacity
@@ -104,5 +107,19 @@ namespace KustoCopyConsole.Kusto
         }
         #endregion
 
+        public DbQueryClient GetDbQueryClient(Uri sourceUri, string database)
+        {
+            try
+            {
+                var queue = _sourceClusterQueryQueueMap[sourceUri];
+                var provider = _providerFactory.GetQueryProvider(sourceUri);
+
+                return new DbQueryClient(provider, queue, database);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                throw new CopyException($"Can't find cluster '{sourceUri}'", false, ex);
+            }
+        }
     }
 }
