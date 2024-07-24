@@ -36,7 +36,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Kusto\" />
     <Folder Include="Storage\AzureStorage\" />
   </ItemGroup>
 
