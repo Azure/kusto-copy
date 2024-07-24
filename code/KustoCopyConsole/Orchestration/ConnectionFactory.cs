@@ -22,13 +22,13 @@ namespace KustoCopyConsole.Orchestration
         {
             var credentials = CreateCredentials(authentication);
             var sourceClusterUris = parameterization.SourceClusters
-                .Select(s => NormalizeUri(s.SourceClusterUri))
+                .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
                 .Distinct();
             var destinationClusterUris = parameterization.SourceClusters
                 .Select(s => s.Databases.Select(db => db.Destinations.Select(d => d.DestinationClusterUri)))
                 .SelectMany(e => e)
                 .SelectMany(e => e)
-                .Select(s => NormalizeUri(s))
+                .Select(s => NormalizedUri.NormalizeUri(s))
                 .Distinct();
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)
@@ -79,9 +79,19 @@ namespace KustoCopyConsole.Orchestration
         }
         #endregion
 
-        private static Uri NormalizeUri(string uriText)
+        public ICslAdminProvider GetCommandProvider(Uri clusterUri)
         {
-            return new Uri(uriText.Trim().ToLower());
+            return _commandProviderMap[clusterUri];
+        }
+
+        public ICslQueryProvider GetQueryProvider(Uri clusterUri)
+        {
+            return _queryProviderMap[clusterUri];
+        }
+
+        public ICslAdminProvider GetDmCommandProvider(Uri clusterUri)
+        {
+            return _dmCommandProviderMap[clusterUri];
         }
 
         private static Uri GetIngestUri(Uri uri)
