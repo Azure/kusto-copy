@@ -3,6 +3,7 @@ using Azure.Core;
 using Azure.Identity;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.JobParameter;
+using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.LocalDisk;
 using System.Collections.Immutable;
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.Orchestration
     internal class MainOrchestration : IAsyncDisposable
     {
         private readonly RowItemGateway _rowItemGateway;
-        private readonly ConnectionFactory _connectionFactory;
+        private readonly ProviderFactory _connectionFactory;
 
         #region Constructors
         internal static async Task<MainOrchestration> CreateAsync(
@@ -22,18 +23,18 @@ namespace KustoCopyConsole.Orchestration
             var parameterization = CreateParameterization(options);
             var appendStorage = CreateAppendStorage();
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
-            var connectionFactory = new ConnectionFactory(
+            var providerFactory = new ProviderFactory(
                 parameterization,
                 CreateCredentials(options.Authentication));
 
             await Task.CompletedTask;
 
-            return new MainOrchestration(parameterization, connectionFactory, rowItemGateway);
+            return new MainOrchestration(parameterization, providerFactory, rowItemGateway);
         }
 
         private MainOrchestration(
             MainJobParameterization parameterization,
-            ConnectionFactory connectionFactory,
+            ProviderFactory connectionFactory,
             RowItemGateway rowItemGateway)
         {
             Parameterization = parameterization;

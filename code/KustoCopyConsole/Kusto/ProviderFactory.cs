@@ -8,9 +8,9 @@ using Kusto.Ingest;
 using KustoCopyConsole.JobParameter;
 using System.Collections.Immutable;
 
-namespace KustoCopyConsole.Orchestration
+namespace KustoCopyConsole.Kusto
 {
-    internal class ConnectionFactory
+    internal class ProviderFactory
     {
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Orchestration
         private readonly ImmutableDictionary<Uri, IKustoQueuedIngestClient> _dmIngestProviderMap;
 
         #region Constructor
-        public ConnectionFactory(MainJobParameterization parameterization, TokenCredential credentials)
+        public ProviderFactory(MainJobParameterization parameterization, TokenCredential credentials)
         {
             var sourceClusterUris = parameterization.SourceClusters
                 .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
