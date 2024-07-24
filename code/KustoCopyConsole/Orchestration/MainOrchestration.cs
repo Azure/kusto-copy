@@ -34,11 +34,11 @@ namespace KustoCopyConsole.Orchestration
 
         private MainOrchestration(
             MainJobParameterization parameterization,
-            ProviderFactory connectionFactory,
+            ProviderFactory providerFactory,
             RowItemGateway rowItemGateway)
         {
             Parameterization = parameterization;
-            _connectionFactory = connectionFactory;
+            _connectionFactory = providerFactory;
             _rowItemGateway = rowItemGateway;
         }
 
