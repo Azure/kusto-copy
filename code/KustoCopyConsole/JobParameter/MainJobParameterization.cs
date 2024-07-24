@@ -15,6 +15,23 @@ namespace KustoCopyConsole.JobParameter
 
         internal void Validate()
         {
+            var sourceUriDuplicate = SourceClusters
+                .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
+                .GroupBy(s => s)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .FirstOrDefault();
+
+            if (sourceUriDuplicate!=null)
+            {
+                throw new CopyException(
+                    $"Cluster URI '{sourceUriDuplicate}' appears twice in the parameterization",
+                    false);
+            }
+            foreach (var s in SourceClusters)
+            {
+                s.Validate();
+            }
         }
 
         internal string ToYaml()

@@ -19,5 +19,9 @@ namespace KustoCopyConsole.JobParameter
 
         public IImmutableList<SourceDatabaseParameterization> Databases { get; set; } =
             ImmutableArray<SourceDatabaseParameterization>.Empty;
+
+        public void Validate()
+        {
+        }
     }
 }
