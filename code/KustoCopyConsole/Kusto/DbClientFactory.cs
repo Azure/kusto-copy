@@ -17,9 +17,9 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbClientFactory
     {
-        private readonly ProviderFactory providerFactory;
-        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterExportQueueMap;
-        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterQueryQueueMap;
+        private readonly ProviderFactory _providerFactory;
+        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
+        private readonly ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterQueryQueueMap;
 
         #region Constructor
         public static async Task<DbClientFactory> CreateAsync(
@@ -83,9 +83,9 @@ namespace KustoCopyConsole.Kusto
             ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterExportQueueMap,
             ImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterQueryQueueMap)
         {
-            this.providerFactory = providerFactory;
-            this.sourceClusterExportQueueMap = sourceClusterExportQueueMap;
-            this.sourceClusterQueryQueueMap = sourceClusterQueryQueueMap;
+            _providerFactory = providerFactory;
+            _sourceClusterExportQueueMap = sourceClusterExportQueueMap;
+            _sourceClusterQueryQueueMap = sourceClusterQueryQueueMap;
         }
 
         private static async Task<(long Export, long Query)> GetCounts(ICslAdminProvider provider)
