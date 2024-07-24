@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Orchestration
     internal class MainOrchestration : IAsyncDisposable
     {
         private readonly RowItemGateway _rowItemGateway;
-        private readonly ProviderFactory _providerFactory;
+        private readonly DbClientFactory _dbClientFactory;
 
         #region Constructors
         internal static async Task<MainOrchestration> CreateAsync(
@@ -23,22 +23,20 @@ namespace KustoCopyConsole.Orchestration
             var parameterization = CreateParameterization(options);
             var appendStorage = CreateAppendStorage();
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
-            var providerFactory = new ProviderFactory(
+            var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 CreateCredentials(options.Authentication));
 
-            await Task.CompletedTask;
-
-            return new MainOrchestration(parameterization, providerFactory, rowItemGateway);
+            return new MainOrchestration(parameterization, dbClientFactory, rowItemGateway);
         }
 
         private MainOrchestration(
             MainJobParameterization parameterization,
-            ProviderFactory providerFactory,
+            DbClientFactory dbClientFactory,
             RowItemGateway rowItemGateway)
         {
             Parameterization = parameterization;
-            _providerFactory = providerFactory;
+            _dbClientFactory = dbClientFactory;
             _rowItemGateway = rowItemGateway;
         }
 

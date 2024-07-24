@@ -52,7 +52,7 @@ namespace KustoCopyConsole.Kusto
                     ? o.Task.Result.Export
                     : o.Source.ConcurrentExportCommandCount,
                     ConcurrentQueryCount = o.Source.ConcurrentQueryCount == 0
-                    ? o.Task.Result.Query
+                    ? Math.Max(1, 0.1 * o.Task.Result.Query)
                     : o.Source.ConcurrentQueryCount
                 });
             var sourceClusterExportQueueMap = sourceClusterConfig
