@@ -1,4 +1,6 @@
 ﻿
+using Azure.Core;
+using Azure.Identity;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Storage;
@@ -22,7 +24,7 @@ namespace KustoCopyConsole.Orchestration
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
             var connectionFactory = new ConnectionFactory(
                 parameterization,
-                options.Authentication);
+                CreateCredentials(options.Authentication));
 
             await Task.CompletedTask;
 
@@ -37,6 +39,18 @@ namespace KustoCopyConsole.Orchestration
             Parameterization = parameterization;
             _connectionFactory = connectionFactory;
             _rowItemGateway = rowItemGateway;
+        }
+
+        private static TokenCredential CreateCredentials(string authentication)
+        {
+            if (string.Compare(authentication.Trim(), "AzCli", true) == 0)
+            {
+                return new AzureCliCredential();
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         private static IAppendStorage CreateAppendStorage()

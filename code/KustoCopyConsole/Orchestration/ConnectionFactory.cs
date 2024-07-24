@@ -18,9 +18,8 @@ namespace KustoCopyConsole.Orchestration
         private readonly ImmutableDictionary<Uri, IKustoQueuedIngestClient> _dmIngestProviderMap;
 
         #region Constructor
-        public ConnectionFactory(MainJobParameterization parameterization, string authentication)
+        public ConnectionFactory(MainJobParameterization parameterization, TokenCredential credentials)
         {
-            var credentials = CreateCredentials(authentication);
             var sourceClusterUris = parameterization.SourceClusters
                 .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
                 .Distinct();
@@ -64,18 +63,6 @@ namespace KustoCopyConsole.Orchestration
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoIngestFactory.CreateQueuedIngestClient(e.Builder));
-        }
-
-        private static TokenCredential CreateCredentials(string authentication)
-        {
-            if (string.Compare(authentication.Trim(), "AzCli", true) == 0)
-            {
-                return new AzureCliCredential();
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
         }
         #endregion
 
