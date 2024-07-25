@@ -25,7 +25,8 @@ namespace KustoCopyConsole.Orchestration
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
-                CreateCredentials(options.Authentication));
+                CreateCredentials(options.Authentication),
+                ct);
 
             return new MainOrchestration(parameterization, dbClientFactory, rowItemGateway);
         }
@@ -146,6 +147,7 @@ namespace KustoCopyConsole.Orchestration
             var sourceDbs = Parameterization.SourceClusters
                 .Select(sc => sc.Databases.Select(db => new SourceDatabaseOrchestration(
                     _rowItemGateway,
+                    _dbClientFactory,
                     sc,
                     db)))
                 .SelectMany(e => e)

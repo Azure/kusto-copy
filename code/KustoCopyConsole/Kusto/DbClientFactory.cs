@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Kusto
             var countTasks = sourceClusters
                 .Select(s => new
                 {
-                    Task = GetCounts(providerFactory.GetCommandProvider(s.Uri), ct),
+                    Task = GetCountsAsync(providerFactory.GetCommandProvider(s.Uri), ct),
                     Source = s
                 })
                 .ToImmutableArray();

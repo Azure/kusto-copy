@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.JobParameter;
+using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
@@ -14,15 +15,20 @@ namespace KustoCopyConsole.Orchestration
     {
         private readonly SourceClusterParameterization _sourceCluster;
         private readonly SourceDatabaseParameterization _sourceDb;
+        private readonly DbQueryClient _queryClient;
 
         public SourceDatabaseOrchestration(
             RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
             SourceClusterParameterization sourceCluster,
             SourceDatabaseParameterization sourceDb)
-            : base(rowItemGateway)
+            : base(rowItemGateway, dbClientFactory)
         {
             _sourceCluster = sourceCluster;
             _sourceDb = sourceDb;
+            _queryClient = DbClientFactory.GetDbQueryClient(
+                NormalizedUri.NormalizeUri(sourceCluster.SourceClusterUri),
+                _sourceDb.DatabaseName);
         }
 
         public override async Task ProcessAsync(IEnumerable<RowItem> allItems, CancellationToken ct)
@@ -47,7 +53,7 @@ namespace KustoCopyConsole.Orchestration
                 var cursorStart = completedItems.Any()
                     ? completedItems.LastOrDefault()!.CursorEnd
                     : string.Empty;
-                var cursorEnd = "Need to call Kusto!";
+                var cursorEnd = await _queryClient.GetCurrentCursor(ct);
                 var currentItem = new RowItem
                 {
                     RowType = RowType.SourceDatabase,
