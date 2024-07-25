@@ -25,18 +25,23 @@ namespace KustoCopyConsole.Kusto
 
         public async Task<string> GetCurrentCursor(CancellationToken ct)
         {
-            var query = "print cursor_current()";
-            var reader = await _provider.ExecuteQueryAsync(
-                _databaseName,
-                query,
-                EMPTY_PROPERTIES,
-                ct);
-            var cursor = reader.ToDataSet().Tables[0].Rows
-                .Cast<DataRow>()
-                .Select(r => (string)r[0])
-                .FirstOrDefault();
+            return await _queue.RequestRunAsync(
+                KustoDbPriority.HighestPriority,
+                async () =>
+                {
+                    var query = "print cursor_current()";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var cursor = reader.ToDataSet().Tables[0].Rows
+                        .Cast<DataRow>()
+                        .Select(r => (string)r[0])
+                        .FirstOrDefault();
 
-            return cursor!;
+                    return cursor!;
+                });
         }
     }
 }
