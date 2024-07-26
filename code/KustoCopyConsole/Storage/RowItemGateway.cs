@@ -22,6 +22,8 @@ namespace KustoCopyConsole.Storage
         private readonly MemoryStream _bufferStream = new MemoryStream();
         private DateTime? _bufferStartTime;
 
+        public event EventHandler<RowItem>? RowAppended;
+
         public RowItemGateway(
             IAppendStorage appendStorage,
             Func<IEnumerable<RowItem>, IEnumerable<RowItem>> compactFunc)
