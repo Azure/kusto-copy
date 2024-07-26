@@ -105,6 +105,12 @@ namespace KustoCopyConsole.Entity
 
         [Index(13)]
         public long? BlockId { get; set; }
+
+        [Index(14)]
+        public DateTime? IngestionTimeStart { get; set; }
+
+        [Index(15)]
+        public long? IngestionTimeEnd { get; set; }
         #endregion
 
         public T ParseState<T>() where T : struct
