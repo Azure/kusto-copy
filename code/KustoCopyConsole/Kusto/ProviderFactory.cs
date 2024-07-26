@@ -10,7 +10,7 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class ProviderFactory
+    internal class ProviderFactory : IDisposable
     {
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
@@ -67,6 +67,18 @@ namespace KustoCopyConsole.Kusto
                 e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
         }
         #endregion
+
+        void IDisposable.Dispose()
+        {
+            var disposables = _commandProviderMap.Values.Cast<IDisposable>()
+                .Concat(_queryProviderMap.Values)
+                .Concat(_dmCommandProviderMap.Values);
+
+            foreach (var disposable in disposables)
+            {
+                disposable.Dispose();
+            }
+        }
 
         public ICslAdminProvider GetCommandProvider(Uri clusterUri)
         {

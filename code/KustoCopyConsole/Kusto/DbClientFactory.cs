@@ -15,7 +15,7 @@ using System.Runtime.InteropServices;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class DbClientFactory
+    internal class DbClientFactory : IDisposable
     {
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
@@ -106,6 +106,11 @@ namespace KustoCopyConsole.Kusto
             return (countMap["DataExport"], countMap["Queries"]);
         }
         #endregion
+
+        void IDisposable.Dispose()
+        {
+            ((IDisposable) _providerFactory).Dispose();
+        }
 
         public DbQueryClient GetDbQueryClient(Uri sourceUri, string database)
         {

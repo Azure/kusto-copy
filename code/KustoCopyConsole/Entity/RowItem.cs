@@ -66,17 +66,17 @@ namespace KustoCopyConsole.Entity
         public string FileVersion { get; set; } = string.Empty;
 
         [Index(1)]
-        public DateTime? Created { get; set; } = DateTime.Now;
-
-        [Index(2)]
-        public DateTime? Updated { get; set; } = DateTime.Now;
-
-        [Index(3)]
         [TypeConverter(typeof(RowTypeConverter))]
         public RowType RowType { get; set; } = RowType.Unspecified;
 
-        [Index(4)]
+        [Index(2)]
         public string State { get; set; } = string.Empty;
+
+        [Index(3)]
+        public DateTime? Created { get; set; } = DateTime.Now;
+
+        [Index(4)]
+        public DateTime? Updated { get; set; } = DateTime.Now;
 
         [Index(5)]
         public string SourceClusterUri { get; set; } = string.Empty;

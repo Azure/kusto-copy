@@ -157,18 +157,19 @@ namespace KustoCopyConsole
             };
             try
             {
-                var orchestration = await MainOrchestration.CreateAsync(
+                await using (var orchestration = await MainOrchestration.CreateAsync(
                     options,
-                    cancellationTokenSource.Token);
-
-                Trace.WriteLine("");
-                Trace.WriteLine("Parameterization:");
-                Trace.WriteLine("");
-                Trace.WriteLine(orchestration.Parameterization.ToYaml());
-                Trace.WriteLine("");
-                Trace.WriteLine("Processing...");
-                Trace.WriteLine("");
-                await orchestration.ProcessAsync(cancellationTokenSource.Token);
+                    cancellationTokenSource.Token))
+                {
+                    Trace.WriteLine("");
+                    Trace.WriteLine("Parameterization:");
+                    Trace.WriteLine("");
+                    Trace.WriteLine(orchestration.Parameterization.ToYaml());
+                    Trace.WriteLine("");
+                    Trace.WriteLine("Processing...");
+                    Trace.WriteLine("");
+                    await orchestration.ProcessAsync(cancellationTokenSource.Token);
+                }
             }
             finally
             {

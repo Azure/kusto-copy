@@ -15,10 +15,12 @@ namespace KustoCopyConsole.Storage
     internal class RowItemGateway : IAsyncDisposable
     {
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
+        private static readonly TimeSpan MAX_BUFFER_TIME = TimeSpan.FromSeconds(5);
 
         private readonly IAppendStorage _appendStorage;
         private readonly Func<IEnumerable<RowItem>, IEnumerable<RowItem>> _compactFunc;
-        private readonly MemoryStream _memoryStream = new MemoryStream();
+        private readonly MemoryStream _bufferStream = new MemoryStream();
+        private DateTime? _bufferStartTime;
 
         public RowItemGateway(
             IAppendStorage appendStorage,
@@ -30,7 +32,7 @@ namespace KustoCopyConsole.Storage
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await FlushAsync();
+            await FlushAsync(CancellationToken.None);
             await _appendStorage.DisposeAsync();
         }
 
@@ -39,24 +41,35 @@ namespace KustoCopyConsole.Storage
             return await CompactAsync(ct);
         }
 
-        public Task AppendAsync(RowItem item, CancellationToken ct)
+        public async Task AppendAsync(RowItem item, CancellationToken ct)
         {
-            item.Validate();
-            throw new NotImplementedException();
+            var bufferToWrite = AppendToBuffer(item);
+
+            if (bufferToWrite == null
+                && _bufferStartTime != null
+                && DateTime.Now - _bufferStartTime > MAX_BUFFER_TIME)
+            {
+                await FlushAsync(ct);
+                bufferToWrite = _bufferStream.ToArray();
+                _bufferStream.SetLength(0);
+                _bufferStartTime = null;
+            }
+            if (bufferToWrite != null)
+            {
+                await _appendStorage.AtomicAppendAsync(bufferToWrite, ct);
+            }
         }
 
-        public Task AppendAtomicallyAsync(IEnumerable<RowItem> items, CancellationToken ct)
+        public async Task FlushAsync(CancellationToken ct)
         {
-            //item.Validate();
+            var bufferToWrite = _bufferStream.ToArray();
 
-            throw new NotImplementedException();
+            _bufferStream.SetLength(0);
+            _bufferStartTime = null;
+            await _appendStorage.AtomicAppendAsync(bufferToWrite, ct);
         }
 
-        public async Task FlushAsync()
-        {
-            await Task.CompletedTask;
-        }
-
+        #region Compaction
         private async Task<IImmutableList<RowItem>> CompactAsync(CancellationToken ct)
         {
             var readBuffer = await _appendStorage.LoadAllAsync(ct);
@@ -103,14 +116,13 @@ namespace KustoCopyConsole.Storage
                     csv.WriteHeader<RowItem>();
                     csv.NextRecord();
                     csv.WriteRecords(items);
-                    csv.NextRecord();
                     csv.Flush();
                     writer.Flush();
 
                     var writeBuffer = tempMemoryStream.ToArray();
 
                     await _appendStorage.AtomicReplaceAsync(writeBuffer, ct);
-                 
+
                     return items;
                 }
             }
@@ -145,6 +157,59 @@ namespace KustoCopyConsole.Storage
 
                 return allNewItems.ToImmutableArray();
             }
+        }
+        #endregion
+
+        private byte[]? AppendToBuffer(RowItem item)
+        {
+            item.Validate();
+            lock (_bufferStream)
+            {
+                var lengthBefore = _bufferStream.Length;
+
+                using (var writer = new StreamWriter(_bufferStream, leaveOpen: true))
+                using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+                {
+                    csv.WriteRecord(item);
+                    csv.NextRecord();
+                    csv.Flush();
+                    writer.Flush();
+                }
+
+                var lengthAfter = _bufferStream.Length;
+
+                if (lengthAfter > _appendStorage.MaxBufferSize)
+                {   //  Buffer is too long:  write buffer before this item
+                    if (lengthBefore == 0)
+                    {
+                        throw new CopyException(
+                            $"Buffer to write to the log is too long:  {lengthAfter}",
+                            false);
+                    }
+                    _bufferStream.SetLength(lengthBefore);
+
+                    var allBuffer = _bufferStream.ToArray();
+                    var beforeBuffer = new byte[lengthBefore];
+                    var remainBuffer = new byte[lengthAfter - lengthBefore];
+
+                    Array.Copy(allBuffer, beforeBuffer, lengthBefore);
+                    Array.Copy(allBuffer, lengthBefore, remainBuffer, 0, remainBuffer.Length);
+                    _bufferStream.SetLength(0);
+                    _bufferStream.Write(
+                        allBuffer,
+                        (int)lengthBefore,
+                        (int)(lengthAfter - lengthBefore));
+                    _bufferStartTime = DateTime.Now;
+
+                    return beforeBuffer;
+                }
+                else if (_bufferStartTime == null)
+                {
+                    _bufferStartTime = DateTime.Now;
+                }
+            }
+
+            return null;
         }
     }
 }

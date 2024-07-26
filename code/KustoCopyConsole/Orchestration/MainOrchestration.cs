@@ -21,6 +21,7 @@ namespace KustoCopyConsole.Orchestration
             CancellationToken ct)
         {
             var parameterization = CreateParameterization(options);
+
             var appendStorage = CreateAppendStorage();
             var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
             var dbClientFactory = await DbClientFactory.CreateAsync(
@@ -137,6 +138,7 @@ namespace KustoCopyConsole.Orchestration
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             await ((IAsyncDisposable)_rowItemGateway).DisposeAsync();
+            ((IDisposable)_dbClientFactory).Dispose();
         }
 
         public MainJobParameterization Parameterization { get; }
