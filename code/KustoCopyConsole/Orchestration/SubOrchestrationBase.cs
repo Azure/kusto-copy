@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System;
@@ -13,16 +14,20 @@ namespace KustoCopyConsole.Orchestration
     {
         protected SubOrchestrationBase(
             RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory)
+            DbClientFactory dbClientFactory,
+            MainJobParameterization parameterization)
         {
             RowItemGateway = rowItemGateway;
             DbClientFactory = dbClientFactory;
+            Parameterization = parameterization;
         }
 
         protected RowItemGateway RowItemGateway { get; }
         
         protected DbClientFactory DbClientFactory { get; }
 
-        public abstract Task ProcessAsync(IEnumerable<RowItem> allItems, CancellationToken ct);
+        protected MainJobParameterization Parameterization { get; }
+
+        public abstract Task ProcessAsync(CancellationToken ct);
     }
 }

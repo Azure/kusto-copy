@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
@@ -11,36 +12,39 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Orchestration
 {
+    /// <summary>
+    /// This orchestration is responsible to start iteration and complete them.
+    /// </summary>
     internal class SourceDatabaseOrchestration : SubOrchestrationBase
     {
-        private readonly SourceClusterParameterization _sourceCluster;
-        private readonly SourceDatabaseParameterization _sourceDb;
-        private readonly DbQueryClient _queryClient;
-
         public SourceDatabaseOrchestration(
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
-            SourceClusterParameterization sourceCluster,
-            SourceDatabaseParameterization sourceDb)
-            : base(rowItemGateway, dbClientFactory)
+            MainJobParameterization parameterization)
+            : base(rowItemGateway, dbClientFactory, parameterization)
         {
-            _sourceCluster = sourceCluster;
-            _sourceDb = sourceDb;
-            _queryClient = DbClientFactory.GetDbQueryClient(
-                NormalizedUri.NormalizeUri(sourceCluster.SourceClusterUri),
-                _sourceDb.DatabaseName);
         }
 
-        public override async Task ProcessAsync(IEnumerable<RowItem> allItems, CancellationToken ct)
+        public override async Task ProcessAsync(CancellationToken ct)
         {
-            var completedItems = allItems
-                .Where(i => i.RowType == RowType.SourceDatabase)
+            var completedItems = RowItemGateway.InMemoryCache.SoureDatabaseMap.Values
+                .Select(c => c.RowItem)
                 .Where(i => i.ParseState<SourceDatabaseState>() == SourceDatabaseState.Completed)
                 .ToImmutableArray();
-            var activeItems = allItems
-                .Where(i => i.RowType == RowType.SourceDatabase)
+            var activeItems = RowItemGateway.InMemoryCache.SoureDatabaseMap.Values
+                .Select(c => c.RowItem)
                 .Where(i => i.ParseState<SourceDatabaseState>() != SourceDatabaseState.Completed)
                 .ToImmutableArray();
+            var allSourceDatabases = Parameterization.SourceClusters
+                .Select(c => c.Databases.Select(db => new
+                {
+                    ClusterUri = NormalizedUri.NormalizeUri(c.SourceClusterUri),
+                    db.DatabaseName,
+                    ClusterParameters = c,
+                    DatabaseParameters = db
+                }))
+                .SelectMany(a => a)
+                .ToImmutableDictionary(o => (o.ClusterUri, o.DatabaseName));
 
             if (_sourceCluster.ExportMode == ExportMode.BackFillOnly && completedItems.Any())
             {   //  We're done

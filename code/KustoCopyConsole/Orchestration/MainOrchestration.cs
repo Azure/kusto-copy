@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Orchestration
             var parameterization = CreateParameterization(options);
 
             var appendStorage = CreateAppendStorage();
-            var rowItemGateway = new RowItemGateway(appendStorage, CompactItems);
+            var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 CreateCredentials(options.Authentication),
@@ -145,28 +145,16 @@ namespace KustoCopyConsole.Orchestration
 
         internal async Task ProcessAsync(CancellationToken ct)
         {
-            var allItems = await _rowItemGateway.MigrateToLatestVersionAsync(ct);
-            var sourceDbs = Parameterization.SourceClusters
-                .Select(sc => sc.Databases.Select(db => new SourceDatabaseOrchestration(
-                    _rowItemGateway,
-                    _dbClientFactory,
-                    sc,
-                    db)))
-                .SelectMany(e => e)
-                .ToImmutableArray();
-            var dbTasks = sourceDbs
-                .Select(d => d.ProcessAsync(allItems, ct))
+            var sourceDatabase = new SourceDatabaseOrchestration(
+                _rowItemGateway,
+                _dbClientFactory,
+                Parameterization);
+            var dbTasks = new[] { sourceDatabase }
+                .Select(d => d.ProcessAsync(ct))
                 .ToImmutableArray();
 
-            //  Allow GC
-            allItems = null;
             //  Let every database orchestration complete
             await Task.WhenAll(dbTasks);
-        }
-
-        private static IEnumerable<RowItem> CompactItems(IEnumerable<RowItem> items)
-        {
-            return items;
         }
     }
 }

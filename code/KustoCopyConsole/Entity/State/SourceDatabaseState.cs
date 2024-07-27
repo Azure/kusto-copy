@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Entity
+﻿namespace KustoCopyConsole.Entity.State
 {
     public enum SourceDatabaseState
     {
