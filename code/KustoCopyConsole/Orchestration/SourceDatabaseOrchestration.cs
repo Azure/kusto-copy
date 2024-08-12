@@ -46,35 +46,36 @@ namespace KustoCopyConsole.Orchestration
                 .SelectMany(a => a)
                 .ToImmutableDictionary(o => (o.ClusterUri, o.DatabaseName));
 
-            if (_sourceCluster.ExportMode == ExportMode.BackFillOnly && completedItems.Any())
-            {   //  We're done
-            }
-            //  Allow GC
-            //completedItems = completedItems.Clear();
+            await Task.CompletedTask;
+            //if (_sourceCluster.ExportMode == ExportMode.BackFillOnly && completedItems.Any())
+            //{   //  We're done
+            //}
+            ////  Allow GC
+            ////completedItems = completedItems.Clear();
 
-            if (!activeItems.Any())
-            {
-                var cursorStart = completedItems.Any()
-                    ? completedItems.LastOrDefault()!.CursorEnd
-                    : string.Empty;
-                var cursorEnd = await _queryClient.GetCurrentCursor(ct);
-                var currentItem = new RowItem
-                {
-                    RowType = RowType.SourceDatabase,
-                    State = SourceDatabaseState.Discovering.ToString(),
-                    SourceClusterUri = _sourceCluster.SourceClusterUri,
-                    SourceDatabaseName = _sourceDb.DatabaseName,
-                    IterationId = completedItems.Count(),
-                    CursorStart = cursorStart,
-                    CursorEnd = cursorEnd
-                };
+            //if (!activeItems.Any())
+            //{
+            //    var cursorStart = completedItems.Any()
+            //        ? completedItems.LastOrDefault()!.CursorEnd
+            //        : string.Empty;
+            //    var cursorEnd = await _queryClient.GetCurrentCursor(ct);
+            //    var currentItem = new RowItem
+            //    {
+            //        RowType = RowType.SourceDatabase,
+            //        State = SourceDatabaseState.Discovering.ToString(),
+            //        SourceClusterUri = _sourceCluster.SourceClusterUri,
+            //        SourceDatabaseName = _sourceDb.DatabaseName,
+            //        IterationId = completedItems.Count(),
+            //        CursorStart = cursorStart,
+            //        CursorEnd = cursorEnd
+            //    };
 
-                await RowItemGateway.AppendAsync(currentItem, ct);
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            //    await RowItemGateway.AppendAsync(currentItem, ct);
+            //}
+            //else
+            //{
+            //    throw new NotImplementedException();
+            //}
         }
     }
 }
