@@ -1,7 +1,9 @@
 ﻿using CsvHelper;
+using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -15,12 +17,23 @@ namespace KustoCopyConsole.Storage
 {
     internal class RowItemGateway : IAsyncDisposable
     {
+        #region Inner Types
+        private record QueueItem(byte[] Buffer, TaskCompletionSource TaskSource);
+        #endregion
+
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
-        private static readonly TimeSpan MAX_BUFFER_TIME = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan FLUSH_TIME = TimeSpan.FromSeconds(5);
 
         private readonly IAppendStorage _appendStorage;
-        private readonly MemoryStream _bufferStream = new MemoryStream();
-        private DateTime? _bufferStartTime;
+        private readonly BackgroundTaskContainer _backgroundTaskContainer = new();
+        private readonly ConcurrentQueue<QueueItem> _bufferToWriteQueue = new();
+        //  The lock object is used to lock access to the stream and switch around the task source
+        private readonly object _lock = new object();
+        private readonly MemoryStream _bufferStream = new();
+        //  The async lock object is used to lock access to the storage and queued items
+        //  in order to serialize access
+        private readonly AsyncLock _asyncLock = new();
+        private TaskCompletionSource _persistanceTaskSource = new();
 
         #region Construction
         private RowItemGateway(IAppendStorage appendStorage, RowItemInMemoryCache cache)
@@ -113,89 +126,123 @@ namespace KustoCopyConsole.Storage
             await _appendStorage.DisposeAsync();
         }
 
-        public async Task AppendAsync(RowItem item, CancellationToken ct)
+        public async Task<RowItemAppend> AppendAsync(RowItem item, CancellationToken ct)
         {
-            var bufferToWrite = AppendToBuffer(item);
+            var binaryItem = GetBytes(item);
 
-            if (bufferToWrite == null
-                && _bufferStartTime != null
-                && DateTime.Now - _bufferStartTime > MAX_BUFFER_TIME)
+            try
             {
-                await FlushAsync(ct);
-                bufferToWrite = _bufferStream.ToArray();
-                _bufferStream.SetLength(0);
-                _bufferStartTime = null;
-            }
-            if (bufferToWrite != null)
-            {
-                var success = await _appendStorage.AtomicAppendAsync(bufferToWrite, ct);
-
-                if (!success)
+                lock (_lock)
                 {
-                    throw new NotImplementedException("Must compact");
+                    var package = new RowItemAppend(item, _persistanceTaskSource.Task);
+
+                    if (_bufferStream.Length == 0)
+                    {
+                        _backgroundTaskContainer.AddTask(
+                            AutoPersistAsync(_persistanceTaskSource, ct));
+                    }
+                    if (_bufferStream.Length + binaryItem.Length <= _appendStorage.MaxBufferSize)
+                    {
+                        _bufferStream.Write(binaryItem);
+                    }
+                    else
+                    {
+                        QueueCurrentStream();
+                    }
+
+                    return package;
                 }
+            }
+            finally
+            {
+                await WriteQueueAsync(ct);
+                await _backgroundTaskContainer.ObserveCompletedTasksAsync();
             }
         }
 
         public async Task FlushAsync(CancellationToken ct)
         {
-            var bufferToWrite = _bufferStream.ToArray();
-
-            _bufferStream.SetLength(0);
-            _bufferStartTime = null;
-            await _appendStorage.AtomicAppendAsync(bufferToWrite, ct);
+            QueueCurrentStream();
+            await WriteQueueAsync(ct);
+            await _backgroundTaskContainer.ObserveCompletedTasksAsync();
         }
 
-        private byte[]? AppendToBuffer(RowItem item)
+        private static byte[] GetBytes(RowItem item)
         {
-            item.Validate();
-            lock (_bufferStream)
+            using (var stream = new MemoryStream())
+            using (var writer = new StreamWriter(stream))
+            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                var lengthBefore = _bufferStream.Length;
+                csv.WriteRecord(item);
+                csv.NextRecord();
+                csv.Flush();
+                writer.Flush();
 
-                using (var writer = new StreamWriter(_bufferStream, leaveOpen: true))
-                using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+                return stream.ToArray();
+            }
+        }
+
+        private async Task WriteQueueAsync(CancellationToken ct)
+        {
+            using (var disposableLock = _asyncLock.TryGetLock())
+            {
+                if (disposableLock != null)
                 {
-                    csv.WriteRecord(item);
-                    csv.NextRecord();
-                    csv.Flush();
-                    writer.Flush();
-                }
-
-                var lengthAfter = _bufferStream.Length;
-
-                if (lengthAfter > _appendStorage.MaxBufferSize)
-                {   //  Buffer is too long:  write buffer before this item
-                    if (lengthBefore == 0)
+                    while (_bufferToWriteQueue.TryDequeue(out var queueItem))
                     {
-                        throw new CopyException(
-                            $"Buffer to write to the log is too long:  {lengthAfter}",
-                            false);
+                        var success = await _appendStorage.AtomicAppendAsync(queueItem.Buffer, ct);
+
+                        if (!success)
+                        {
+                            throw new NotImplementedException("Must compact");
+                        }
+                        else
+                        {
+                            queueItem.TaskSource.SetResult();
+                        }
                     }
-                    _bufferStream.SetLength(lengthBefore);
-
-                    var allBuffer = _bufferStream.ToArray();
-                    var beforeBuffer = new byte[lengthBefore];
-                    var remainBuffer = new byte[lengthAfter - lengthBefore];
-
-                    Array.Copy(allBuffer, beforeBuffer, lengthBefore);
-                    Array.Copy(allBuffer, lengthBefore, remainBuffer, 0, remainBuffer.Length);
-                    _bufferStream.SetLength(0);
-                    _bufferStream.Write(
-                        allBuffer,
-                        (int)lengthBefore,
-                        (int)(lengthAfter - lengthBefore));
-                    _bufferStartTime = DateTime.Now;
-
-                    return beforeBuffer;
-                }
-                else if (_bufferStartTime == null)
-                {
-                    _bufferStartTime = DateTime.Now;
                 }
             }
+            //  Combat racing condition
+            if(_bufferToWriteQueue.Any())
+            {
+                await WriteQueueAsync(ct);
+            }
+        }
 
-            return null;
+        private async Task AutoPersistAsync(
+            TaskCompletionSource persistanceTaskSource,
+            CancellationToken ct)
+        {   //  First wait for the flush time
+            await Task.Delay(FLUSH_TIME);
+
+            lock (_lock)
+            {
+                if (object.ReferenceEquals(persistanceTaskSource, _persistanceTaskSource))
+                {
+                    QueueCurrentStream();
+                }
+                else
+                {
+                    return;
+                }
+            }
+            await WriteQueueAsync(ct);
+        }
+
+        private void QueueCurrentStream()
+        {
+            lock (_lock)
+            {
+                if (_bufferStream.Length > 0)
+                {
+                    _bufferToWriteQueue.Enqueue(new QueueItem(
+                        _bufferStream.ToArray(),
+                        _persistanceTaskSource));
+                    _persistanceTaskSource = new();
+                    _bufferStream.SetLength(0);
+                }
+            }
         }
     }
 }
