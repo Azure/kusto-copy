@@ -107,24 +107,25 @@ namespace KustoCopyConsole.Orchestration
 
                 return new MainJobParameterization
                 {
-                    SourceClusters = ImmutableList.Create(
-                        new SourceClusterParameterization
+                    Activities = ImmutableList.Create(
+                        new ActivityParameterization
                         {
-                            IsContinuousRun = options.IsContinuousRun,
-                            SourceClusterUri = sourceBuilder.ToString(),
-                            Databases = ImmutableList.Create(new SourceDatabaseParameterization
+                            Source = new TableParameterization
                             {
+                                ClusterUri = sourceBuilder.ToString(),
                                 DatabaseName = sourceDb,
-                                Tables = ImmutableList.Create(new SourceTableParameterization
-                                {
-                                    TableName = sourceTable
-                                }),
-                                Destinations = ImmutableList.Create(new DestinationParameterization
-                                {
-                                    DestinationClusterUri = destinationBuilder.ToString(),
-                                    DatabaseName = destinationDb
-                                })
-                            })
+                                TableName = sourceTable
+                            },
+                            Destinations = ImmutableList.Create(new TableParameterization
+                            {
+                                ClusterUri = destinationBuilder.ToString(),
+                                DatabaseName = destinationDb
+                            }),
+                            Query = options.Query,
+                            TableOption = new TableOption
+                            {
+                                IsContinuousRun = options.IsContinuousRun
+                            }
                         })
                 };
             }

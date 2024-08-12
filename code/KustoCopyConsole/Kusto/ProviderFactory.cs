@@ -19,8 +19,8 @@ namespace KustoCopyConsole.Kusto
         #region Constructor
         public ProviderFactory(MainJobParameterization parameterization, TokenCredential credentials)
         {
-            var sourceClusterUris = parameterization.SourceClusters
-                .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
+            var sourceClusterUris = parameterization.Activities
+                .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
                 .Distinct();
             var sourceBuilders = sourceClusterUris
                 .Select(uri => new
@@ -29,11 +29,9 @@ namespace KustoCopyConsole.Kusto
                     Builder = new KustoConnectionStringBuilder(uri.ToString())
                     .WithAadAzureTokenCredentialsAuthentication(credentials)
                 });
-            var destinationClusterUris = parameterization.SourceClusters
-                .Select(s => s.Databases.Select(db => db.Destinations.Select(d => d.DestinationClusterUri)))
-                .SelectMany(e => e)
-                .SelectMany(e => e)
-                .Select(s => NormalizedUri.NormalizeUri(s))
+            var destinationClusterUris = parameterization.Activities
+                .SelectMany(a => a.Destinations)
+                .Select(d => NormalizedUri.NormalizeUri(d.ClusterUri))
                 .Distinct();
             var destinationIngestionBuilders = destinationClusterUris
                 .Select(uri => new

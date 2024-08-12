@@ -40,6 +40,9 @@ namespace KustoCopyConsole
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool IsContinuousRun { get; set; } = false;
 
+        [Option('q', "query", Required = false, HelpText = "Set query.")]
+        public string Query { get; set; } = string.Empty;
+
         [Option("job-name", Required = false, HelpText = "Set job name.")]
         public string JobName { get; set; } = "default";
 

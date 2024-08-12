@@ -28,12 +28,21 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             var providerFactory = new ProviderFactory(parameterization, credentials);
-            var sourceClusters = parameterization.SourceClusters
-                .Select(s => new
+            var clusterOptionMap = parameterization.ClusterOptions
+                .ToImmutableDictionary(o => NormalizedUri.NormalizeUri(o.ClusterUri));
+            var sourceClusters = parameterization.Activities
+                .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
+                .Distinct()
+                .Select(uri => new
                 {
-                    Uri = NormalizedUri.NormalizeUri(s.SourceClusterUri),
-                    s.ConcurrentExportCommandCount,
-                    s.ConcurrentQueryCount
+                    Uri = uri,
+                    Option = clusterOptionMap.ContainsKey(uri) ? clusterOptionMap[uri] : null
+                })
+                .Select(o => new
+                {
+                    o.Uri,
+                    ConcurrentExportCommandCount = o.Option?.ConcurrentExportCommandCount ?? 0,
+                    ConcurrentQueryCount = o.Option?.ConcurrentQueryCount ?? 0
                 });
             var countTasks = sourceClusters
                 .Select(s => new
@@ -109,7 +118,7 @@ namespace KustoCopyConsole.Kusto
 
         void IDisposable.Dispose()
         {
-            ((IDisposable) _providerFactory).Dispose();
+            ((IDisposable)_providerFactory).Dispose();
         }
 
         public DbQueryClient GetDbQueryClient(Uri sourceUri, string database)

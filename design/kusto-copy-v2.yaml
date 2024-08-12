@@ -2,19 +2,23 @@
 # * Data lake accounts
 # * Authentication
 
-sourceClusters:
-- sourceClusterUri: https://inttestsyenycav4i2vma.eastus.kusto.windows.net
-  continuousRun:  false    #   If true, it goes on, if false, it stops after one iteration completes
-  exportMode:  "backfillOnly"    #   One of the following values:  backfillOnly, newOnly, backFillAndNew
-  iterationWait:  00:05:00  # Time to wait between two iterations
+clusterOptions:
+- clusterUri: https://inttestsyenycav4i2vma.eastus.kusto.windows.net
   concurrentQueryCount:  5    #   Number of queries / commands sent in parallel to a given cluster (Default is %10 of query slots)
   concurrentExportCommandCount:  20    #   Number of export commands sent in parallel to a given cluster (Default will max export slots)
-  databases:
-  - databaseName:  github
-    tables:
-    - tableName:  Table1
-      extentTimeRange:  24:00:00  # The max range of extent creation time to be merge together
-      query:  "| project ColA, ColB"
-    destinations:
-      - destinationClusterUri:  https://inttestsyenycav4i2vma.eastus.kusto.windows.net
-        databaseName:  github
+activities:
+- source:
+    clusterUri: https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+    databaseName:  github
+    tableName:  Table1
+  destinations:
+  - clusterUri: https://inttestsyenycav4i2vma.eastus.kusto.windows.net
+    databaseName:  github # Optional, if not provided take same value as source
+    tableName:  Table1  # Optional, if not provided take same value as source
+  query:  "| project ColA, ColB"
+  tableOption:
+    isContinuousRun:  false    #   If true, it goes on, if false, it stops after one iteration completes
+    extentTimeRange:  24:00:00  # The max range of extent creation time to be merge together
+    exportMode:  "backfillOnly"    #   One of the following values:  backfillOnly, newOnly, backFillAndNew
+    iterationWait:  00:05:00  # Time to wait between two iterations
+  

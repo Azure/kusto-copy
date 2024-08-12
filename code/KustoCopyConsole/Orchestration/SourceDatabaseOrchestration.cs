@@ -35,16 +35,16 @@ namespace KustoCopyConsole.Orchestration
                 .Select(c => c.RowItem)
                 .Where(i => i.ParseState<SourceDatabaseState>() != SourceDatabaseState.Completed)
                 .ToImmutableArray();
-            var allSourceDatabases = Parameterization.SourceClusters
-                .Select(c => c.Databases.Select(db => new
-                {
-                    ClusterUri = NormalizedUri.NormalizeUri(c.SourceClusterUri),
-                    db.DatabaseName,
-                    ClusterParameters = c,
-                    DatabaseParameters = db
-                }))
-                .SelectMany(a => a)
-                .ToImmutableDictionary(o => (o.ClusterUri, o.DatabaseName));
+            //var allSourceDatabases = Parameterization.SourceClusters
+            //    .Select(c => c.Databases.Select(db => new
+            //    {
+            //        ClusterUri = NormalizedUri.NormalizeUri(c.SourceClusterUri),
+            //        db.DatabaseName,
+            //        ClusterParameters = c,
+            //        DatabaseParameters = db
+            //    }))
+            //    .SelectMany(a => a)
+            //    .ToImmutableDictionary(o => (o.ClusterUri, o.DatabaseName));
 
             await Task.CompletedTask;
             //if (_sourceCluster.ExportMode == ExportMode.BackFillOnly && completedItems.Any())

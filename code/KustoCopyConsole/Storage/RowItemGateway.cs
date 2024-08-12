@@ -11,7 +11,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static Kusto.Cloud.Platform.Utils.CachedBufferEncoder;
 
 namespace KustoCopyConsole.Storage
 {

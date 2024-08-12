@@ -10,27 +10,21 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        public IImmutableList<SourceClusterParameterization> SourceClusters { get; set; } =
-            ImmutableArray<SourceClusterParameterization>.Empty;
+        public IImmutableList<ActivityParameterization> Activities { get; set; } =
+            ImmutableArray<ActivityParameterization>.Empty;
+
+        public IImmutableList<ClusterOption> ClusterOptions { get; set; } =
+            ImmutableArray<ClusterOption>.Empty;
 
         internal void Validate()
         {
-            var sourceUriDuplicate = SourceClusters
-                .Select(s => NormalizedUri.NormalizeUri(s.SourceClusterUri))
-                .GroupBy(s => s)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .FirstOrDefault();
-
-            if (sourceUriDuplicate!=null)
+            foreach (var a in Activities)
             {
-                throw new CopyException(
-                    $"Cluster URI '{sourceUriDuplicate}' appears twice in the parameterization",
-                    false);
+                a.Validate();
             }
-            foreach (var s in SourceClusters)
+            foreach (var c in ClusterOptions)
             {
-                s.Validate();
+                c.Validate();
             }
         }
 
