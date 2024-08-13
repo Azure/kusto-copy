@@ -146,7 +146,7 @@ namespace KustoCopyConsole.Orchestration
 
         internal async Task ProcessAsync(CancellationToken ct)
         {
-            var sourceDatabase = new SourceDatabaseOrchestration(
+            var sourceDatabase = new SourceTableIterationOrchestration(
                 _rowItemGateway,
                 _dbClientFactory,
                 Parameterization);

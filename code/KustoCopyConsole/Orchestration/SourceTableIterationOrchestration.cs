@@ -16,9 +16,9 @@ namespace KustoCopyConsole.Orchestration
     /// <summary>
     /// This orchestration is responsible to start iteration and complete them.
     /// </summary>
-    internal class SourceDatabaseOrchestration : SubOrchestrationBase
+    internal class SourceTableIterationOrchestration : SubOrchestrationBase
     {
-        public SourceDatabaseOrchestration(
+        public SourceTableIterationOrchestration(
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
             MainJobParameterization parameterization)
