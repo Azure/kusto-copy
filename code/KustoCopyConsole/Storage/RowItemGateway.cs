@@ -34,6 +34,8 @@ namespace KustoCopyConsole.Storage
         private readonly AsyncLock _asyncLock = new();
         private TaskCompletionSource _persistanceTaskSource = new();
 
+        public event EventHandler<RowItemAppend>? RowItemAppended;
+
         #region Construction
         private RowItemGateway(IAppendStorage appendStorage, RowItemInMemoryCache cache)
         {
@@ -147,6 +149,10 @@ namespace KustoCopyConsole.Storage
                     else
                     {
                         QueueCurrentStream();
+                    }
+                    if (RowItemAppended != null)
+                    {
+                        RowItemAppended(this, package);
                     }
 
                     return package;

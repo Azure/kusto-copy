@@ -13,8 +13,6 @@ namespace KustoCopyConsole.Entity.InMemory
         private volatile IImmutableDictionary<(Uri, string), SourceDatabaseCache> _sourceDatabaseMap
             = ImmutableDictionary<(Uri, string), SourceDatabaseCache>.Empty;
 
-        public event EventHandler<RowItem>? NewRowItem;
-
         public RowItemInMemoryCache(IEnumerable<RowItem> items)
         {
             lock (_lock)
@@ -44,10 +42,6 @@ namespace KustoCopyConsole.Entity.InMemory
                         ref _sourceDatabaseMap,
                         AddItemToCache(item));
                 }
-            }
-            if (NewRowItem != null)
-            {
-                NewRowItem(this, item);
             }
         }
 
