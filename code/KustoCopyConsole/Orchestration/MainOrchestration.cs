@@ -150,12 +150,12 @@ namespace KustoCopyConsole.Orchestration
                 _rowItemGateway,
                 _dbClientFactory,
                 Parameterization);
-            var dbTasks = new[] { sourceDatabase }
+            var orchestrationTasks = new[] { sourceDatabase }
                 .Select(d => d.ProcessAsync(ct))
                 .ToImmutableArray();
 
             //  Let every database orchestration complete
-            await Task.WhenAll(dbTasks);
+            await Task.WhenAll(orchestrationTasks);
         }
     }
 }
