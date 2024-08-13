@@ -70,7 +70,6 @@ namespace KustoCopyConsole.Storage
                 RowType = RowType.FileVersion,
             };
 
-            allItems = allItems.Prepend(newVersionItem);
             foreach (var item in allItems)
             {
                 item.Validate();
@@ -84,18 +83,14 @@ namespace KustoCopyConsole.Storage
             {
                 csv.WriteHeader<RowItem>();
                 csv.NextRecord();
-                csv.WriteRecords(cache.GetItems());
+                csv.WriteRecords(cache.GetItems().Prepend(newVersionItem));
                 csv.NextRecord();
                 csv.Flush();
                 writer.Flush();
 
                 var writeBuffer = tempMemoryStream.ToArray();
-                var isValidWrite = await appendStorage.AtomicAppendAsync(writeBuffer, ct);
-
-                if (!isValidWrite)
-                {
-                    throw new CopyException("Initial log write fails", false);
-                }
+                
+                await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
 
                 return new RowItemGateway(appendStorage, cache);
             }
@@ -106,12 +101,7 @@ namespace KustoCopyConsole.Storage
             using (var bufferStream = new MemoryStream(readBuffer))
             using (var reader = new StreamReader(bufferStream))
             using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-            {   //  Skip header line
-                if (!csv.Read())
-                {
-                    throw new CopyException("Can't read log header", false);
-                }
-
+            {
                 var allItems = csv.GetRecords<RowItem>()
                     .ToImmutableArray();
 
