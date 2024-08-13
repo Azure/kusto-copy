@@ -85,32 +85,35 @@ namespace KustoCopyConsole.Entity
         public string SourceDatabaseName { get; set; } = string.Empty;
 
         [Index(7)]
-        public string DestinationClusterUri { get; set; } = string.Empty;
+        public string SourceTableName { get; set; } = string.Empty;
 
         [Index(8)]
-        public string DestinationDatabaseName { get; set; } = string.Empty;
+        public string DestinationClusterUri { get; set; } = string.Empty;
 
         [Index(9)]
-        public string TableName { get; set; } = string.Empty;
+        public string DestinationDatabaseName { get; set; } = string.Empty;
+
+        [Index(10)]
+        public string DestinationTableName { get; set; } = string.Empty;
 
         /// <summary>Zero-based index with zero being the backfill.</summary>>
-        [Index(10)]
-        public long? IterationId { get; set; }
-
         [Index(11)]
-        public string CursorStart { get; set; } = string.Empty;
+        public long IterationId { get; set; }
 
         [Index(12)]
-        public string CursorEnd { get; set; } = string.Empty;
+        public string CursorStart { get; set; } = string.Empty;
 
         [Index(13)]
-        public long? BlockId { get; set; }
+        public string CursorEnd { get; set; } = string.Empty;
 
         [Index(14)]
-        public DateTime? IngestionTimeStart { get; set; }
+        public long? BlockId { get; set; }
 
         [Index(15)]
-        public long? IngestionTimeEnd { get; set; }
+        public DateTime? IngestionTimeStart { get; set; }
+
+        [Index(16)]
+        public DateTime? IngestionTimeEnd { get; set; }
         #endregion
 
         public T ParseState<T>() where T : struct

@@ -25,7 +25,7 @@ namespace KustoCopyConsole
         public string Destination { get; set; } = string.Empty;
 
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
-        public string Authentication { get; set; } = "AzCli";
+        public string Authentication { get; set; } = string.Empty;
 
         [Option(
             'l',

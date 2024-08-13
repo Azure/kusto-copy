@@ -10,8 +10,8 @@ namespace KustoCopyConsole.Entity.InMemory
     internal class RowItemInMemoryCache
     {
         private readonly object _lock = new object();
-        private volatile IImmutableDictionary<(Uri, string), SourceDatabaseCache> _sourceDatabaseMap
-            = ImmutableDictionary<(Uri, string), SourceDatabaseCache>.Empty;
+        private volatile IImmutableDictionary<TableIdentity, SourceTableCache> _sourceTableMap =
+            ImmutableDictionary<TableIdentity, SourceTableCache>.Empty;
 
         public RowItemInMemoryCache(IEnumerable<RowItem> items)
         {
@@ -19,54 +19,68 @@ namespace KustoCopyConsole.Entity.InMemory
             {
                 foreach (var item in items)
                 {
-                    AddItem(item);
+                    AppendItem(item);
                 }
             }
         }
 
-        public IImmutableDictionary<(Uri, string), SourceDatabaseCache> SoureDatabaseMap
-            => _sourceDatabaseMap;
+        public IImmutableDictionary<TableIdentity, SourceTableCache> SourceTableMap
+            => _sourceTableMap;
 
         public IEnumerable<RowItem> GetItems()
         {
-            throw new NotImplementedException();
+            foreach (var sourceTable in SourceTableMap.Values)
+            {
+                foreach (var sourceTableIteration in sourceTable.IterationMap.Values)
+                {
+                    yield return sourceTableIteration.RowItem;
+                }
+            }
         }
 
-        public void AddItem(RowItem item)
+        public void AppendItem(RowItem item)
         {
             lock (_lock)
             {
                 if (item.RowType != RowType.FileVersion && item.RowType != RowType.Unspecified)
                 {
                     Interlocked.Exchange(
-                        ref _sourceDatabaseMap,
-                        AddItemToCache(item));
+                        ref _sourceTableMap,
+                        AppendItemToCache(item));
                 }
             }
         }
 
-        private IImmutableDictionary<(Uri, string), SourceDatabaseCache> AddItemToCache(RowItem item)
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendItemToCache(
+            RowItem item)
         {
             switch (item.RowType)
             {
-                case RowType.SourceDatabase:
-                    return AddSourceDatabase(item);
+                case RowType.SourceTable:
+                    return AppendSourceTable(item);
                 default:
                     throw new NotSupportedException($"Not supported row type:  {item.RowType}");
             }
         }
 
-        private IImmutableDictionary<(Uri, string), SourceDatabaseCache> AddSourceDatabase(RowItem item)
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceTable(
+            RowItem item)
         {
-            var key = (NormalizedUri.NormalizeUri(item.SourceClusterUri), item.SourceDatabaseName);
+                //item.IterationId!.Value
+            var tableId = new TableIdentity(
+                NormalizedUri.NormalizeUri(item.SourceClusterUri),
+                item.SourceDatabaseName,
+                item.SourceTableName);
 
-            if (_sourceDatabaseMap.ContainsKey(key))
+            if (_sourceTableMap.ContainsKey(tableId))
             {
-                return _sourceDatabaseMap.SetItem(key, new SourceDatabaseCache(item));
+                return _sourceTableMap.SetItem(
+                    tableId,
+                    _sourceTableMap[tableId].AppendIteration(item));
             }
             else
             {
-                return _sourceDatabaseMap.Add(key, new SourceDatabaseCache(item));
+                return _sourceTableMap.Add(tableId, new SourceTableCache(item));
             }
         }
     }

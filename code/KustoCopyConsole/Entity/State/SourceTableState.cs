@@ -2,7 +2,6 @@
 {
     public enum SourceTableState
     {
-        Discovered,
         Planning,
         Exporting,
         Completed

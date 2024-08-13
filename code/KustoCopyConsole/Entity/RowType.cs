@@ -4,6 +4,6 @@
     {
         Unspecified,
         FileVersion,
-        SourceDatabase
+        SourceTable
     }
 }

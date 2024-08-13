@@ -112,7 +112,8 @@ namespace KustoCopyConsole.Storage
                     throw new CopyException("Can't read log header", false);
                 }
 
-                var allItems = csv.GetRecords<RowItem>();
+                var allItems = csv.GetRecords<RowItem>()
+                    .ToImmutableArray();
 
                 return allItems;
             }
@@ -150,10 +151,7 @@ namespace KustoCopyConsole.Storage
                     {
                         QueueCurrentStream();
                     }
-                    if (RowItemAppended != null)
-                    {
-                        RowItemAppended(this, package);
-                    }
+                    OnRowItemAppended(package);
 
                     return package;
                 }
@@ -247,6 +245,15 @@ namespace KustoCopyConsole.Storage
                     _persistanceTaskSource = new();
                     _bufferStream.SetLength(0);
                 }
+            }
+        }
+
+        private void OnRowItemAppended(RowItemAppend package)
+        {
+            InMemoryCache.AppendItem(package.Item);
+            if (RowItemAppended != null)
+            {
+                RowItemAppended(this, package);
             }
         }
     }

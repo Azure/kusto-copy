@@ -44,9 +44,9 @@ namespace KustoCopyConsole.Orchestration
 
         private static TokenCredential CreateCredentials(string authentication)
         {
-            if (string.Compare(authentication.Trim(), "AzCli", true) == 0)
+            if (string.IsNullOrWhiteSpace(authentication))
             {
-                return new AzureCliCredential();
+                return new DefaultAzureCredential();
             }
             else
             {

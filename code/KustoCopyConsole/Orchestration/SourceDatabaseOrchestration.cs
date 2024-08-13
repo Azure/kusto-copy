@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -27,55 +28,61 @@ namespace KustoCopyConsole.Orchestration
 
         public override async Task ProcessAsync(CancellationToken ct)
         {
-            var completedItems = RowItemGateway.InMemoryCache.SoureDatabaseMap.Values
-                .Select(c => c.RowItem)
-                .Where(i => i.ParseState<SourceDatabaseState>() == SourceDatabaseState.Completed)
-                .ToImmutableArray();
-            var activeItems = RowItemGateway.InMemoryCache.SoureDatabaseMap.Values
-                .Select(c => c.RowItem)
-                .Where(i => i.ParseState<SourceDatabaseState>() != SourceDatabaseState.Completed)
-                .ToImmutableArray();
-            //var allSourceDatabases = Parameterization.SourceClusters
-            //    .Select(c => c.Databases.Select(db => new
-            //    {
-            //        ClusterUri = NormalizedUri.NormalizeUri(c.SourceClusterUri),
-            //        db.DatabaseName,
-            //        ClusterParameters = c,
-            //        DatabaseParameters = db
-            //    }))
-            //    .SelectMany(a => a)
-            //    .ToImmutableDictionary(o => (o.ClusterUri, o.DatabaseName));
+            var cache = RowItemGateway.InMemoryCache;
 
-            await Task.CompletedTask;
-            //if (_sourceCluster.ExportMode == ExportMode.BackFillOnly && completedItems.Any())
-            //{   //  We're done
-            //}
-            ////  Allow GC
-            ////completedItems = completedItems.Clear();
+            foreach (var a in Parameterization.Activities)
+            {
+                var tableIdentity = new TableIdentity(
+                    NormalizedUri.NormalizeUri(a.Source.ClusterUri),
+                    a.Source.DatabaseName,
+                    a.Source.TableName);
+                var cachedIterations = cache.SourceTableMap.ContainsKey(tableIdentity)
+                    ? cache.SourceTableMap[tableIdentity].IterationMap.Values
+                    : new SourceTableIterationCache[0];
+                var completedItems = cachedIterations
+                    .Select(c => c.RowItem)
+                    .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed);
+                var activeItems = cachedIterations
+                    .Select(c => c.RowItem)
+                    .Where(i => i.ParseState<SourceTableState>() != SourceTableState.Completed);
 
-            //if (!activeItems.Any())
-            //{
-            //    var cursorStart = completedItems.Any()
-            //        ? completedItems.LastOrDefault()!.CursorEnd
-            //        : string.Empty;
-            //    var cursorEnd = await _queryClient.GetCurrentCursor(ct);
-            //    var currentItem = new RowItem
-            //    {
-            //        RowType = RowType.SourceDatabase,
-            //        State = SourceDatabaseState.Discovering.ToString(),
-            //        SourceClusterUri = _sourceCluster.SourceClusterUri,
-            //        SourceDatabaseName = _sourceDb.DatabaseName,
-            //        IterationId = completedItems.Count(),
-            //        CursorStart = cursorStart,
-            //        CursorEnd = cursorEnd
-            //    };
+                if (!cachedIterations.Any()
+                    || (a.TableOption.ExportMode != ExportMode.BackFillOnly && !activeItems.Any()))
+                {
+                    var lastIteration = cachedIterations.Any()
+                        ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
+                        : new RowItem();
+                    var newIterationId = lastIteration.IterationId + 1;
+                    var cursorStart = lastIteration.CursorEnd;
 
-            //    await RowItemGateway.AppendAsync(currentItem, ct);
-            //}
-            //else
-            //{
-            //    throw new NotImplementedException();
-            //}
+                    await StartIterationAsync(tableIdentity, newIterationId, cursorStart, ct);
+                }
+            }
+        }
+
+        private async Task StartIterationAsync(
+            TableIdentity tableIdentity,
+            long newIterationId,
+            string cursorStart,
+            CancellationToken ct)
+        {
+            var queryClient = DbClientFactory.GetDbQueryClient(
+                tableIdentity.ClusterUri,
+                tableIdentity.DatabaseName);
+            var cursorEnd = await queryClient.GetCurrentCursor(ct);
+            var currentItem = new RowItem
+            {
+                RowType = RowType.SourceTable,
+                State = SourceTableState.Planning.ToString(),
+                SourceClusterUri = tableIdentity.ClusterUri.ToString(),
+                SourceDatabaseName = tableIdentity.DatabaseName,
+                SourceTableName = tableIdentity.TableName,
+                IterationId = newIterationId,
+                CursorStart = cursorStart,
+                CursorEnd = cursorEnd
+            };
+
+            await RowItemGateway.AppendAsync(currentItem, ct);
         }
     }
 }
