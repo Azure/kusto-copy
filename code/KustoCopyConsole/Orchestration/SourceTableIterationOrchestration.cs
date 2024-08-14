@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Orchestration
         {
         }
 
-        public override async Task ProcessAsync(CancellationToken ct)
+        protected override async Task OnProcessAsync(CancellationToken ct)
         {
             var cache = RowItemGateway.InMemoryCache;
 

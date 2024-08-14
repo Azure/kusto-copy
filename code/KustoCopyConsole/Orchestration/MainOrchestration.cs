@@ -146,16 +146,24 @@ namespace KustoCopyConsole.Orchestration
 
         internal async Task ProcessAsync(CancellationToken ct)
         {
-            var sourceDatabase = new SourceTableIterationOrchestration(
+            var sourceTableIteration = new SourceTableIterationOrchestration(
                 _rowItemGateway,
                 _dbClientFactory,
                 Parameterization);
-            var orchestrationTasks = new[] { sourceDatabase }
-                .Select(d => d.ProcessAsync(ct))
-                .ToImmutableArray();
+            var sourceTablePlanning = new SourceTablePlanningOrchestration(
+                _rowItemGateway,
+                _dbClientFactory,
+                Parameterization);
+            var subOrchestrationTasks = new SubOrchestrationBase[]
+            {
+                sourceTableIteration,
+                sourceTablePlanning
+            }
+            .Select(d => d.ProcessAsync(ct))
+            .ToImmutableArray();
 
             //  Let every database orchestration complete
-            await Task.WhenAll(orchestrationTasks);
+            await Task.WhenAll(subOrchestrationTasks);
         }
     }
 }
