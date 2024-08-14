@@ -115,6 +115,9 @@ namespace KustoCopyConsole.Entity
 
         [Index(16)]
         public DateTime? IngestionTimeEnd { get; set; }
+
+        [Index(17)]
+        public long Cardinality { get; set; }
         #endregion
 
         public T ParseState<T>() where T : struct

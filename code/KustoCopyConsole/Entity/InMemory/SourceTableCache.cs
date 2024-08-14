@@ -21,20 +21,11 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IImmutableDictionary<long, SourceTableIterationCache> IterationMap { get; }
 
-        public SourceTableCache AppendIteration(RowItem item)
+        public SourceTableCache AppendIteration(SourceTableIterationCache iteration)
         {
-            var iterationId = item.IterationId;
+            var iterationId = iteration.RowItem.IterationId;
 
-            if (IterationMap.ContainsKey(iterationId))
-            {
-                return new SourceTableCache(
-                    IterationMap.SetItem(iterationId, IterationMap[iterationId].Update(item)));
-            }
-            else
-            {
-                return new SourceTableCache(
-                    IterationMap.Add(iterationId, new SourceTableIterationCache(item)));
-            }
+            return new SourceTableCache(IterationMap.SetItem(iterationId, iteration));
         }
     }
 }

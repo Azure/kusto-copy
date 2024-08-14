@@ -67,7 +67,7 @@ namespace KustoCopyConsole.Orchestration
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursor(ct);
-            var currentItem = new RowItem
+            var newIterationItem = new RowItem
             {
                 RowType = RowType.SourceTable,
                 State = SourceTableState.Planning.ToString(),
@@ -79,7 +79,7 @@ namespace KustoCopyConsole.Orchestration
                 CursorEnd = cursorEnd
             };
 
-            await RowItemGateway.AppendAsync(currentItem, ct);
+            await RowItemGateway.AppendAsync(newIterationItem, ct);
         }
     }
 }

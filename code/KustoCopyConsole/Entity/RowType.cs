@@ -4,6 +4,7 @@
     {
         Unspecified,
         FileVersion,
-        SourceTable
+        SourceTable,
+        SourceBlock
     }
 }

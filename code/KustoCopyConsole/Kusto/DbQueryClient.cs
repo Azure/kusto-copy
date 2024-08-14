@@ -45,7 +45,7 @@ namespace KustoCopyConsole.Kusto
                 });
         }
 
-        public async Task<(DateTime?, long)> GetPlanningCutOffIngestionTimeAsync(
+        public async Task<(DateTime? IngestionTime, long Cardinality)> GetPlanningCutOffIngestionTimeAsync(
             string tableName,
             string cursorStart,
             string cursorEnd,
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Kusto
                     : $"| where cursor_before_or_at('{cursorEnd}')";
                     var ingestionTimeStartFilter = ingestionTimeStart == null
                     ? string.Empty
-                    : $"| where ingestion_time > datetime('{ingestionTimeStart}')";
+                    : $"| where ingestion_time() > datetime('{ingestionTimeStart}')";
                     var query = @$"
 ['{tableName}']
 {cursorStartFilter}

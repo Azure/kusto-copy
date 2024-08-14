@@ -58,6 +58,8 @@ namespace KustoCopyConsole.Entity.InMemory
             {
                 case RowType.SourceTable:
                     return AppendSourceTable(item);
+                case RowType.SourceBlock:
+                    return AppendSourceBlock(item);
                 default:
                     throw new NotSupportedException($"Not supported row type:  {item.RowType}");
             }
@@ -72,11 +74,40 @@ namespace KustoCopyConsole.Entity.InMemory
             {
                 return _sourceTableMap.SetItem(
                     tableId,
-                    _sourceTableMap[tableId].AppendIteration(item));
+                    _sourceTableMap[tableId].AppendIteration(
+                        new SourceTableIterationCache(item)));
             }
             else
             {
                 return _sourceTableMap.Add(tableId, new SourceTableCache(item));
+            }
+        }
+
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceBlock(
+            RowItem item)
+        {
+            var tableId = item.GetSourceTableIdentity();
+
+            if (_sourceTableMap.ContainsKey(tableId))
+            {
+                var sourceTable = _sourceTableMap[tableId];
+
+                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+
+                    return _sourceTableMap.SetItem(
+                        tableId,
+                        sourceTable.AppendIteration(sourceIteration.AppendBlock(item)));
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Table should come before block in logs");
             }
         }
     }

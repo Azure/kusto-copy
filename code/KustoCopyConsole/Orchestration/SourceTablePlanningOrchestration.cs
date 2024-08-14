@@ -71,7 +71,30 @@ namespace KustoCopyConsole.Orchestration
                 ingestionTimeStart,
                 ct);
 
-            throw new NotImplementedException();
+            if (cutOff.Cardinality == 0)
+            {
+                var newIterationItem = iterationItem.Clone();
+
+                newIterationItem.State = SourceTableState.Planned.ToString();
+                await RowItemGateway.AppendAsync(newIterationItem, ct);
+            }
+            else
+            {
+                var newBlockItem = new RowItem
+                {
+                    RowType = RowType.SourceBlock,
+                    State = SourceBlockState.Planned.ToString(),
+                    SourceClusterUri = tableIdentity.ClusterUri.ToString(),
+                    SourceDatabaseName = tableIdentity.DatabaseName,
+                    SourceTableName = tableIdentity.TableName,
+                    IterationId = iterationItem.IterationId,
+                    IngestionTimeStart = ingestionTimeStart,
+                    IngestionTimeEnd = cutOff.IngestionTime
+                };
+
+                await RowItemGateway.AppendAsync(newBlockItem, ct);
+                await OnPlanningIterationAsync(iterationItem, ct);
+            }
         }
     }
 }
