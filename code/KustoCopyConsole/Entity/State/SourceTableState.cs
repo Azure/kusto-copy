@@ -3,7 +3,7 @@
     public enum SourceTableState
     {
         Planning,
-        Exporting,
+        Planned,
         Completed
     }
 }

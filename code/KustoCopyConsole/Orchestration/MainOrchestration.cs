@@ -205,17 +205,16 @@ namespace KustoCopyConsole.Orchestration
                 }
                 else
                 {
-                    var tableIdentity = new TableIdentity(
-                        NormalizedUri.NormalizeUri(a.Source.ClusterUri),
-                        a.Source.DatabaseName,
-                        a.Source.TableName);
+                    var tableIdentity = a.Source.GetTableIdentity();
                     var cachedIterations = cache.SourceTableMap.ContainsKey(tableIdentity)
                         ? cache.SourceTableMap[tableIdentity].IterationMap.Values
                         : Array.Empty<SourceTableIterationCache>();
-                    var lastCompletedItem = cachedIterations
+                    var completedItems = cachedIterations
                         .Select(c => c.RowItem)
-                        .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed)
-                        .ArgMax(i => i.Updated!.Value);
+                        .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed);
+                    var lastCompletedItem = completedItems.Any()
+                        ? completedItems.ArgMax(i => i.Updated!.Value)
+                        : null;
 
                     if (a.TableOption.ExportMode == ExportMode.BackFillOnly
                         && lastCompletedItem != null)

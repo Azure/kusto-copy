@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Entity.InMemory
+namespace KustoCopyConsole.Entity
 {
-    internal record TableIdentity(
+    public record TableIdentity(
         Uri ClusterUri,
         string DatabaseName,
         string TableName);

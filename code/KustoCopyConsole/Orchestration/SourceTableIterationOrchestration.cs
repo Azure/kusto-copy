@@ -32,10 +32,7 @@ namespace KustoCopyConsole.Orchestration
 
             foreach (var a in Parameterization.Activities)
             {
-                var tableIdentity = new TableIdentity(
-                    NormalizedUri.NormalizeUri(a.Source.ClusterUri),
-                    a.Source.DatabaseName,
-                    a.Source.TableName);
+                var tableIdentity = a.Source.GetTableIdentity();
                 var cachedIterations = cache.SourceTableMap.ContainsKey(tableIdentity)
                     ? cache.SourceTableMap[tableIdentity].IterationMap.Values
                     : Array.Empty<SourceTableIterationCache>();

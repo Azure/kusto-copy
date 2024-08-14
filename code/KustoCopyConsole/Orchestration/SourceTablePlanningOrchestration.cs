@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -48,8 +49,28 @@ namespace KustoCopyConsole.Orchestration
             }
         }
 
-        private Task OnPlanningIterationAsync(RowItem item, CancellationToken ct)
+        private async Task OnPlanningIterationAsync(RowItem iterationItem, CancellationToken ct)
         {
+            var tableIdentity = iterationItem.GetSourceTableIdentity();
+            var tableCache = RowItemGateway.InMemoryCache.SourceTableMap[tableIdentity];
+            var iterationCache = tableCache.IterationMap[iterationItem.IterationId];
+            var lastBlock = iterationCache.BlockMap
+                .Values
+                .OrderBy(b => b.RowItem.BlockId)
+                .LastOrDefault();
+            var ingestionTimeStart = lastBlock == null
+                ? null
+                : lastBlock.RowItem.IngestionTimeEnd;
+            var queryClient = DbClientFactory.GetDbQueryClient(
+                tableIdentity.ClusterUri,
+                tableIdentity.DatabaseName);
+            var cutOff = await queryClient.GetPlanningCutOffIngestionTimeAsync(
+                tableIdentity.TableName,
+                iterationItem.CursorStart,
+                iterationItem.CursorEnd,
+                ingestionTimeStart,
+                ct);
+
             throw new NotImplementedException();
         }
     }

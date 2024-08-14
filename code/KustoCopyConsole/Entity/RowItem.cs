@@ -107,8 +107,9 @@ namespace KustoCopyConsole.Entity
         public string CursorEnd { get; set; } = string.Empty;
 
         [Index(14)]
-        public long? BlockId { get; set; }
+        public long BlockId { get; set; }
 
+        /// <summary>Ingestion time after which the block starts (i.e. not included in block).</summary>
         [Index(15)]
         public DateTime? IngestionTimeStart { get; set; }
 
@@ -159,6 +160,14 @@ namespace KustoCopyConsole.Entity
             clone.Updated = DateTime.Now;
 
             return clone;
+        }
+
+        public TableIdentity GetSourceTableIdentity()
+        {
+            return new TableIdentity(
+                NormalizedUri.NormalizeUri(SourceClusterUri),
+                SourceDatabaseName,
+                SourceTableName);
         }
 
         private void ValidateProperty(

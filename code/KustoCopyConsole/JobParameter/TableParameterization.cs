@@ -1,4 +1,6 @@
 ﻿
+using KustoCopyConsole.Entity;
+
 namespace KustoCopyConsole.JobParameter
 {
     public class TableParameterization
@@ -9,9 +11,17 @@ namespace KustoCopyConsole.JobParameter
         
         public string TableName { get; set; } = string.Empty;
 
-        internal void Validate()
+        public void Validate()
         {
             throw new NotImplementedException();
+        }
+
+        public TableIdentity GetTableIdentity()
+        {
+            return new TableIdentity(
+                NormalizedUri.NormalizeUri(ClusterUri),
+                DatabaseName,
+                TableName);
         }
     }
 }

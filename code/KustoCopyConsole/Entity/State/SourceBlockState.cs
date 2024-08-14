@@ -2,7 +2,7 @@
 {
     public enum SourceBlockState
     {
-        Pending,
+        Planned,
         Exporting,
         Exported,
         /// <summary>

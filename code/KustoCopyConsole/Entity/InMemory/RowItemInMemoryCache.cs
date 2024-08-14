@@ -66,11 +66,7 @@ namespace KustoCopyConsole.Entity.InMemory
         private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceTable(
             RowItem item)
         {
-                //item.IterationId!.Value
-            var tableId = new TableIdentity(
-                NormalizedUri.NormalizeUri(item.SourceClusterUri),
-                item.SourceDatabaseName,
-                item.SourceTableName);
+            var tableId = item.GetSourceTableIdentity();
 
             if (_sourceTableMap.ContainsKey(tableId))
             {
