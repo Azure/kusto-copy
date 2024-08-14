@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Orchestration
         {
         }
 
-        protected override async Task OnProcessAsync(CancellationToken ct)
+        protected override async Task OnStartProcessAsync(CancellationToken ct)
         {
             var cache = RowItemGateway.InMemoryCache;
 
@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Orchestration
                     a.Source.TableName);
                 var cachedIterations = cache.SourceTableMap.ContainsKey(tableIdentity)
                     ? cache.SourceTableMap[tableIdentity].IterationMap.Values
-                    : new SourceTableIterationCache[0];
+                    : Array.Empty<SourceTableIterationCache>();
                 var completedItems = cachedIterations
                     .Select(c => c.RowItem)
                     .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed);

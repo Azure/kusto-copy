@@ -89,7 +89,7 @@ namespace KustoCopyConsole.Storage
                 writer.Flush();
 
                 var writeBuffer = tempMemoryStream.ToArray();
-                
+
                 await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
 
                 return new RowItemGateway(appendStorage, cache);
@@ -149,7 +149,7 @@ namespace KustoCopyConsole.Storage
             finally
             {
                 await WriteQueueAsync(ct);
-                await _backgroundTaskContainer.ObserveCompletedTasksAsync();
+                await _backgroundTaskContainer.ObserveCompletedTasksAsync(ct);
             }
         }
 
@@ -157,7 +157,7 @@ namespace KustoCopyConsole.Storage
         {
             QueueCurrentStream();
             await WriteQueueAsync(ct);
-            await _backgroundTaskContainer.ObserveCompletedTasksAsync();
+            await _backgroundTaskContainer.ObserveCompletedTasksAsync(ct);
         }
 
         private static byte[] GetBytes(RowItem item)
@@ -197,7 +197,7 @@ namespace KustoCopyConsole.Storage
                 }
             }
             //  Combat racing condition
-            if(_bufferToWriteQueue.Any())
+            if (_bufferToWriteQueue.Any())
             {
                 await WriteQueueAsync(ct);
             }

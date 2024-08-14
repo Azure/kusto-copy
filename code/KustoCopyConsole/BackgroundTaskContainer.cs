@@ -20,7 +20,7 @@ namespace KustoCopyConsole
             }
         }
 
-        public async Task ObserveCompletedTasksAsync()
+        public async Task ObserveCompletedTasksAsync(CancellationToken ct)
         {
             var completedTasks = RemoveCompletedTasks();
 

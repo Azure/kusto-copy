@@ -29,5 +29,27 @@ namespace KustoCopyConsole
 
             return maxItem;
         }
+
+        public static T ArgMax<T>(this IEnumerable<T> enumerable, Func<T, DateTime> selector)
+        {
+            T? maxItem = default;
+            DateTime maxValue = DateTime.MinValue;
+
+            foreach (var item in enumerable)
+            {
+                if (maxItem == null
+                    || selector(item) > maxValue)
+                {
+                    maxItem = item;
+                }
+            }
+
+            if (maxItem == null)
+            {
+                throw new InvalidOperationException("Enumerable is empty");
+            }
+
+            return maxItem;
+        }
     }
 }

@@ -10,6 +10,8 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
+        public bool IsContinuousRun { get; set; } = false;
+
         public IImmutableList<ActivityParameterization> Activities { get; set; } =
             ImmutableArray<ActivityParameterization>.Empty;
 

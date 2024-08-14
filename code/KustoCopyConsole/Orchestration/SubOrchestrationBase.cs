@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Orchestration
 
         protected MainJobParameterization Parameterization { get; }
 
-        public async Task ProcessAsync(CancellationToken ct)
+        public async Task ProcessAsync(Task drivingTask, CancellationToken ct)
         {
             EventHandler<RowItemAppend> rowItemAppendedHandler = (sender, e) =>
             {
@@ -41,14 +41,18 @@ namespace KustoCopyConsole.Orchestration
             RowItemGateway.RowItemAppended += rowItemAppendedHandler;
             try
             {
-                var processTask = OnProcessAsync(ct);
+                var processTask = OnStartProcessAsync(ct);
 
-                while (!processTask.IsCompleted)
+                while (!drivingTask.IsCompleted)
                 {
-                    await Task.WhenAny(processTask, Task.Delay(TimeSpan.FromSeconds(10), ct));
-                    await BackgroundTaskContainer.ObserveCompletedTasksAsync();
+                    await Task.WhenAny(
+                        drivingTask,
+                        processTask,
+                        Task.Delay(TimeSpan.FromSeconds(10), ct));
+                    await BackgroundTaskContainer.ObserveCompletedTasksAsync(ct);
                 }
                 await processTask;
+                await BackgroundTaskContainer.ObserveCompletedTasksAsync(ct);
             }
             finally
             {
@@ -56,7 +60,7 @@ namespace KustoCopyConsole.Orchestration
             }
         }
 
-        protected abstract Task OnProcessAsync(CancellationToken ct);
+        protected abstract Task OnStartProcessAsync(CancellationToken ct);
 
         protected virtual void OnProcessRowItemAppended(RowItemAppend e, CancellationToken ct)
         {

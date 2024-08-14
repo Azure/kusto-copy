@@ -2,6 +2,8 @@
 using Azure.Core;
 using Azure.Identity;
 using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
@@ -107,6 +109,7 @@ namespace KustoCopyConsole.Orchestration
 
                 return new MainJobParameterization
                 {
+                    IsContinuousRun = options.IsContinuousRun,
                     Activities = ImmutableList.Create(
                         new ActivityParameterization
                         {
@@ -122,10 +125,7 @@ namespace KustoCopyConsole.Orchestration
                                 DatabaseName = destinationDb
                             }),
                             Query = options.Query,
-                            TableOption = new TableOption
-                            {
-                                IsContinuousRun = options.IsContinuousRun
-                            }
+                            TableOption = new TableOption()
                         })
                 };
             }
@@ -144,8 +144,18 @@ namespace KustoCopyConsole.Orchestration
 
         public MainJobParameterization Parameterization { get; }
 
-        internal async Task ProcessAsync(CancellationToken ct)
+        public async Task ProcessAsync(CancellationToken ct)
         {
+            var processStartTime = DateTime.Now;
+            var monitoringCompletenessSource = new TaskCompletionSource();
+            EventHandler<RowItemAppend> rowItemAppendedHandler = (sender, e) =>
+            {
+                OnProcessRowItemAppended(e, processStartTime, monitoringCompletenessSource, ct);
+            };
+
+            _rowItemGateway.RowItemAppended += rowItemAppendedHandler;
+            MonitorCompleteness(processStartTime, monitoringCompletenessSource);
+
             var sourceTableIteration = new SourceTableIterationOrchestration(
                 _rowItemGateway,
                 _dbClientFactory,
@@ -159,11 +169,72 @@ namespace KustoCopyConsole.Orchestration
                 sourceTableIteration,
                 sourceTablePlanning
             }
-            .Select(d => d.ProcessAsync(ct))
+            .Select(d => d.ProcessAsync(monitoringCompletenessSource.Task, ct))
             .ToImmutableArray();
 
             //  Let every database orchestration complete
             await Task.WhenAll(subOrchestrationTasks);
+            _rowItemGateway.RowItemAppended -= rowItemAppendedHandler;
+        }
+
+        private void OnProcessRowItemAppended(
+            RowItemAppend e,
+            DateTime processStartTime,
+            TaskCompletionSource monitoringCompletenessSource,
+            CancellationToken ct)
+        {
+            if (e.Item.RowType == RowType.SourceTable
+                && e.Item.ParseState<SourceTableState>() == SourceTableState.Completed)
+            {
+                MonitorCompleteness(processStartTime, monitoringCompletenessSource);
+            }
+        }
+
+        private void MonitorCompleteness(
+            DateTime processStartTime,
+            TaskCompletionSource monitoringCompletenessSource)
+        {
+            var cache = _rowItemGateway.InMemoryCache;
+
+            foreach (var a in Parameterization.Activities)
+            {
+                if (a.TableOption.ExportMode != ExportMode.BackFillOnly
+                    && Parameterization.IsContinuousRun)
+                {   //  This table will always have work to do and hence will never be done
+                    return;
+                }
+                else
+                {
+                    var tableIdentity = new TableIdentity(
+                        NormalizedUri.NormalizeUri(a.Source.ClusterUri),
+                        a.Source.DatabaseName,
+                        a.Source.TableName);
+                    var cachedIterations = cache.SourceTableMap.ContainsKey(tableIdentity)
+                        ? cache.SourceTableMap[tableIdentity].IterationMap.Values
+                        : Array.Empty<SourceTableIterationCache>();
+                    var lastCompletedItem = cachedIterations
+                        .Select(c => c.RowItem)
+                        .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed)
+                        .ArgMax(i => i.Updated!.Value);
+
+                    if (a.TableOption.ExportMode == ExportMode.BackFillOnly
+                        && lastCompletedItem != null)
+                    {   //  We are done:  the backfill has been done
+                    }
+                    else if (a.TableOption.ExportMode != ExportMode.BackFillOnly
+                        && !Parameterization.IsContinuousRun
+                        && lastCompletedItem != null
+                        && lastCompletedItem!.Updated > processStartTime)
+                    {   //  Only one iteration was mandated and it has occured:  we're done
+                    }
+                    else
+                    {   //  This table isn't completed, so we keep going
+                        return;
+                    }
+                }
+            }
+
+            monitoringCompletenessSource.TrySetResult();
         }
     }
 }
