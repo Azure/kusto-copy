@@ -65,6 +65,7 @@ namespace KustoCopyConsole.Orchestration
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
             var cutOff = await queryClient.GetPlanningCutOffIngestionTimeAsync(
+                iterationItem.IterationId,
                 tableIdentity.TableName,
                 iterationItem.CursorStart,
                 iterationItem.CursorEnd,

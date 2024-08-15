@@ -46,6 +46,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<(DateTime? IngestionTime, long Cardinality)> GetPlanningCutOffIngestionTimeAsync(
+            long iterationId,
             string tableName,
             string cursorStart,
             string cursorEnd,
