@@ -54,7 +54,7 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
-                KustoDbPriority.HighestPriority,
+                new KustoDbPriority(iterationId, tableName),
                 async () =>
                 {
                     var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
