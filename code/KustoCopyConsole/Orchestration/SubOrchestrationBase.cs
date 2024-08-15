@@ -47,8 +47,11 @@ namespace KustoCopyConsole.Orchestration
                 {
                     await Task.WhenAny(
                         drivingTask,
-                        processTask,
                         Task.Delay(TimeSpan.FromSeconds(10), ct));
+                    if (processTask.IsCompleted)
+                    {   //  Surface errors if there are
+                        await processTask;
+                    }
                     await BackgroundTaskContainer.ObserveCompletedTasksAsync(ct);
                 }
                 await processTask;
