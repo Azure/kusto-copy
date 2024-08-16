@@ -3,7 +3,9 @@ using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Orchestration
 {
@@ -12,6 +14,8 @@ namespace KustoCopyConsole.Orchestration
     /// </summary>
     internal class SourceTablePlanningOrchestration : SubOrchestrationBase
     {
+        private const long MAX_RECORDS_PER_BLOCK = 1048576;
+
         public SourceTablePlanningOrchestration(
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
@@ -58,45 +62,125 @@ namespace KustoCopyConsole.Orchestration
                 .Values
                 .OrderBy(b => b.RowItem.BlockId)
                 .LastOrDefault();
+            var lastBlockItem = lastBlock?.RowItem;
             var ingestionTimeStart = lastBlock == null
                 ? string.Empty
                 : lastBlock.RowItem.IngestionTimeEnd;
             var queryClient = DbClientFactory.GetDbQueryClient(
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
-            var cutOff = await queryClient.GetPlanningCutOffIngestionTimeAsync(
-                iterationItem.IterationId,
-                tableIdentity.TableName,
-                iterationItem.CursorStart,
-                iterationItem.CursorEnd,
-                ingestionTimeStart,
-                ct);
+            var timeResolutionInSeconds = 100000;
 
-            if (cutOff.Cardinality == 0)
+            while (true)
             {
-                var newIterationItem = iterationItem.Clone();
+                var timeResolution = TimeSpan.FromSeconds(timeResolutionInSeconds);
+                var distributions = await queryClient.GetRecordDistributionAsync(
+                    iterationItem.IterationId,
+                    tableIdentity.TableName,
+                    iterationItem.CursorStart,
+                    iterationItem.CursorEnd,
+                    ingestionTimeStart,
+                    timeResolution,
+                    ct);
 
-                newIterationItem.State = SourceTableState.Planned.ToString();
-                await RowItemGateway.AppendAsync(newIterationItem, ct);
-            }
-            else
-            {
-                var newBlockItem = new RowItem
+                if (distributions.Any())
                 {
-                    RowType = RowType.SourceBlock,
-                    State = SourceBlockState.Planned.ToString(),
-                    SourceClusterUri = tableIdentity.ClusterUri.ToString(),
-                    SourceDatabaseName = tableIdentity.DatabaseName,
-                    SourceTableName = tableIdentity.TableName,
-                    IterationId = iterationItem.IterationId,
-                    BlockId = lastBlock == null ? 0 : lastBlock.RowItem.BlockId + 1,
-                    IngestionTimeStart = ingestionTimeStart,
-                    IngestionTimeEnd = cutOff.IngestionTimeEnd,
-                    Cardinality = cutOff.Cardinality
-                };
+                    if (distributions[0].Cardinality < MAX_RECORDS_PER_BLOCK
+                        || string.IsNullOrWhiteSpace(distributions[0].IngestionTimeStart)
+                        || timeResolutionInSeconds == 1)
+                    {
+                        var aggregatedDistributions = AggregateDistributions(
+                            distributions,
+                            timeResolutionInSeconds == 1);
 
-                await RowItemGateway.AppendAsync(newBlockItem, ct);
-                await OnPlanningIterationAsync(iterationItem, ct);
+                        foreach(var distribution in aggregatedDistributions)
+                        {
+                            var newBlockItem = new RowItem
+                            {
+                                RowType = RowType.SourceBlock,
+                                State = SourceBlockState.Planned.ToString(),
+                                SourceClusterUri = tableIdentity.ClusterUri.ToString(),
+                                SourceDatabaseName = tableIdentity.DatabaseName,
+                                SourceTableName = tableIdentity.TableName,
+                                IterationId = iterationItem.IterationId,
+                                BlockId = lastBlockItem == null ? 0 : lastBlockItem.BlockId + 1,
+                                IngestionTimeStart = distribution.IngestionTimeStart,
+                                IngestionTimeEnd = distribution.IngestionTimeEnd,
+                                Cardinality = distribution.Cardinality
+                            };
+
+                            lastBlockItem = newBlockItem;
+                            await RowItemGateway.AppendAsync(newBlockItem, ct);
+                        }
+                        await OnPlanningIterationAsync(iterationItem, ct);
+
+                        return;
+                    }
+                    else
+                    {   //  Try again with a lower resolution
+                        timeResolutionInSeconds /= 10;
+                    }
+                }
+                else
+                {   //  No more records:  mark table iteration as "Planned"
+                    var newIterationItem = iterationItem.Clone();
+
+                    newIterationItem.State = SourceTableState.Planned.ToString();
+                    await RowItemGateway.AppendAsync(newIterationItem, ct);
+
+                    return;
+                }
+            }
+        }
+
+        private IEnumerable<RecordDistribution> AggregateDistributions(
+            IEnumerable<RecordDistribution> distribution,
+            bool canHaveBetterResolution)
+        {
+            var isNewItem = true;
+            var ingestionTimeStart = string.Empty;
+            var ingestionTimeEnd = string.Empty;
+            var cardinality = (long)0;
+
+            foreach (var item in distribution)
+            {
+                if (!isNewItem)
+                {
+                    if (cardinality + item.Cardinality > MAX_RECORDS_PER_BLOCK)
+                    {   //  Seal previous items
+                        yield return new RecordDistribution(
+                            ingestionTimeStart,
+                            ingestionTimeEnd,
+                            cardinality);
+                        isNewItem = true;
+                    }
+                    else
+                    {
+                        ingestionTimeEnd = item.IngestionTimeEnd;
+                        cardinality += item.Cardinality;
+                    }
+                }
+                if (isNewItem)
+                {
+                    if (item.Cardinality < MAX_RECORDS_PER_BLOCK || !canHaveBetterResolution)
+                    {
+                        ingestionTimeStart = item.IngestionTimeStart;
+                        ingestionTimeEnd = item.IngestionTimeEnd;
+                        cardinality = item.Cardinality;
+                        isNewItem = false;
+                    }
+                    else
+                    {   //  Need finer resolution
+                        break;
+                    }
+                }
+            }
+            if (!isNewItem)
+            {   //  Seal last items
+                yield return new RecordDistribution(
+                    ingestionTimeStart,
+                    ingestionTimeEnd,
+                    cardinality);
             }
         }
     }

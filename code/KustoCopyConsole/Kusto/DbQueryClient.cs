@@ -2,11 +2,13 @@
 using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Entity;
+using KustoCopyConsole.Kusto.Data;
+using System.Collections.Immutable;
 using System.Data;
 
 namespace KustoCopyConsole.Kusto
 {
-    public class DbQueryClient
+    internal class DbQueryClient
     {
         private static readonly ClientRequestProperties EMPTY_PROPERTIES =
             new ClientRequestProperties();
@@ -45,12 +47,13 @@ namespace KustoCopyConsole.Kusto
                 });
         }
 
-        public async Task<(string IngestionTimeEnd, long Cardinality)> GetPlanningCutOffIngestionTimeAsync(
+        public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
             long iterationId,
             string tableName,
             string cursorStart,
             string cursorEnd,
             string ingestionTimeStart,
+            TimeSpan timeResolution,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
@@ -60,36 +63,33 @@ namespace KustoCopyConsole.Kusto
                     const string CURSOR_START_PARAM = "CursorStart";
                     const string CURSOR_END_PARAM = "CursorEnd";
                     const string INGESTION_TIME_START_PARAM = "ingestionTimeStartText";
+                    const string TIME_RESOLUTION_PARAM = "timeResolution";
 
                     var query = @$"
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
-    {INGESTION_TIME_START_PARAM}:string);
+    {INGESTION_TIME_START_PARAM}:string,
+    {TIME_RESOLUTION_PARAM}:timespan);
 let IngestionTimeStart = todatetime({INGESTION_TIME_START_PARAM});
 let BaseData = ['{tableName}']
     | project IngestionTime = ingestion_time()
     | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
     | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
     | where iif(isempty({INGESTION_TIME_START_PARAM}), true, IngestionTime>IngestionTimeStart);
-let IngestionTimeEnd = toscalar(BaseData
-    //  The +1 is to see if the last ingestion time slice goes beyond the 1M
-    | top 1048576+1 by IngestionTime asc
-    | summarize by IngestionTime
-    //  Here we want to skip the last slice if there is more than one slice since the last slice is above 1M
-    | top 2 by IngestionTime desc
-    //  But we also want to keep the last slice if it's the only slice
-    | summarize min(IngestionTime));
-//  Simply return the cardinality and ingestion time boundary
 BaseData
-| where IngestionTime <= IngestionTimeEnd
-| summarize Cardinality=count()
-| project IngestionTimeEnd=tostring(IngestionTimeEnd), Cardinality";
+| summarize Cardinality=count() by IngestionTimeStart=bin(IngestionTime, {TIME_RESOLUTION_PARAM})
+| top 1000 by IngestionTimeStart asc
+| project
+    tostring(IngestionTimeStart),
+    IngestionTimeEnd=tostring(IngestionTimeStart+{TIME_RESOLUTION_PARAM}),
+    Cardinality";
                     var properties = EMPTY_PROPERTIES.Clone();
 
                     properties.SetParameter(CURSOR_START_PARAM, cursorStart);
                     properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
                     properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart);
+                    properties.SetParameter(TIME_RESOLUTION_PARAM, timeResolution);
 
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -98,21 +98,13 @@ BaseData
                         ct);
                     var result = reader.ToDataSet().Tables[0].Rows
                         .Cast<DataRow>()
-                        .Select(r => new
-                        {
-                            IngestionTimeEnd = (string)(r[0]),
-                            Cardinality = (long)r[1]
-                        })
-                        .FirstOrDefault();
+                        .Select(r => new RecordDistribution(
+                            (string)(r[0]),
+                            (string)(r[1]),
+                            (long)r[2]))
+                        .ToImmutableArray();
 
-                    if (result == null)
-                    {
-                        return (string.Empty, 0);
-                    }
-                    else
-                    {
-                        return (result.IngestionTimeEnd, result.Cardinality);
-                    }
+                    return result;
                 });
         }
     }
