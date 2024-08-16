@@ -118,6 +118,7 @@ namespace KustoCopyConsole.Entity
         [Index(16)]
         public string IngestionTimeEnd { get; set; } = string.Empty;
 
+        /// <summary>Number of rows in a block.</summary>
         [Index(17)]
         public long Cardinality { get; set; }
         #endregion
