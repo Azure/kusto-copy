@@ -89,8 +89,10 @@ namespace KustoCopyConsole.Orchestration
                     SourceDatabaseName = tableIdentity.DatabaseName,
                     SourceTableName = tableIdentity.TableName,
                     IterationId = iterationItem.IterationId,
+                    BlockId = lastBlock == null ? 0 : lastBlock.RowItem.BlockId + 1,
                     IngestionTimeStart = ingestionTimeStart,
-                    IngestionTimeEnd = cutOff.IngestionTime
+                    IngestionTimeEnd = cutOff.IngestionTime,
+                    Cardinality = cutOff.Cardinality
                 };
 
                 await RowItemGateway.AppendAsync(newBlockItem, ct);

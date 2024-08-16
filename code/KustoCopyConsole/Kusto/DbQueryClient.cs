@@ -57,16 +57,22 @@ namespace KustoCopyConsole.Kusto
                 new KustoDbPriority(iterationId, tableName),
                 async () =>
                 {
+                    const string INGESTION_TIME_START_PARAM = "ingestionTimeStart";
+
                     var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
                     ? string.Empty
                     : $"| where cursor_after('{cursorStart}')";
                     var cursorEndFilter = string.IsNullOrWhiteSpace(cursorEnd)
                     ? string.Empty
                     : $"| where cursor_before_or_at('{cursorEnd}')";
+                    var ingestionTimeStartDeclaration = ingestionTimeStart == null
+                    ? string.Empty
+                    : $"declare query_parameters({INGESTION_TIME_START_PARAM}:datetime);";
                     var ingestionTimeStartFilter = ingestionTimeStart == null
                     ? string.Empty
                     : $"| where ingestion_time() > datetime('{ingestionTimeStart}')";
                     var query = @$"
+{ingestionTimeStartDeclaration}
 ['{tableName}']
 {cursorStartFilter}
 {cursorEndFilter}
@@ -79,10 +85,19 @@ namespace KustoCopyConsole.Kusto
 | top 2 by IngestionTime desc
 | top 1 by IngestionTime asc
 | project IngestionTime, Cardinality";
+                    var properties = EMPTY_PROPERTIES.Clone();
+
+                    if (ingestionTimeStart != null)
+                    {
+                        properties.SetParameter(
+                            INGESTION_TIME_START_PARAM,
+                            ingestionTimeStart.Value);
+                    }
+
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
-                        EMPTY_PROPERTIES,
+                        properties,
                         ct);
                     var result = reader.ToDataSet().Tables[0].Rows
                         .Cast<DataRow>()
