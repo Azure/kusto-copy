@@ -110,11 +110,13 @@ namespace KustoCopyConsole.Entity
         public long BlockId { get; set; }
 
         /// <summary>Ingestion time after which the block starts (i.e. not included in block).</summary>
+        /// <remarks>We use the string representation to simplify parameter handling.</remarks>
         [Index(15)]
-        public DateTime? IngestionTimeStart { get; set; }
+        public string IngestionTimeStart { get; set; } = string.Empty;
 
+        /// <summary>Ingestion time after which the block starts (i.e. not included in block).</summary>
         [Index(16)]
-        public DateTime? IngestionTimeEnd { get; set; }
+        public string IngestionTimeEnd { get; set; } = string.Empty;
 
         [Index(17)]
         public long Cardinality { get; set; }

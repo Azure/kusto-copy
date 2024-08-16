@@ -59,7 +59,7 @@ namespace KustoCopyConsole.Orchestration
                 .OrderBy(b => b.RowItem.BlockId)
                 .LastOrDefault();
             var ingestionTimeStart = lastBlock == null
-                ? null
+                ? string.Empty
                 : lastBlock.RowItem.IngestionTimeEnd;
             var queryClient = DbClientFactory.GetDbQueryClient(
                 tableIdentity.ClusterUri,
@@ -91,7 +91,7 @@ namespace KustoCopyConsole.Orchestration
                     IterationId = iterationItem.IterationId,
                     BlockId = lastBlock == null ? 0 : lastBlock.RowItem.BlockId + 1,
                     IngestionTimeStart = ingestionTimeStart,
-                    IngestionTimeEnd = cutOff.IngestionTime,
+                    IngestionTimeEnd = cutOff.IngestionTimeEnd,
                     Cardinality = cutOff.Cardinality
                 };
 

@@ -12,7 +12,6 @@ namespace KustoCopyConsole.Storage.LocalDisk
     {
         private readonly string _path;
         private Stream _fileStream;
-        private volatile int _writeCount = 0;
 
         public LocalAppendStorage(string path)
         {
@@ -45,16 +44,9 @@ namespace KustoCopyConsole.Storage.LocalDisk
 
         async Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
         {
-            if (Interlocked.Increment(ref _writeCount) >= 10)
-            {
-                return false;
-            }
-            else
-            {
-                await _fileStream.WriteAsync(buffer);
+            await _fileStream.WriteAsync(buffer);
 
-                return true;
-            }
+            return true;
         }
 
         private Stream OpenFile(string path)
