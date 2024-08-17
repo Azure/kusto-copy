@@ -91,7 +91,7 @@ namespace KustoCopyConsole.Orchestration
                     {
                         var aggregatedDistributions = AggregateDistributions(
                             distributions,
-                            timeResolutionInSeconds == 1);
+                            timeResolutionInSeconds != 1);
 
                         foreach(var distribution in aggregatedDistributions)
                         {
