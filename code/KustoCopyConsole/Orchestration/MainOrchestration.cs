@@ -171,7 +171,8 @@ namespace KustoCopyConsole.Orchestration
             var subOrchestrationTasks = new SubOrchestrationBase[]
             {
                 sourceTableIteration,
-                sourceTablePlanning
+                sourceTablePlanning,
+                sourceTableExporting
             }
             .Select(d => d.ProcessAsync(monitoringCompletenessSource.Task, ct))
             .ToImmutableArray();
