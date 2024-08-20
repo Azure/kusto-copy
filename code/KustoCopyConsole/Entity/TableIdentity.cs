@@ -9,5 +9,11 @@ namespace KustoCopyConsole.Entity
     public record TableIdentity(
         Uri ClusterUri,
         string DatabaseName,
-        string TableName);
+        string TableName)
+    {
+        public override string ToString()
+        {
+            return $"{{Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
+        }
+    }
 }

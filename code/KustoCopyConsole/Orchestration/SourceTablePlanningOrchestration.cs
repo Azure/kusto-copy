@@ -10,7 +10,8 @@ using System.Collections.Immutable;
 namespace KustoCopyConsole.Orchestration
 {
     /// <summary>
-    /// This orchestration is responsible for table's planning.
+    /// This orchestration is responsible for table's planning, i.e. creation
+    /// blocks.
     /// </summary>
     internal class SourceTablePlanningOrchestration : SubOrchestrationBase
     {
