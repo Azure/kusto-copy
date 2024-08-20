@@ -62,14 +62,12 @@ namespace KustoCopyConsole
         {
             get
             {
-                var versionAttribute = typeof(Program)
-                    .Assembly
-                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>();
-                var version = versionAttribute == null
+                var version = typeof(Program).Assembly.GetName().Version;
+                var versionText = version == null
                     ? "<VERSION MISSING>"
-                    : versionAttribute!.InformationalVersion;
+                    : version.ToString();
 
-                return version;
+                return versionText;
             }
         }
 
