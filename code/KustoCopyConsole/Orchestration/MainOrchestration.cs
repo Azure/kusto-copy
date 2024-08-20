@@ -164,6 +164,10 @@ namespace KustoCopyConsole.Orchestration
                 _rowItemGateway,
                 _dbClientFactory,
                 Parameterization);
+            var sourceTableExporting = new SourceTableExportingOrchestration(
+                _rowItemGateway,
+                _dbClientFactory,
+                Parameterization);
             var subOrchestrationTasks = new SubOrchestrationBase[]
             {
                 sourceTableIteration,
