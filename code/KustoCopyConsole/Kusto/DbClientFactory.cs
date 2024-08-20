@@ -121,18 +121,33 @@ namespace KustoCopyConsole.Kusto
             ((IDisposable)_providerFactory).Dispose();
         }
 
-        public DbQueryClient GetDbQueryClient(Uri sourceUri, string database)
+        public DbQueryClient GetDbQueryClient(Uri clusterUri, string database)
         {
             try
             {
-                var queue = _sourceClusterQueryQueueMap[sourceUri];
-                var provider = _providerFactory.GetQueryProvider(sourceUri);
+                var queue = _sourceClusterQueryQueueMap[clusterUri];
+                var provider = _providerFactory.GetQueryProvider(clusterUri);
 
                 return new DbQueryClient(provider, queue, database);
             }
             catch (KeyNotFoundException ex)
             {
-                throw new CopyException($"Can't find cluster '{sourceUri}'", false, ex);
+                throw new CopyException($"Can't find cluster '{clusterUri}'", false, ex);
+            }
+        }
+
+        public DmCommandClient GetDmCommandClient(Uri clusterUri, string database)
+        {
+            try
+            {
+                var queue = _sourceClusterQueryQueueMap[clusterUri];
+                var provider = _providerFactory.GetDmCommandProvider(clusterUri);
+
+                return new DmCommandClient(provider, queue, database);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                throw new CopyException($"Can't find cluster '{clusterUri}'", false, ex);
             }
         }
     }

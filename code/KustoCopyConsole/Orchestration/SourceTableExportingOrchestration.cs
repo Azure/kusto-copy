@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Azure.Data.Tables;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -27,6 +28,7 @@ namespace KustoCopyConsole.Orchestration
 
         private readonly IDictionary<Uri, Task<StageStorageCache>> _clusterToStagingStorageRoot =
             new Dictionary<Uri, Task<StageStorageCache>>();
+        private readonly Random _random = new();
 
         public SourceTableExportingOrchestration(
             RowItemGateway rowItemGateway,
@@ -63,8 +65,8 @@ namespace KustoCopyConsole.Orchestration
         {
             base.OnProcessRowItemAppended(e, ct);
 
-            if (e.Item.RowType == RowType.SourceTable
-                && e.Item.ParseState<SourceTableState>() == SourceTableState.Planned)
+            if (e.Item.RowType == RowType.SourceBlock
+                && e.Item.ParseState<SourceBlockState>() == SourceBlockState.Planned)
             {
                 BackgroundTaskContainer.AddTask(OnExportingIterationAsync(
                     e.Item,
@@ -74,6 +76,73 @@ namespace KustoCopyConsole.Orchestration
 
         private async Task OnExportingIterationAsync(RowItem item, CancellationToken ct)
         {
+            var roots = await GetExportRootUrisAsync(item, ct);
+            var shuffledRoots = roots
+                .OrderBy(i => _random.Next())
+                .ToImmutableArray();
+
+            throw new NotImplementedException();
+        }
+
+        #region Storage URLs
+        #region Managing DM staging accounts
+        private async Task<IImmutableList<Uri>> GetCachedStorageRootsAsync(
+            Uri clusterUri,
+            CancellationToken ct)
+        {
+            Task<StageStorageCache> storageCacheTask;
+
+            lock (_clusterToStagingStorageRoot)
+            {
+                if (!_clusterToStagingStorageRoot.ContainsKey(clusterUri))
+                {
+                    _clusterToStagingStorageRoot.Add(
+                        clusterUri,
+                        FetchStageStorageCacheAsync(clusterUri, ct));
+                }
+                storageCacheTask = _clusterToStagingStorageRoot[clusterUri];
+            }
+
+            var storageCache = await storageCacheTask;
+
+            if (DateTime.Now.Subtract(storageCache.FetchTime) > CACHE_REFRESH_RATE)
+            {
+                lock (_clusterToStagingStorageRoot)
+                {
+                    if (object.ReferenceEquals(
+                        storageCacheTask,
+                        _clusterToStagingStorageRoot[clusterUri]))
+                    {
+                        _clusterToStagingStorageRoot[clusterUri] =
+                            FetchStageStorageCacheAsync(clusterUri, ct);
+                    }
+                }
+
+                return await GetCachedStorageRootsAsync(clusterUri, ct);
+            }
+            else
+            {
+                return storageCache.StorageRoots;
+            }
+        }
+
+        private async Task<StageStorageCache> FetchStageStorageCacheAsync(
+            Uri clusterUri,
+            CancellationToken ct)
+        {
+            var dmCommandClient = DbClientFactory.GetDmCommandClient(clusterUri, string.Empty);
+            var tempStorageUris = await dmCommandClient.GetTempStorageUrisAsync(ct);
+
+            return new StageStorageCache(DateTime.Now, tempStorageUris);
+        }
+        #endregion
+
+        private async Task<IImmutableList<Uri>> GetExportRootUrisAsync(
+            RowItem blockItem,
+            CancellationToken ct)
+        {
+            var sourceTableId = blockItem.GetSourceTableIdentity();
+ 
             if (Parameterization.StorageUrls.Any())
             {
                 throw new NotImplementedException(
@@ -81,7 +150,6 @@ namespace KustoCopyConsole.Orchestration
             }
             else
             {
-                var sourceTableId = item.GetSourceTableIdentity();
                 var activity = Parameterization.Activities
                     .Where(a => a.Source.GetTableIdentity() == sourceTableId)
                     .FirstOrDefault();
@@ -102,50 +170,13 @@ namespace KustoCopyConsole.Orchestration
                 }
 
                 var destinationTableId = activity.Destinations.First().GetTableIdentity();
-                var storageRoots =
-                    await GetCachedStorageRootsAsync(destinationTableId.ClusterUri);
-            }
-            throw new NotImplementedException();
-        }
+                var storageRoots = await GetCachedStorageRootsAsync(
+                    destinationTableId.ClusterUri,
+                    ct);
 
-        private async Task<IImmutableList<Uri>> GetCachedStorageRootsAsync(Uri clusterUri)
-        {
-            Task<StageStorageCache> storageCacheTask;
-
-            lock (_clusterToStagingStorageRoot)
-            {
-                if (!_clusterToStagingStorageRoot.ContainsKey(clusterUri))
-                {
-                    _clusterToStagingStorageRoot.Add(clusterUri, FetchStageStorageCacheAsync(clusterUri));
-                }
-                storageCacheTask = _clusterToStagingStorageRoot[clusterUri];
-            }
-
-            var storageCache = await storageCacheTask;
-
-            if (DateTime.Now.Subtract(storageCache.FetchTime) > CACHE_REFRESH_RATE)
-            {
-                lock (_clusterToStagingStorageRoot)
-                {
-                    if (object.ReferenceEquals(
-                        storageCacheTask,
-                        _clusterToStagingStorageRoot[clusterUri]))
-                    {
-                        _clusterToStagingStorageRoot[clusterUri] =
-                            FetchStageStorageCacheAsync(clusterUri);
-                    }
-                }
-
-                return await GetCachedStorageRootsAsync(clusterUri);
-            }
-            else
-            {
-                return storageCache.StorageRoots;
+                return storageRoots;
             }
         }
-
-        private Task<StageStorageCache> FetchStageStorageCacheAsync(Uri clusterUri)
-        {
-        }
+        #endregion
     }
 }

@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Kusto
             _databaseName = databaseName;
         }
 
-        public async Task<string> GetCurrentCursor(CancellationToken ct)
+        public async Task<string> GetCurrentCursorAsync(CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
                 KustoDbPriority.HighestPriority,

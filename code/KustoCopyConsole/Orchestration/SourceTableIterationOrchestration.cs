@@ -66,7 +66,7 @@ namespace KustoCopyConsole.Orchestration
             var queryClient = DbClientFactory.GetDbQueryClient(
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
-            var cursorEnd = await queryClient.GetCurrentCursor(ct);
+            var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
             var newIterationItem = new RowItem
             {
                 RowType = RowType.SourceTable,
