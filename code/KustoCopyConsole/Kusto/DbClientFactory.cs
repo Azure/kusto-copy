@@ -17,9 +17,13 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbClientFactory : IDisposable
     {
+        private const int MAX_CONCURRENT_DM_COMMAND = 2;
+        private const int MAX_CONCURRENT_DB_COMMAND = 5;
+
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterQueryQueueMap;
+        private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterCommandQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _destinationClusterDmCommandQueueMap;
 
         #region Constructor
@@ -63,38 +67,34 @@ namespace KustoCopyConsole.Kusto
                     ? o.Task.Result.Export
                     : o.Source.ConcurrentExportCommandCount,
                     ConcurrentQueryCount = o.Source.ConcurrentQueryCount == 0
-                    ? Math.Max(1, 0.1 * o.Task.Result.Query)
+                    ? (int)Math.Max(1, 0.1 * o.Task.Result.Query)
                     : o.Source.ConcurrentQueryCount
                 });
             var sourceClusterExportQueueMap = sourceClusterConfig
-                .Select(o => new
-                {
-                    o.Uri,
-                    ExportQueue = new PriorityExecutionQueue<KustoDbPriority>(
-                        (int)o.ConcurrentExportCommandCount)
-                })
-                .ToImmutableDictionary(o => o.Uri, o => o.ExportQueue);
+                .ToImmutableDictionary(
+                o => o.Uri,
+                o => new PriorityExecutionQueue<KustoDbPriority>(o.ConcurrentExportCommandCount));
             var sourceClusterQueryQueueMap = sourceClusterConfig
-                .Select(o => new
-                {
-                    o.Uri,
-                    QueryQueue = new PriorityExecutionQueue<KustoDbPriority>(
-                        (int)o.ConcurrentQueryCount)
-                })
-                .ToImmutableDictionary(o => o.Uri, o => o.QueryQueue);
+                .ToImmutableDictionary(
+                o => o.Uri,
+                o => new PriorityExecutionQueue<KustoDbPriority>(o.ConcurrentQueryCount));
+            var sourceClusterCommandQueueMap = sourceClusterConfig
+                .ToImmutableDictionary(
+                o => o.Uri,
+                o => new PriorityExecutionQueue<KustoDbPriority>(MAX_CONCURRENT_DB_COMMAND));
             var destinationClusterDmQueryQueueMap = parameterization.Activities
                 .SelectMany(a => a.Destinations)
                 .Select(d => NormalizedUri.NormalizeUri(d.ClusterUri))
                 .Distinct()
                 .ToImmutableDictionary(
                 u => u,
-                //  Hard code 2 parallel commands for DM
-                u => new PriorityExecutionQueue<KustoDbPriority>(2));
+                u => new PriorityExecutionQueue<KustoDbPriority>(MAX_CONCURRENT_DM_COMMAND));
 
             return new DbClientFactory(
                 providerFactory,
                 sourceClusterExportQueueMap,
                 sourceClusterQueryQueueMap,
+                sourceClusterCommandQueueMap,
                 destinationClusterDmQueryQueueMap);
         }
 
@@ -102,15 +102,17 @@ namespace KustoCopyConsole.Kusto
             ProviderFactory providerFactory,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterExportQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterQueryQueueMap,
+            IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterCommandQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> destinationClusterDmCommandQueueMap)
         {
             _providerFactory = providerFactory;
             _sourceClusterExportQueueMap = sourceClusterExportQueueMap;
             _sourceClusterQueryQueueMap = sourceClusterQueryQueueMap;
+            _sourceClusterCommandQueueMap = sourceClusterCommandQueueMap;
             _destinationClusterDmCommandQueueMap = destinationClusterDmCommandQueueMap;
         }
 
-        private static async Task<(long Export, long Query)> GetCountsAsync(
+        private static async Task<(int Export, int Query)> GetCountsAsync(
             ICslAdminProvider provider,
             CancellationToken ct)
         {
@@ -122,7 +124,7 @@ namespace KustoCopyConsole.Kusto
             var countMap = reader.ToDataSet().Tables[0].Rows
                 .Cast<DataRow>()
                 .Select(r => r.ItemArray)
-                .ToImmutableDictionary(a => (string)a[0]!, a => (long)a[1]!);
+                .ToImmutableDictionary(a => (string)a[0]!, a => (int)((long)a[1]!));
 
             return (countMap["DataExport"], countMap["Queries"]);
         }
@@ -141,6 +143,21 @@ namespace KustoCopyConsole.Kusto
                 var provider = _providerFactory.GetQueryProvider(clusterUri);
 
                 return new DbQueryClient(provider, queue, database);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                throw new CopyException($"Can't find cluster '{clusterUri}'", false, ex);
+            }
+        }
+
+        public DbCommandClient GetDbCommandClient(Uri clusterUri, string database)
+        {
+            try
+            {
+                var queue = _destinationClusterDmCommandQueueMap[clusterUri];
+                var provider = _providerFactory.GetDmCommandProvider(clusterUri);
+
+                return new DbCommandClient(provider, queue, database);
             }
             catch (KeyNotFoundException ex)
             {
