@@ -28,7 +28,6 @@ namespace KustoCopyConsole.Orchestration
 
         private readonly IDictionary<Uri, Task<StageStorageCache>> _clusterToStagingStorageRoot =
             new Dictionary<Uri, Task<StageStorageCache>>();
-        private readonly Random _random = new();
 
         public SourceTableExportingOrchestration(
             RowItemGateway rowItemGateway,
@@ -77,9 +76,6 @@ namespace KustoCopyConsole.Orchestration
         private async Task OnExportingIterationAsync(RowItem item, CancellationToken ct)
         {
             var roots = await GetExportRootUrisAsync(item, ct);
-            var shuffledRoots = roots
-                .OrderBy(i => _random.Next())
-                .ToImmutableArray();
 
             throw new NotImplementedException();
         }

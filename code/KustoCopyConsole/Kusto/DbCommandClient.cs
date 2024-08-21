@@ -5,11 +5,16 @@ using KustoCopyConsole.Entity;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 using System.Data;
+using static Kusto.Data.Common.CslCommandGenerator;
+using System.Text;
+using static Kusto.Data.Net.Http.OneApiError;
+using System;
 
 namespace KustoCopyConsole.Kusto
 {
     internal class DbCommandClient
     {
+        private readonly Random _random = new();
         private readonly ICslAdminProvider _provider;
         private readonly PriorityExecutionQueue<KustoDbPriority> _commandQueue;
         private readonly PriorityExecutionQueue<KustoDbPriority> _exportQueue;
@@ -28,8 +33,14 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> ExportBlockAsync(
+            IImmutableList<Uri> storageRoots,
             CancellationToken ct)
         {
+            var shuffledStorageRoots = storageRoots
+                .OrderBy(i => _random.Next());
+            var quotedRoots = shuffledStorageRoots
+                .Select(r => @$"h""{r}""");
+            var rootsText = string.Join(", ", quotedRoots);
             var priority = KustoDbPriority.HighestPriority;
 
             //  Double queue:
@@ -43,7 +54,15 @@ namespace KustoCopyConsole.Kusto
                         priority,
                         async () =>
                         {
-                            var commandText = ".export";
+                            var commandText = @$"
+.export async compressed to parquet (
+    {rootsText}
+)
+with (
+    namePrefix=""export"",
+    persistDetails=true
+) <| 
+Logs | where id == ""1234""";
                             var reader = await _provider.ExecuteControlCommandAsync(
                                 string.Empty,
                                 commandText);
