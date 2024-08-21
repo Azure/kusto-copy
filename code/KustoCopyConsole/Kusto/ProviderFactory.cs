@@ -14,6 +14,7 @@ namespace KustoCopyConsole.Kusto
     {
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
+        private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dbCommandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dmCommandProviderMap;
 
         #region Constructor
@@ -59,6 +60,10 @@ namespace KustoCopyConsole.Kusto
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoClientFactory.CreateCslQueryProvider(e.Builder));
+            _dbCommandProviderMap = allBuilders
+                .ToImmutableDictionary(
+                e => e.Uri,
+                e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
             _dmCommandProviderMap = destinationIngestionBuilders
                 .ToImmutableDictionary(
                 e => e.Uri,
@@ -86,6 +91,11 @@ namespace KustoCopyConsole.Kusto
         public ICslQueryProvider GetQueryProvider(Uri clusterUri)
         {
             return _queryProviderMap[clusterUri];
+        }
+
+        public ICslAdminProvider GetDbCommandProvider(Uri clusterUri)
+        {
+            return _dbCommandProviderMap[clusterUri];
         }
 
         public ICslAdminProvider GetDmCommandProvider(Uri clusterUri)

@@ -1,6 +1,4 @@
-﻿using Azure.Data.Tables;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.InMemory;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -75,7 +73,19 @@ namespace KustoCopyConsole.Orchestration
 
         private async Task OnExportingIterationAsync(RowItem item, CancellationToken ct)
         {
+            var tableIdentity = item.GetSourceTableIdentity();
             var roots = await GetExportRootUrisAsync(item, ct);
+            var client = DbClientFactory.GetDbCommandClient(
+                tableIdentity.ClusterUri,
+                tableIdentity.DatabaseName);
+            var operationId = await client.ExportBlockAsync(
+                roots,
+                tableIdentity.TableName,
+                item.CursorStart,
+                item.CursorEnd,
+                item.IngestionTimeStart,
+                item.IngestionTimeEnd,
+                ct);
 
             throw new NotImplementedException();
         }

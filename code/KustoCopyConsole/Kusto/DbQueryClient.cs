@@ -84,7 +84,7 @@ BaseData
     tostring(IngestionTimeStart),
     IngestionTimeEnd=tostring(IngestionTimeStart+{TIME_RESOLUTION_PARAM}),
     Cardinality";
-                    var properties = EMPTY_PROPERTIES.Clone();
+                    var properties = new ClientRequestProperties();
 
                     properties.SetParameter(CURSOR_START_PARAM, cursorStart);
                     properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
