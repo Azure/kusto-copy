@@ -154,10 +154,11 @@ namespace KustoCopyConsole.Kusto
         {
             try
             {
-                var queue = _destinationClusterDmCommandQueueMap[clusterUri];
+                var commandQueue = _sourceClusterCommandQueueMap[clusterUri];
+                var exportQueue = _sourceClusterExportQueueMap[clusterUri];
                 var provider = _providerFactory.GetDmCommandProvider(clusterUri);
 
-                return new DbCommandClient(provider, queue, database);
+                return new DbCommandClient(provider, commandQueue, exportQueue, database);
             }
             catch (KeyNotFoundException ex)
             {
