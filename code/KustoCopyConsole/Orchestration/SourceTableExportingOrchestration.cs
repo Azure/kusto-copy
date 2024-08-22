@@ -1,4 +1,6 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Azure.Data.Tables;
+using Azure.Storage.Blobs.Models;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -8,6 +10,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -99,6 +102,14 @@ namespace KustoCopyConsole.Orchestration
             #endregion
 
             #region Operation ID map
+            public bool AnyOperation()
+            {
+                lock (_operationIdToBlockMap)
+                {
+                    return _operationIdToBlockMap.Count != 0;
+                }
+            }
+
             public int GetOperationIDCount()
             {
                 lock (_operationIdToBlockMap)
@@ -107,9 +118,9 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public void AddOperationId(string operationId, RowItem item)
+            public void AddOperationId(RowItem blockItem)
             {
-                _operationIdToBlockMap.Add(operationId, item);
+                _operationIdToBlockMap.Add(blockItem.OperationId, blockItem);
             }
             #endregion
         }
@@ -136,6 +147,16 @@ namespace KustoCopyConsole.Orchestration
                     return _clusterToExportQueue
                         .Values
                         .Any(v => v.AnyExport());
+                }
+            }
+
+            public bool AnyOperation()
+            {
+                lock (_clusterToExportQueue)
+                {
+                    return _clusterToExportQueue
+                        .Values
+                        .Any(v => v.AnyOperation());
                 }
             }
 
@@ -261,18 +282,25 @@ namespace KustoCopyConsole.Orchestration
                     foreach (var block in iteration.BlockMap.Values)
                     {
                         if (block.RowItem.ParseState<SourceBlockState>()
-                            == SourceBlockState.Planned
-                            || block.RowItem.ParseState<SourceBlockState>()
-                            == SourceBlockState.Exporting)
+                            == SourceBlockState.Planned)
                         {
                             BackgroundTaskContainer.AddTask(OnQueueExportingItemAsync(
                                 block.RowItem,
                                 ct));
                         }
+                        else if(block.RowItem.ParseState<SourceBlockState>()
+                            == SourceBlockState.Exporting)
+                        {
+                            var tableIdentity = block.RowItem.GetSourceTableIdentity();
+                            var clusterQueue = _clusterQueues.EnsureClusterQueue(block.RowItem, ct);
+
+                            clusterQueue.AddOperationId(block.RowItem);
+                        }
                     }
                 }
             }
-
+            EnsureExportedTask(true, ct);
+            
             await Task.CompletedTask;
         }
 
@@ -371,7 +399,7 @@ namespace KustoCopyConsole.Orchestration
                         newBlockItem.State = SourceBlockState.Exporting.ToString();
                         newBlockItem.OperationId = operationId;
                         await RowItemGateway.AppendAsync(newBlockItem, ct);
-                        clusterQueue.AddOperationId(operationId, newBlockItem);
+                        clusterQueue.AddOperationId(newBlockItem);
                         EnsureExportedTask(true, ct);
                         //  We've treated it, so we dequeue it
                         clusterQueue.Dequeue();
@@ -389,6 +417,12 @@ namespace KustoCopyConsole.Orchestration
         private async Task OnExportedAsync(CancellationToken ct)
         {
             await Task.CompletedTask;
+            EnsureExportedTask(false, ct);
+            //  In case of racing condition
+            if (_clusterQueues.AnyOperation())
+            {
+                EnsureExportedTask(true, ct);
+            }
         }
     }
 }
