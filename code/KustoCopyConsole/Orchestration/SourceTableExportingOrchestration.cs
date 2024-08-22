@@ -179,9 +179,15 @@ namespace KustoCopyConsole.Orchestration
                 return new ClusterCache(DateTime.Now, exportRootUris, exportCapacity);
             }
 
-            private Task<int> FetchExportCapacityAsync(RowItem blockItem, CancellationToken ct)
+            private async Task<int> FetchExportCapacityAsync(RowItem blockItem, CancellationToken ct)
             {
-                throw new NotImplementedException();
+                var tableIdentity = blockItem.GetSourceTableIdentity();
+                var client = _dbClientFactory.GetDbCommandClient(
+                    tableIdentity.ClusterUri,
+                    tableIdentity.DatabaseName);
+                var exportCapacity = await client.GetExportCapacityAsync();
+
+                return exportCapacity;
             }
 
             private async Task<IImmutableList<Uri>> FetchExportRootUrisAsync(
@@ -345,7 +351,7 @@ namespace KustoCopyConsole.Orchestration
                 {
                     var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
 
-                    while (clusterQueue.GetOperationIDCount() > clusterCache.ExportCapacity
+                    while (clusterQueue.GetOperationIDCount() < clusterCache.ExportCapacity
                         && clusterQueue.TryPeekExport(out var blockItem))
                     {
                         var tableIdentity = blockItem.GetSourceTableIdentity();
