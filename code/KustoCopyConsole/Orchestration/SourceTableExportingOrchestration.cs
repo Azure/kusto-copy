@@ -97,12 +97,115 @@ namespace KustoCopyConsole.Orchestration
             }
             #endregion
         }
+
+        private class ClusterQueueCollection
+        {
+            private readonly MainJobParameterization _parameterization;
+            private readonly DbClientFactory _dbClientFactory;
+            private readonly IDictionary<Uri, ClusterQueue> _clusterToExportQueue =
+                new Dictionary<Uri, ClusterQueue>();
+
+            public ClusterQueueCollection(
+                MainJobParameterization parameterization,
+                DbClientFactory dbClientFactory)
+            {
+                _parameterization = parameterization;
+                _dbClientFactory = dbClientFactory;
+            }
+
+            public IImmutableList<ClusterQueue> GetClusterQueues()
+            {
+                lock (_clusterToExportQueue)
+                {
+                    return _clusterToExportQueue
+                        .Values
+                        .ToImmutableArray();
+                }
+            }
+
+            public ClusterQueue EnsureClusterQueue(RowItem blockItem, CancellationToken ct)
+            {
+                var tableIdentity = blockItem.GetSourceTableIdentity();
+
+                lock (_clusterToExportQueue)
+                {
+                    if (!_clusterToExportQueue.ContainsKey(tableIdentity.ClusterUri))
+                    {
+                        _clusterToExportQueue[tableIdentity.ClusterUri] = new ClusterQueue(
+                            new PriorityQueue<RowItem, KustoPriority>(),
+                            new Dictionary<string, RowItem>(),
+                            ctt => FetchClusterCacheAsync(blockItem, ctt));
+                    }
+
+                    return _clusterToExportQueue[tableIdentity.ClusterUri];
+                }
+            }
+
+            #region Fetch
+            private async Task<ClusterCache> FetchClusterCacheAsync(
+                RowItem blockItem,
+                CancellationToken ct)
+            {
+                var exportRootUrisTask = FetchExportRootUrisAsync(blockItem, ct);
+                var exportCapacity = await FetchExportCapacityAsync(blockItem, ct);
+                var exportRootUris = await exportRootUrisTask;
+
+                return new ClusterCache(DateTime.Now, exportRootUris, exportCapacity);
+            }
+
+            private Task<int> FetchExportCapacityAsync(RowItem blockItem, CancellationToken ct)
+            {
+                throw new NotImplementedException();
+            }
+
+            private async Task<IImmutableList<Uri>> FetchExportRootUrisAsync(
+                RowItem blockItem,
+                CancellationToken ct)
+            {
+                var sourceTableId = blockItem.GetSourceTableIdentity();
+
+                if (_parameterization.StorageUrls.Any())
+                {
+                    throw new NotImplementedException(
+                        "Support for storage accounts not supported yet");
+                }
+                else
+                {
+                    var activity = _parameterization.Activities
+                        .Where(a => a.Source.GetTableIdentity() == sourceTableId)
+                        .FirstOrDefault();
+
+                    if (activity == null)
+                    {
+                        throw new CopyException(
+                            $"Table {sourceTableId} present in transaction log but not in "
+                            + $"configuration",
+                            false);
+                    }
+                    if (activity.Destinations.Count() != 1)
+                    {
+                        throw new CopyException(
+                            $"Table {sourceTableId} expected to have 1 destination but has"
+                            + $" {activity.Destinations.Count()}",
+                            false);
+                    }
+
+                    var destinationTableId = activity.Destinations.First().GetTableIdentity();
+                    var dmCommandClient = _dbClientFactory.GetDmCommandClient(
+                        destinationTableId.ClusterUri,
+                        destinationTableId.DatabaseName);
+                    var tempStorageUris = await dmCommandClient.GetTempStorageUrisAsync(ct);
+
+                    return tempStorageUris;
+                }
+            }
+            #endregion
+        }
         #endregion
 
         private static readonly TimeSpan CACHE_REFRESH_RATE = TimeSpan.FromMinutes(10);
 
-        private readonly IDictionary<Uri, ClusterQueue> _clusterToExportQueue =
-            new Dictionary<Uri, ClusterQueue>();
+        private readonly ClusterQueueCollection _clusterQueues;
         private volatile int _isExportingTaskRunning = Convert.ToInt32(false);
         private volatile int _isExportedTaskRunning = Convert.ToInt32(false);
 
@@ -112,6 +215,7 @@ namespace KustoCopyConsole.Orchestration
             MainJobParameterization parameterization)
             : base(rowItemGateway, dbClientFactory, parameterization)
         {
+            _clusterQueues = new(Parameterization, DbClientFactory);
         }
 
         protected override async Task OnStartProcessAsync(CancellationToken ct)
@@ -156,7 +260,7 @@ namespace KustoCopyConsole.Orchestration
         private async Task OnQueueExportingItemAsync(RowItem blockItem, CancellationToken ct)
         {
             var tableIdentity = blockItem.GetSourceTableIdentity();
-            var clusterQueue = EnsureClusterQueue(blockItem, ct);
+            var clusterQueue = _clusterQueues.EnsureClusterQueue(blockItem, ct);
 
             clusterQueue.EnqueueExport(
                 blockItem,
@@ -189,7 +293,7 @@ namespace KustoCopyConsole.Orchestration
         {
             while (true)
             {
-                foreach (var clusterQueue in GetClusterQueues())
+                foreach (var clusterQueue in _clusterQueues.GetClusterQueues())
                 {
                     var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
 
@@ -217,95 +321,5 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
         }
-
-        #region Cluster queue
-        private IImmutableList<ClusterQueue> GetClusterQueues()
-        {
-            lock (_clusterToExportQueue)
-            {
-                return _clusterToExportQueue
-                    .Values
-                    .ToImmutableArray();
-            }
-        }
-
-        private ClusterQueue EnsureClusterQueue(RowItem blockItem, CancellationToken ct)
-        {
-            var tableIdentity = blockItem.GetSourceTableIdentity();
-
-            lock (_clusterToExportQueue)
-            {
-                if (!_clusterToExportQueue.ContainsKey(tableIdentity.ClusterUri))
-                {
-                    _clusterToExportQueue[tableIdentity.ClusterUri] = new ClusterQueue(
-                        new PriorityQueue<RowItem, KustoPriority>(),
-                        new Dictionary<string, RowItem>(),
-                        ctt => FetchClusterCacheAsync(blockItem, ctt));
-                }
-
-                return _clusterToExportQueue[tableIdentity.ClusterUri];
-            }
-        }
-
-        #region Fetch
-        private async Task<ClusterCache> FetchClusterCacheAsync(
-            RowItem blockItem,
-            CancellationToken ct)
-        {
-            var exportRootUrisTask = FetchExportRootUrisAsync(blockItem, ct);
-            var exportCapacity = await FetchExportCapacityAsync(blockItem, ct);
-            var exportRootUris = await exportRootUrisTask;
-
-            return new ClusterCache(DateTime.Now, exportRootUris, exportCapacity);
-        }
-
-        private Task<int> FetchExportCapacityAsync(RowItem blockItem, CancellationToken ct)
-        {
-            throw new NotImplementedException();
-        }
-
-        private async Task<IImmutableList<Uri>> FetchExportRootUrisAsync(
-            RowItem blockItem,
-            CancellationToken ct)
-        {
-            var sourceTableId = blockItem.GetSourceTableIdentity();
-
-            if (Parameterization.StorageUrls.Any())
-            {
-                throw new NotImplementedException(
-                    "Support for storage accounts not supported yet");
-            }
-            else
-            {
-                var activity = Parameterization.Activities
-                    .Where(a => a.Source.GetTableIdentity() == sourceTableId)
-                    .FirstOrDefault();
-
-                if (activity == null)
-                {
-                    throw new CopyException(
-                        $"Table {sourceTableId} present in transaction log but not in "
-                        + $"configuration",
-                        false);
-                }
-                if (activity.Destinations.Count() != 1)
-                {
-                    throw new CopyException(
-                        $"Table {sourceTableId} expected to have 1 destination but has"
-                        + $" {activity.Destinations.Count()}",
-                        false);
-                }
-
-                var destinationTableId = activity.Destinations.First().GetTableIdentity();
-                var dmCommandClient = DbClientFactory.GetDmCommandClient(
-                    destinationTableId.ClusterUri,
-                    destinationTableId.DatabaseName);
-                var tempStorageUris = await dmCommandClient.GetTempStorageUrisAsync(ct);
-
-                return tempStorageUris;
-            }
-        }
-        #endregion
-        #endregion
     }
 }
