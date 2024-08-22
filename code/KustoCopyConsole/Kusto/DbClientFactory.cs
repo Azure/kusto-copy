@@ -21,7 +21,6 @@ namespace KustoCopyConsole.Kusto
         private const int MAX_CONCURRENT_DB_COMMAND = 5;
 
         private readonly ProviderFactory _providerFactory;
-        private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterExportQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterQueryQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _sourceClusterCommandQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> _destinationClusterDmCommandQueueMap;
@@ -49,31 +48,24 @@ namespace KustoCopyConsole.Kusto
                     ConcurrentExportCommandCount = o.Option?.ConcurrentExportCommandCount ?? 0,
                     ConcurrentQueryCount = o.Option?.ConcurrentQueryCount ?? 0
                 });
-            var countTasks = sourceClusters
+            var queryCapacityTasks = sourceClusters
                 .Select(s => new
                 {
-                    Task = GetCountsAsync(providerFactory.GetCommandProvider(s.Uri), ct),
+                    Task = GetQueryCapacityAsync(providerFactory.GetCommandProvider(s.Uri), ct),
                     Source = s
                 })
                 .ToImmutableArray();
 
-            await Task.WhenAll(countTasks.Select(o => o.Task));
+            await Task.WhenAll(queryCapacityTasks.Select(o => o.Task));
 
-            var sourceClusterConfig = countTasks
+            var sourceClusterConfig = queryCapacityTasks
                 .Select(o => new
                 {
                     o.Source.Uri,
-                    ConcurrentExportCommandCount = o.Source.ConcurrentExportCommandCount == 0
-                    ? o.Task.Result.Export
-                    : o.Source.ConcurrentExportCommandCount,
                     ConcurrentQueryCount = o.Source.ConcurrentQueryCount == 0
-                    ? (int)Math.Max(1, 0.1 * o.Task.Result.Query)
+                    ? (int)Math.Max(1, 0.1 * o.Task.Result)
                     : o.Source.ConcurrentQueryCount
                 });
-            var sourceClusterExportQueueMap = sourceClusterConfig
-                .ToImmutableDictionary(
-                o => o.Uri,
-                o => new PriorityExecutionQueue<KustoDbPriority>(o.ConcurrentExportCommandCount));
             var sourceClusterQueryQueueMap = sourceClusterConfig
                 .ToImmutableDictionary(
                 o => o.Uri,
@@ -92,7 +84,6 @@ namespace KustoCopyConsole.Kusto
 
             return new DbClientFactory(
                 providerFactory,
-                sourceClusterExportQueueMap,
                 sourceClusterQueryQueueMap,
                 sourceClusterCommandQueueMap,
                 destinationClusterDmQueryQueueMap);
@@ -100,33 +91,28 @@ namespace KustoCopyConsole.Kusto
 
         private DbClientFactory(
             ProviderFactory providerFactory,
-            IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterExportQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterQueryQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> sourceClusterCommandQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoDbPriority>> destinationClusterDmCommandQueueMap)
         {
             _providerFactory = providerFactory;
-            _sourceClusterExportQueueMap = sourceClusterExportQueueMap;
             _sourceClusterQueryQueueMap = sourceClusterQueryQueueMap;
             _sourceClusterCommandQueueMap = sourceClusterCommandQueueMap;
             _destinationClusterDmCommandQueueMap = destinationClusterDmCommandQueueMap;
         }
 
-        private static async Task<(int Export, int Query)> GetCountsAsync(
+        private static async Task<int> GetQueryCapacityAsync(
             ICslAdminProvider provider,
             CancellationToken ct)
         {
             var commandText = @"
 .show capacity
-| where Resource in ('DataExport', 'Queries')
-| project Resource, Total";
+| where Resource == 'Queries'
+| project Total";
             var reader = await provider.ExecuteControlCommandAsync(string.Empty, commandText);
-            var countMap = reader.ToDataSet().Tables[0].Rows
-                .Cast<DataRow>()
-                .Select(r => r.ItemArray)
-                .ToImmutableDictionary(a => (string)a[0]!, a => (int)((long)a[1]!));
+            var queryCount = (long)reader.ToDataSet().Tables[0].Rows[0][0];
 
-            return (countMap["DataExport"], countMap["Queries"]);
+            return (int)queryCount;
         }
         #endregion
 

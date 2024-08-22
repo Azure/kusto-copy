@@ -41,6 +41,7 @@ namespace KustoCopyConsole.Kusto
                     const string INGESTION_TIME_START_PARAM = "ingestionTimeStartText";
                     const string INGESTION_TIME_END_PARAM = "ingestionTimeEndText";
 
+                    //  Shuffle the storage roots for better long term round robin
                     var shuffledStorageRoots = storageRoots
                         .OrderBy(i => _random.Next());
                     var quotedRoots = shuffledStorageRoots
@@ -52,7 +53,8 @@ namespace KustoCopyConsole.Kusto
 )
 with (
     namePrefix=""export"",
-    persistDetails=true
+    persistDetails=true,
+    parquetDatetimePrecision=""microsecond""
 ) <| 
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
