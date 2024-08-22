@@ -65,6 +65,14 @@ namespace KustoCopyConsole.Orchestration
             }
 
             #region Export queue
+            public bool AnyExport()
+            {
+                lock (_exportQueue)
+                {
+                    return _exportQueue.Count != 0;
+                }
+            }
+
             public void EnqueueExport(RowItem blockItem, KustoPriority kustoPriority)
             {
                 lock (_exportQueue)
@@ -98,6 +106,11 @@ namespace KustoCopyConsole.Orchestration
                     return _operationIdToBlockMap.Count;
                 }
             }
+
+            public void AddOperationId(string operationId, RowItem item)
+            {
+                _operationIdToBlockMap.Add(operationId, item);
+            }
             #endregion
         }
 
@@ -114,6 +127,16 @@ namespace KustoCopyConsole.Orchestration
             {
                 _parameterization = parameterization;
                 _dbClientFactory = dbClientFactory;
+            }
+
+            public bool AnyExport()
+            {
+                lock (_clusterToExportQueue)
+                {
+                    return _clusterToExportQueue
+                        .Values
+                        .Any(v => v.AnyExport());
+                }
             }
 
             public IImmutableList<ClusterQueue> GetClusterQueues()
@@ -283,18 +306,40 @@ namespace KustoCopyConsole.Orchestration
 
                 await RowItemGateway.AppendAsync(newBlockItem, ct);
             }
+            EnsureExportingTask(true, ct);
+        }
+
+        private void EnsureExportingTask(bool target, CancellationToken ct)
+        {
             if (Interlocked.CompareExchange(
                 ref _isExportingTaskRunning,
-                Convert.ToInt32(true),
-                Convert.ToInt32(false)) == Convert.ToInt32(false))
+                Convert.ToInt32(target),
+                Convert.ToInt32(!target)) == Convert.ToInt32(!target))
             {
-                BackgroundTaskContainer.AddTask(OnExportingAsync(ct));
+                if (target)
+                {
+                    BackgroundTaskContainer.AddTask(OnExportingAsync(ct));
+                }
+            }
+        }
+
+        private void EnsureExportedTask(bool target, CancellationToken ct)
+        {
+            if (Interlocked.CompareExchange(
+                ref _isExportedTaskRunning,
+                Convert.ToInt32(target),
+                Convert.ToInt32(!target)) == Convert.ToInt32(!target))
+            {
+                if (target)
+                {
+                    BackgroundTaskContainer.AddTask(OnExportedAsync(ct));
+                }
             }
         }
 
         private async Task OnExportingAsync(CancellationToken ct)
         {
-            while (true)
+            while (_clusterQueues.AnyExport())
             {
                 foreach (var clusterQueue in _clusterQueues.GetClusterQueues())
                 {
@@ -320,11 +365,24 @@ namespace KustoCopyConsole.Orchestration
                         newBlockItem.State = SourceBlockState.Exporting.ToString();
                         newBlockItem.OperationId = operationId;
                         await RowItemGateway.AppendAsync(newBlockItem, ct);
+                        clusterQueue.AddOperationId(operationId, newBlockItem);
+                        EnsureExportedTask(true, ct);
                         //  We've treated it, so we dequeue it
                         clusterQueue.Dequeue();
                     }
                 }
             }
+            EnsureExportingTask(false, ct);
+            //  In case of racing condition
+            if (_clusterQueues.AnyExport())
+            {
+                EnsureExportingTask(true, ct);
+            }
+        }
+
+        private async Task OnExportedAsync(CancellationToken ct)
+        {
+            await Task.CompletedTask;
         }
     }
 }
