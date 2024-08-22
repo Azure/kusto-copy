@@ -1,8 +1,4 @@
-﻿using Azure.Core;
-using Azure.Storage.Blobs.Models;
-using Kusto.Data;
-using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -11,7 +7,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
@@ -78,11 +73,19 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public bool TryDequeueExport([MaybeNullWhen(false)] out RowItem blockItem)
+            public bool TryPeekExport([MaybeNullWhen(false)] out RowItem blockItem)
             {
                 lock (_exportQueue)
                 {
-                    return _exportQueue.TryDequeue(out blockItem, out _);
+                    return _exportQueue.TryPeek(out blockItem, out _);
+                }
+            }
+
+            public void Dequeue()
+            {
+                lock (_exportQueue)
+                {
+                    _exportQueue.Dequeue();
                 }
             }
             #endregion
@@ -297,8 +300,8 @@ namespace KustoCopyConsole.Orchestration
                 {
                     var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
 
-                    if (clusterQueue.GetOperationIDCount() > clusterCache.ExportCapacity
-                        && clusterQueue.TryDequeueExport(out var blockItem))
+                    while (clusterQueue.GetOperationIDCount() > clusterCache.ExportCapacity
+                        && clusterQueue.TryPeekExport(out var blockItem))
                     {
                         var tableIdentity = blockItem.GetSourceTableIdentity();
                         var commandClient = DbClientFactory.GetDbCommandClient(
@@ -317,6 +320,8 @@ namespace KustoCopyConsole.Orchestration
                         newBlockItem.State = SourceBlockState.Exporting.ToString();
                         newBlockItem.OperationId = operationId;
                         await RowItemGateway.AppendAsync(newBlockItem, ct);
+                        //  We've treated it, so we dequeue it
+                        clusterQueue.Dequeue();
                     }
                 }
             }
