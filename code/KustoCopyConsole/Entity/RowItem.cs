@@ -121,6 +121,9 @@ namespace KustoCopyConsole.Entity
         /// <summary>Number of rows in a block.</summary>
         [Index(17)]
         public long Cardinality { get; set; }
+
+        [Index(18)]
+        public string OperationId { get; set; } = string.Empty;
         #endregion
 
         public T ParseState<T>() where T : struct

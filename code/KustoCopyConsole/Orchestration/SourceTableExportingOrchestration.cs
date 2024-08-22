@@ -11,6 +11,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,6 +35,8 @@ namespace KustoCopyConsole.Orchestration
         private class ClusterQueue
         {
             private readonly object _lock = new object();
+            private readonly PriorityQueue<RowItem, KustoPriority> _exportQueue;
+            private readonly IDictionary<string, RowItem> _operationIdToBlockMap;
             private readonly Func<CancellationToken, Task<ClusterCache>> _clusterCacheFetch;
             private Task<ClusterCache>? _cacheTask;
 
@@ -41,14 +45,10 @@ namespace KustoCopyConsole.Orchestration
                 IDictionary<string, RowItem> operationIdToBlockMap,
                 Func<CancellationToken, Task<ClusterCache>> clusterCacheFetch)
             {
-                ExportQueue = exportQueue;
-                OperationIdToBlockMap = operationIdToBlockMap;
+                _exportQueue = exportQueue;
+                _operationIdToBlockMap = operationIdToBlockMap;
                 _clusterCacheFetch = clusterCacheFetch;
             }
-
-            public PriorityQueue<RowItem, KustoPriority> ExportQueue { get; }
-
-            public IDictionary<string, RowItem> OperationIdToBlockMap { get; }
 
             public async Task<ClusterCache> GetClusterCacheAsync(CancellationToken ct)
             {
@@ -68,6 +68,34 @@ namespace KustoCopyConsole.Orchestration
 
                 return await _cacheTask!;
             }
+
+            #region Export queue
+            public void EnqueueExport(RowItem blockItem, KustoPriority kustoPriority)
+            {
+                lock (_exportQueue)
+                {
+                    _exportQueue.Enqueue(blockItem, kustoPriority);
+                }
+            }
+
+            public bool TryDequeueExport([MaybeNullWhen(false)] out RowItem blockItem)
+            {
+                lock (_exportQueue)
+                {
+                    return _exportQueue.TryDequeue(out blockItem, out _);
+                }
+            }
+            #endregion
+
+            #region Operation ID map
+            public int GetOperationIDCount()
+            {
+                lock (_operationIdToBlockMap)
+                {
+                    return _operationIdToBlockMap.Count;
+                }
+            }
+            #endregion
         }
         #endregion
 
@@ -75,6 +103,8 @@ namespace KustoCopyConsole.Orchestration
 
         private readonly IDictionary<Uri, ClusterQueue> _clusterToExportQueue =
             new Dictionary<Uri, ClusterQueue>();
+        private volatile int _isExportingTaskRunning = Convert.ToInt32(false);
+        private volatile int _isExportedTaskRunning = Convert.ToInt32(false);
 
         public SourceTableExportingOrchestration(
             RowItemGateway rowItemGateway,
@@ -126,9 +156,9 @@ namespace KustoCopyConsole.Orchestration
         private async Task OnQueueExportingItemAsync(RowItem blockItem, CancellationToken ct)
         {
             var tableIdentity = blockItem.GetSourceTableIdentity();
-            var clusterQueue = GetClusterQueue(blockItem, ct);
+            var clusterQueue = EnsureClusterQueue(blockItem, ct);
 
-            clusterQueue.ExportQueue.Enqueue(
+            clusterQueue.EnqueueExport(
                 blockItem,
                 new KustoPriority(
                     tableIdentity.DatabaseName,
@@ -137,6 +167,7 @@ namespace KustoCopyConsole.Orchestration
                         tableIdentity.TableName,
                         blockItem.BlockId)));
 
+            //  We test since it might be coming from a persisted state which is "exporting" already
             if (blockItem.ParseState<SourceBlockState>() == SourceBlockState.Planned)
             {
                 var newBlockItem = blockItem.Clone();
@@ -145,10 +176,60 @@ namespace KustoCopyConsole.Orchestration
 
                 await RowItemGateway.AppendAsync(newBlockItem, ct);
             }
+            if (Interlocked.CompareExchange(
+                ref _isExportingTaskRunning,
+                Convert.ToInt32(true),
+                Convert.ToInt32(false)) == Convert.ToInt32(false))
+            {
+                BackgroundTaskContainer.AddTask(OnExportingAsync(ct));
+            }
+        }
+
+        private async Task OnExportingAsync(CancellationToken ct)
+        {
+            while (true)
+            {
+                foreach (var clusterQueue in GetClusterQueues())
+                {
+                    var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
+
+                    if (clusterQueue.GetOperationIDCount() > clusterCache.ExportCapacity
+                        && clusterQueue.TryDequeueExport(out var blockItem))
+                    {
+                        var tableIdentity = blockItem.GetSourceTableIdentity();
+                        var commandClient = DbClientFactory.GetDbCommandClient(
+                            tableIdentity.ClusterUri,
+                            tableIdentity.DatabaseName);
+                        var operationId = await commandClient.ExportBlockAsync(
+                            clusterCache.ExportRootUris,
+                            tableIdentity.TableName,
+                            blockItem.CursorStart,
+                            blockItem.CursorEnd,
+                            blockItem.IngestionTimeStart,
+                            blockItem.IngestionTimeEnd,
+                            ct);
+                        var newBlockItem = blockItem.Clone();
+
+                        newBlockItem.State = SourceBlockState.Exporting.ToString();
+                        newBlockItem.OperationId = operationId;
+                        await RowItemGateway.AppendAsync(newBlockItem, ct);
+                    }
+                }
+            }
         }
 
         #region Cluster queue
-        private ClusterQueue GetClusterQueue(RowItem blockItem, CancellationToken ct)
+        private IImmutableList<ClusterQueue> GetClusterQueues()
+        {
+            lock (_clusterToExportQueue)
+            {
+                return _clusterToExportQueue
+                    .Values
+                    .ToImmutableArray();
+            }
+        }
+
+        private ClusterQueue EnsureClusterQueue(RowItem blockItem, CancellationToken ct)
         {
             var tableIdentity = blockItem.GetSourceTableIdentity();
 
