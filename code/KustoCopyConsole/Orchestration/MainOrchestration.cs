@@ -24,7 +24,7 @@ namespace KustoCopyConsole.Orchestration
         {
             var parameterization = CreateParameterization(options);
 
-            var appendStorage = CreateAppendStorage();
+            var appendStorage = CreateAppendStorage(options);
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
@@ -56,9 +56,27 @@ namespace KustoCopyConsole.Orchestration
             }
         }
 
-        private static IAppendStorage CreateAppendStorage()
+        private static IAppendStorage CreateAppendStorage(CommandLineOptions options)
         {
-            return new LocalAppendStorage("kusto-copy.log");
+            return new LocalAppendStorage(GetLocalLogFilePath(options));
+        }
+
+        private static string GetLocalLogFilePath(CommandLineOptions options)
+        {
+            const string DEFAULT_FILE_NAME = "kusto-copy.log";
+
+            if (string.IsNullOrWhiteSpace(options.LogFilePath))
+            {
+                return DEFAULT_FILE_NAME;
+            }
+            else if(Directory.Exists(options.LogFilePath))
+            {
+                return Path.Combine(options.LogFilePath, DEFAULT_FILE_NAME);
+            }
+            else
+            {
+                return options.LogFilePath;
+            }
         }
 
         private static MainJobParameterization CreateParameterization(CommandLineOptions options)

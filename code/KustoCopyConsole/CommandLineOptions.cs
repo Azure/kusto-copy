@@ -48,5 +48,8 @@ namespace KustoCopyConsole
 
         [Option("job-path", Required = false, HelpText = "Set job file local path.")]
         public string JobFilePath { get; set; } = string.Empty;
+
+        [Option("log-path", Required = false, HelpText = "Set log file local path.")]
+        public string LogFilePath { get; set; } = string.Empty;
     }
 }

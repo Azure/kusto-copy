@@ -1,16 +1,15 @@
-﻿using Azure.Data.Tables;
-using Azure.Storage.Blobs.Models;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Data;
 using System.Diagnostics.CodeAnalysis;
-using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -39,14 +38,18 @@ namespace KustoCopyConsole.Orchestration
             private Task<ClusterCache>? _cacheTask;
 
             public ClusterQueue(
+                Uri clusterUri,
                 PriorityQueue<RowItem, KustoPriority> exportQueue,
                 IDictionary<string, RowItem> operationIdToBlockMap,
                 Func<CancellationToken, Task<ClusterCache>> clusterCacheFetch)
             {
+                ClusterUri = clusterUri;
                 _exportQueue = exportQueue;
                 _operationIdToBlockMap = operationIdToBlockMap;
                 _clusterCacheFetch = clusterCacheFetch;
             }
+
+            public Uri ClusterUri { get; }
 
             public async Task<ClusterCache> GetClusterCacheAsync(CancellationToken ct)
             {
@@ -110,12 +113,19 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public int GetOperationIDCount()
+            public int GetOperationCount()
             {
                 lock (_operationIdToBlockMap)
                 {
                     return _operationIdToBlockMap.Count;
                 }
+            }
+
+            public IImmutableList<string> GetOperationsIds()
+            {
+                return _operationIdToBlockMap
+                    .Keys
+                    .ToImmutableArray();
             }
 
             public void AddOperationId(RowItem blockItem)
@@ -179,6 +189,7 @@ namespace KustoCopyConsole.Orchestration
                     if (!_clusterToExportQueue.ContainsKey(tableIdentity.ClusterUri))
                     {
                         _clusterToExportQueue[tableIdentity.ClusterUri] = new ClusterQueue(
+                            tableIdentity.ClusterUri,
                             new PriorityQueue<RowItem, KustoPriority>(),
                             new Dictionary<string, RowItem>(),
                             ctt => FetchClusterCacheAsync(blockItem, ctt));
@@ -288,7 +299,7 @@ namespace KustoCopyConsole.Orchestration
                                 block.RowItem,
                                 ct));
                         }
-                        else if(block.RowItem.ParseState<SourceBlockState>()
+                        else if (block.RowItem.ParseState<SourceBlockState>()
                             == SourceBlockState.Exporting)
                         {
                             var tableIdentity = block.RowItem.GetSourceTableIdentity();
@@ -300,7 +311,7 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
             EnsureExportedTask(true, ct);
-            
+
             await Task.CompletedTask;
         }
 
@@ -379,7 +390,7 @@ namespace KustoCopyConsole.Orchestration
                 {
                     var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
 
-                    while (clusterQueue.GetOperationIDCount() < clusterCache.ExportCapacity
+                    while (clusterQueue.GetOperationCount() < clusterCache.ExportCapacity
                         && clusterQueue.TryPeekExport(out var blockItem))
                     {
                         var tableIdentity = blockItem.GetSourceTableIdentity();
@@ -416,7 +427,24 @@ namespace KustoCopyConsole.Orchestration
 
         private async Task OnExportedAsync(CancellationToken ct)
         {
-            await Task.CompletedTask;
+            while (_clusterQueues.AnyOperation())
+            {
+                foreach (var clusterQueue in _clusterQueues.GetClusterQueues())
+                {
+                    var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
+
+                    if (clusterQueue.AnyOperation())
+                    {
+                        var commandClient = DbClientFactory.GetDbCommandClient(
+                            clusterQueue.ClusterUri,
+                            string.Empty);
+                        
+                        await commandClient.ShowOperationsAsync(
+                            clusterQueue.GetOperationsIds(),
+                            ct);
+                    }
+                }
+            }
             EnsureExportedTask(false, ct);
             //  In case of racing condition
             if (_clusterQueues.AnyOperation())

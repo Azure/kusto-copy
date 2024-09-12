@@ -1,6 +1,7 @@
 ﻿using Kusto.Cloud.Platform.Data;
 using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 using System.Data;
 
@@ -40,6 +41,33 @@ namespace KustoCopyConsole.Kusto
 
                     return (int)exportCapacity;
                 });
+        }
+
+        public async Task ShowOperationsAsync(IEnumerable<string> operationIds, CancellationToken ct)
+        {
+            if (operationIds.Any())
+            {
+                await _commandQueue.RequestRunAsync(
+                    KustoDbPriority.HighestPriority,
+                    async () =>
+                    {
+                        var operationIdsText = string.Join(", ", operationIds);
+                        var commandText = @$".show operations({operationIdsText})";
+                        var reader = await _provider.ExecuteControlCommandAsync(
+                            _databaseName,
+                            commandText);
+                        var result = reader.ToDataSet().Tables[0].Rows
+                            .Cast<DataRow>()
+                            .Select(r => new
+                            {
+                                OperationId = ((Guid)r["OperationId"]).ToString(),
+                                State = (string)r["State"],
+                                Status = (string)r["Status"],
+                                ShouldRetry = (bool)r["ShouldRetry"]
+                            })
+                            .ToImmutableArray();
+                    });
+            }
         }
 
         public async Task<string> ExportBlockAsync(
