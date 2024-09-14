@@ -2,7 +2,6 @@
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections;
@@ -12,7 +11,6 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Orchestration
 {
