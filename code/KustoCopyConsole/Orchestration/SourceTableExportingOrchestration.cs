@@ -129,6 +129,18 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
+            public RowItem RemoveBlockItem(string operationId)
+            {
+                lock (_operationIdToBlockMap)
+                {
+                    var blockItem = _operationIdToBlockMap[operationId];
+
+                    _operationIdToBlockMap.Remove(operationId);
+
+                    return blockItem;
+                }
+            }
+
             public void AddOperationId(RowItem blockItem)
             {
                 lock (_operationIdToBlockMap)
@@ -460,7 +472,13 @@ namespace KustoCopyConsole.Orchestration
                             switch (status.State)
                             {
                                 case "Completed":
-                                    throw new NotSupportedException();
+                                    var blockItem = clusterQueue.RemoveBlockItem(status.OperationId)
+                                        .Clone();
+
+                                    blockItem.State = SourceBlockState.Exported.ToString();
+                                    await RowItemGateway.AppendAsync(blockItem, ct);
+
+                                    break;
                                 case "Failed":
                                     throw new CopyException(
                                         $"Failed export '{status.OperationId}':  '{status.Status}'",
