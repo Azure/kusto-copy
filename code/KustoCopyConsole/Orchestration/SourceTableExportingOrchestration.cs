@@ -352,28 +352,30 @@ namespace KustoCopyConsole.Orchestration
             EnsureExportingTask(true, ct);
         }
 
-        private void EnsureExportingTask(bool target, CancellationToken ct)
+        private void EnsureExportingTask(bool isExportingTaskRunning, CancellationToken ct)
         {
             if (Interlocked.CompareExchange(
                 ref _isExportingTaskRunning,
-                Convert.ToInt32(target),
-                Convert.ToInt32(!target)) == Convert.ToInt32(!target))
+                Convert.ToInt32(isExportingTaskRunning),
+                Convert.ToInt32(!isExportingTaskRunning))
+                == Convert.ToInt32(!isExportingTaskRunning))
             {
-                if (target)
+                if (isExportingTaskRunning)
                 {
                     BackgroundTaskContainer.AddTask(OnExportingAsync(ct));
                 }
             }
         }
 
-        private void EnsureExportedTask(bool target, CancellationToken ct)
+        private void EnsureExportedTask(bool isExportedTaskRunning, CancellationToken ct)
         {
             if (Interlocked.CompareExchange(
                 ref _isExportedTaskRunning,
-                Convert.ToInt32(target),
-                Convert.ToInt32(!target)) == Convert.ToInt32(!target))
+                Convert.ToInt32(isExportedTaskRunning),
+                Convert.ToInt32(!isExportedTaskRunning))
+                == Convert.ToInt32(!isExportedTaskRunning))
             {
-                if (target)
+                if (isExportedTaskRunning)
                 {
                     BackgroundTaskContainer.AddTask(OnExportedAsync(ct));
                 }

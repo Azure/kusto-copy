@@ -43,30 +43,38 @@ namespace KustoCopyConsole.Kusto
                 });
         }
 
-        public async Task ShowOperationsAsync(IEnumerable<string> operationIds, CancellationToken ct)
+        public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
+            IEnumerable<string> operationIds,
+            CancellationToken ct)
         {
             if (operationIds.Any())
             {
-                await _commandQueue.RequestRunAsync(
+                return await _commandQueue.RequestRunAsync(
                     KustoDbPriority.HighestPriority,
                     async () =>
                     {
                         var operationIdsText = string.Join(", ", operationIds);
-                        var commandText = @$".show operations({operationIdsText})";
+                        var commandText = @$".show operations({operationIdsText})
+| project OperationId, State, Status, ShouldRetry";
                         var reader = await _provider.ExecuteControlCommandAsync(
                             _databaseName,
                             commandText);
                         var result = reader.ToDataSet().Tables[0].Rows
                             .Cast<DataRow>()
-                            .Select(r => new
-                            {
-                                OperationId = ((Guid)r["OperationId"]).ToString(),
-                                State = (string)r["State"],
-                                Status = (string)r["Status"],
-                                ShouldRetry = (bool)r["ShouldRetry"]
-                            })
+                            .Select(r => new ExportOperationStatus(
+                                ((Guid)r["OperationId"]).ToString(),
+                                (string)r["State"],
+                                (string)r["Status"],
+                                (bool)r["ShouldRetry"]
+                            ))
                             .ToImmutableArray();
+
+                        return result;
                     });
+            }
+            else
+            {
+                return ImmutableArray<ExportOperationStatus>.Empty;
             }
         }
 
