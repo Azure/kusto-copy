@@ -65,7 +65,7 @@ namespace KustoCopyConsole.Kusto
                                 ((Guid)r["OperationId"]).ToString(),
                                 (string)r["State"],
                                 (string)r["Status"],
-                                (bool)r["ShouldRetry"]
+                                Convert.ToBoolean((SByte)r["ShouldRetry"])
                             ))
                             .ToImmutableArray();
 

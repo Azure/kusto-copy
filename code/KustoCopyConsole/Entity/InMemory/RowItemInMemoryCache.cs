@@ -34,6 +34,10 @@ namespace KustoCopyConsole.Entity.InMemory
                 foreach (var sourceTableIteration in sourceTable.IterationMap.Values)
                 {
                     yield return sourceTableIteration.RowItem;
+                    foreach (var block in sourceTableIteration.BlockMap.Values)
+                    {
+                        yield return block.RowItem;
+                    }
                 }
             }
         }

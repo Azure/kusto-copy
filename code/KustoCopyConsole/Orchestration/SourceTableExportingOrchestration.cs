@@ -457,10 +457,14 @@ namespace KustoCopyConsole.Orchestration
                         }
                         foreach (var status in statusList)
                         {
-                            switch(status.Status)
+                            switch (status.State)
                             {
+                                case "Failed":
+                                    throw new CopyException(
+                                        $"Failed export '{status.OperationId}':  '{status.Status}'",
+                                        false);
                                 default:
-                                    throw new NotSupportedException($"Export status '{status.Status}'");
+                                    throw new NotSupportedException($"Export status '{status.State}'");
                             }
                         }
                     }
