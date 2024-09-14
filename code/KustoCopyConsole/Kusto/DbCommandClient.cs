@@ -121,8 +121,8 @@ let BlockData = ['{tableName}']
     | project IngestionTime = ingestion_time()
     | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
     | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
-    | where iif(isempty({INGESTION_TIME_START_PARAM}), true, IngestionTime>IngestionTimeStart);
-    | where iif(isempty({INGESTION_TIME_END_PARAM}), true, IngestionTime>IngestionTimeEnd);
+    | where iif(isempty({INGESTION_TIME_START_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_START_PARAM}))
+    | where iif(isempty({INGESTION_TIME_END_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_END_PARAM}));
 BlockData
 ";
                     var properties = new ClientRequestProperties();
@@ -133,7 +133,7 @@ BlockData
                     properties.SetParameter(INGESTION_TIME_END_PARAM, ingestionTimeEnd);
 
                     var reader = await _provider.ExecuteControlCommandAsync(
-                        string.Empty,
+                        _databaseName,
                         commandText,
                         properties);
                     var operationId = (Guid)reader.ToDataSet().Tables[0].Rows[0][0];

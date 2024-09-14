@@ -459,6 +459,8 @@ namespace KustoCopyConsole.Orchestration
                         {
                             switch (status.State)
                             {
+                                case "Completed":
+                                    throw new NotSupportedException();
                                 case "Failed":
                                     throw new CopyException(
                                         $"Failed export '{status.OperationId}':  '{status.Status}'",
