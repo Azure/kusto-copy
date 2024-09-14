@@ -119,16 +119,22 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public IImmutableList<string> GetOperationsIds()
+            public IImmutableList<string> GetOperationIds()
             {
-                return _operationIdToBlockMap
+                lock (_operationIdToBlockMap)
+                {
+                    return _operationIdToBlockMap
                     .Keys
                     .ToImmutableArray();
+                }
             }
 
             public void AddOperationId(RowItem blockItem)
             {
-                _operationIdToBlockMap.Add(blockItem.OperationId, blockItem);
+                lock (_operationIdToBlockMap)
+                {
+                    _operationIdToBlockMap.Add(blockItem.OperationId, blockItem);
+                }
             }
             #endregion
         }
@@ -266,6 +272,7 @@ namespace KustoCopyConsole.Orchestration
         #endregion
 
         private static readonly TimeSpan CACHE_REFRESH_RATE = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan OPERATION_CHECK_RATE = TimeSpan.FromSeconds(10);
 
         private readonly ClusterQueueCollection _clusterQueues;
         private volatile int _isExportingTaskRunning = Convert.ToInt32(false);
@@ -432,18 +439,33 @@ namespace KustoCopyConsole.Orchestration
                 foreach (var clusterQueue in _clusterQueues.GetClusterQueues())
                 {
                     var clusterCache = await clusterQueue.GetClusterCacheAsync(ct);
+                    var operationIds = clusterQueue.GetOperationIds();
 
                     if (clusterQueue.AnyOperation())
                     {
                         var commandClient = DbClientFactory.GetDbCommandClient(
                             clusterQueue.ClusterUri,
                             string.Empty);
-                        
-                        await commandClient.ShowOperationsAsync(
-                            clusterQueue.GetOperationsIds(),
+                        var statusList = await commandClient.ShowOperationsAsync(
+                            operationIds,
                             ct);
+
+                        if (statusList.Count < operationIds.Count)
+                        {
+                            throw new NotImplementedException(
+                                "Operation ID disapear, need to respawn export");
+                        }
+                        foreach (var status in statusList)
+                        {
+                            switch(status.Status)
+                            {
+                                default:
+                                    throw new NotSupportedException($"Export status '{status.Status}'");
+                            }
+                        }
                     }
                 }
+                await Task.Delay(OPERATION_CHECK_RATE);
             }
             EnsureExportedTask(false, ct);
             //  In case of racing condition
