@@ -12,6 +12,8 @@ namespace KustoCopyConsole.Kusto
 {
     internal class ProviderFactory : IDisposable
     {
+        private const string APPLICATION_NAME = "KustoCopy";
+
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dbCommandProviderMap;
@@ -27,8 +29,7 @@ namespace KustoCopyConsole.Kusto
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = new KustoConnectionStringBuilder(uri.ToString())
-                    .WithAadAzureTokenCredentialsAuthentication(credentials)
+                    Builder = CreateBuilder(credentials, uri)
                 });
             var destinationClusterUris = parameterization.Activities
                 .SelectMany(a => a.Destinations)
@@ -38,8 +39,7 @@ namespace KustoCopyConsole.Kusto
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = new KustoConnectionStringBuilder(GetIngestUri(uri).ToString())
-                    .WithAadAzureTokenCredentialsAuthentication(credentials)
+                    Builder = CreateBuilder(credentials, GetIngestUri(uri))
                 });
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)
@@ -48,8 +48,7 @@ namespace KustoCopyConsole.Kusto
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = new KustoConnectionStringBuilder(uri.ToString())
-                    .WithAadAzureTokenCredentialsAuthentication(credentials)
+                    Builder = CreateBuilder(credentials, uri)
                 });
 
             _commandProviderMap = sourceBuilders
@@ -68,6 +67,18 @@ namespace KustoCopyConsole.Kusto
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
+        }
+
+        private static KustoConnectionStringBuilder CreateBuilder(
+            TokenCredential credentials,
+            Uri uri)
+        {
+            var builder = new KustoConnectionStringBuilder(uri.ToString())
+                .WithAadAzureTokenCredentialsAuthentication(credentials);
+
+            builder.ApplicationNameForTracing = "APPLICATION_NAME";
+
+            return builder;
         }
         #endregion
 
