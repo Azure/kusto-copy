@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Entity
     {
         public override string ToString()
         {
-            return $"{{Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
+            return $"(Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
         }
     }
 }
