@@ -1,8 +1,10 @@
-﻿namespace KustoCopyConsole.Entity.InMemory
+﻿using KustoCopyConsole.Entity.RowItems;
+
+namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class SourceTableBlockCache : CacheBase
+    internal class SourceTableBlockCache : CacheBase<SourceBlockRowItem>
     {
-        public SourceTableBlockCache(RowItem item)
+        public SourceTableBlockCache(SourceBlockRowItem item)
             : base(item)
         {
         }

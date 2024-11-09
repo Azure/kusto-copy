@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -35,8 +36,7 @@ namespace KustoCopyConsole.Orchestration
             {
                 foreach (var iterationTable in sourceTable.IterationMap.Values)
                 {
-                    if (iterationTable.RowItem.ParseState<SourceTableState>() !=
-                        SourceTableState.Completed)
+                    if (iterationTable.RowItem.State != SourceTableState.Completed)
                     {
                         BackgroundTaskContainer.AddTask(
                             EnsureStagingTableAsync(iterationTable.RowItem, ct));
@@ -47,11 +47,11 @@ namespace KustoCopyConsole.Orchestration
         }
 
         private async Task EnsureStagingTableAsync(
-            RowItem sourceTableIterationItem,
+            SourceTableRowItem sourceTableIterationItem,
             CancellationToken ct)
         {
-            var sourceTableIdentity = sourceTableIterationItem.GetSourceTableIdentity();
-            var destinationTableIdentities = MapSourceToDestinations(sourceTableIdentity);
+            var destinationTableIdentities =
+                MapSourceToDestinations(sourceTableIterationItem.SourceTable);
 
             await Task.CompletedTask;
             throw new NotImplementedException();

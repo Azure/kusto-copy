@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -33,7 +34,7 @@ namespace KustoCopyConsole.Orchestration
                 .Select(t => t.IterationMap.Values)
                 .SelectMany(i => i)
                 .Select(i => i.RowItem)
-                .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Planning);
+                .Where(i => i.State == SourceTableState.Planning);
 
             foreach (var i in planningTableIterations)
             {
@@ -47,16 +48,19 @@ namespace KustoCopyConsole.Orchestration
         {
             base.OnProcessRowItemAppended(e, ct);
 
-            if (e.Item.RowType == RowType.SourceTable
-                && e.Item.ParseState<SourceTableState>() == SourceTableState.Planning)
+            if (e.Item is SourceTableRowItem st
+                && st.State == SourceTableState.Planning)
             {
-                BackgroundTaskContainer.AddTask(OnPlanningIterationAsync(e.Item, ct));
+                BackgroundTaskContainer.AddTask(
+                    OnPlanningIterationAsync((SourceTableRowItem)e.Item, ct));
             }
         }
 
-        private async Task OnPlanningIterationAsync(RowItem iterationItem, CancellationToken ct)
+        private async Task OnPlanningIterationAsync(
+            SourceTableRowItem iterationItem,
+            CancellationToken ct)
         {
-            var tableIdentity = iterationItem.GetSourceTableIdentity();
+            var tableIdentity = iterationItem.SourceTable;
             var tableCache = RowItemGateway.InMemoryCache.SourceTableMap[tableIdentity];
             var iterationCache = tableCache.IterationMap[iterationItem.IterationId];
             var lastBlock = iterationCache.BlockMap
@@ -96,19 +100,14 @@ namespace KustoCopyConsole.Orchestration
 
                         foreach(var distribution in aggregatedDistributions)
                         {
-                            var newBlockItem = new RowItem
-                            {
-                                RowType = RowType.SourceBlock,
-                                State = SourceBlockState.Planned.ToString(),
-                                SourceClusterUri = tableIdentity.ClusterUri.ToString(),
-                                SourceDatabaseName = tableIdentity.DatabaseName,
-                                SourceTableName = tableIdentity.TableName,
-                                IterationId = iterationItem.IterationId,
-                                BlockId = lastBlockItem == null ? 0 : lastBlockItem.BlockId + 1,
-                                IngestionTimeStart = distribution.IngestionTimeStart,
-                                IngestionTimeEnd = distribution.IngestionTimeEnd,
-                                Cardinality = distribution.Cardinality
-                            };
+                            var newBlockItem = new SourceBlockRowItem(
+                                SourceBlockState.Planned,
+                                tableIdentity,
+                                iterationItem.IterationId,
+                                lastBlockItem == null ? 0 : lastBlockItem.BlockId + 1,
+                                distribution.IngestionTimeStart,
+                                distribution.IngestionTimeEnd,
+                                string.Empty);
 
                             lastBlockItem = newBlockItem;
                             await RowItemGateway.AppendAsync(newBlockItem, ct);
@@ -124,9 +123,8 @@ namespace KustoCopyConsole.Orchestration
                 }
                 else
                 {   //  No more records:  mark table iteration as "Planned"
-                    var newIterationItem = iterationItem.Clone();
+                    var newIterationItem = iterationItem.ChangeState(SourceTableState.Planned);
 
-                    newIterationItem.State = SourceTableState.Planned.ToString();
                     await RowItemGateway.AppendAsync(newIterationItem, ct);
 
                     return;

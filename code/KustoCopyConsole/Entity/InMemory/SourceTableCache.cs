@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using KustoCopyConsole.Entity.RowItems;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
@@ -10,7 +11,7 @@ namespace KustoCopyConsole.Entity.InMemory
             IterationMap = iterationMap;
         }
 
-        public SourceTableCache(RowItem iterationItem)
+        public SourceTableCache(SourceTableRowItem iterationItem)
         {
             var iterationId = iterationItem.IterationId;
 

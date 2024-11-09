@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -30,15 +31,15 @@ namespace KustoCopyConsole.Orchestration
         private class ClusterQueue
         {
             private readonly object _lock = new object();
-            private readonly PriorityQueue<RowItem, KustoPriority> _exportQueue;
-            private readonly IDictionary<string, RowItem> _operationIdToBlockMap;
+            private readonly PriorityQueue<SourceBlockRowItem, KustoPriority> _exportQueue;
+            private readonly IDictionary<string, SourceBlockRowItem> _operationIdToBlockMap;
             private readonly Func<CancellationToken, Task<ClusterCache>> _clusterCacheFetch;
             private Task<ClusterCache>? _cacheTask;
 
             public ClusterQueue(
                 Uri clusterUri,
-                PriorityQueue<RowItem, KustoPriority> exportQueue,
-                IDictionary<string, RowItem> operationIdToBlockMap,
+                PriorityQueue<SourceBlockRowItem, KustoPriority> exportQueue,
+                IDictionary<string, SourceBlockRowItem> operationIdToBlockMap,
                 Func<CancellationToken, Task<ClusterCache>> clusterCacheFetch)
             {
                 ClusterUri = clusterUri;
@@ -77,7 +78,7 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public void EnqueueExport(RowItem blockItem, KustoPriority kustoPriority)
+            public void EnqueueExport(SourceBlockRowItem blockItem, KustoPriority kustoPriority)
             {
                 lock (_exportQueue)
                 {
@@ -85,7 +86,7 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public bool TryPeekExport([MaybeNullWhen(false)] out RowItem blockItem)
+            public bool TryPeekExport([MaybeNullWhen(false)] out SourceBlockRowItem blockItem)
             {
                 lock (_exportQueue)
                 {
@@ -129,7 +130,7 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public RowItem RemoveBlockItem(string operationId)
+            public SourceBlockRowItem RemoveBlockItem(string operationId)
             {
                 lock (_operationIdToBlockMap)
                 {
@@ -141,7 +142,7 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public void AddOperationId(RowItem blockItem)
+            public void AddOperationId(SourceBlockRowItem blockItem)
             {
                 lock (_operationIdToBlockMap)
                 {
@@ -196,9 +197,9 @@ namespace KustoCopyConsole.Orchestration
                 }
             }
 
-            public ClusterQueue EnsureClusterQueue(RowItem blockItem, CancellationToken ct)
+            public ClusterQueue EnsureClusterQueue(SourceBlockRowItem blockItem, CancellationToken ct)
             {
-                var tableIdentity = blockItem.GetSourceTableIdentity();
+                var tableIdentity = blockItem.SourceTable;
 
                 lock (_clusterToExportQueue)
                 {
@@ -206,8 +207,8 @@ namespace KustoCopyConsole.Orchestration
                     {
                         _clusterToExportQueue[tableIdentity.ClusterUri] = new ClusterQueue(
                             tableIdentity.ClusterUri,
-                            new PriorityQueue<RowItem, KustoPriority>(),
-                            new Dictionary<string, RowItem>(),
+                            new PriorityQueue<SourceBlockRowItem, KustoPriority>(),
+                            new Dictionary<string, SourceBlockRowItem>(),
                             ctt => FetchClusterCacheAsync(blockItem, ctt));
                     }
 
@@ -217,7 +218,7 @@ namespace KustoCopyConsole.Orchestration
 
             #region Fetch
             private async Task<ClusterCache> FetchClusterCacheAsync(
-                RowItem blockItem,
+                SourceBlockRowItem blockItem,
                 CancellationToken ct)
             {
                 var exportRootUrisTask = FetchExportRootUrisAsync(blockItem, ct);
@@ -227,9 +228,11 @@ namespace KustoCopyConsole.Orchestration
                 return new ClusterCache(DateTime.Now, exportRootUris, exportCapacity);
             }
 
-            private async Task<int> FetchExportCapacityAsync(RowItem blockItem, CancellationToken ct)
+            private async Task<int> FetchExportCapacityAsync(
+                SourceBlockRowItem blockItem,
+                CancellationToken ct)
             {
-                var tableIdentity = blockItem.GetSourceTableIdentity();
+                var tableIdentity = blockItem.SourceTable;
                 var client = _dbClientFactory.GetDbCommandClient(
                     tableIdentity.ClusterUri,
                     tableIdentity.DatabaseName);
@@ -239,10 +242,10 @@ namespace KustoCopyConsole.Orchestration
             }
 
             private async Task<IImmutableList<Uri>> FetchExportRootUrisAsync(
-                RowItem blockItem,
+                SourceBlockRowItem blockItem,
                 CancellationToken ct)
             {
-                var sourceTableId = blockItem.GetSourceTableIdentity();
+                var sourceTableId = blockItem.SourceTable;
 
                 if (_parameterization.StorageUrls.Any())
                 {
@@ -309,17 +312,15 @@ namespace KustoCopyConsole.Orchestration
                 {
                     foreach (var block in iteration.BlockMap.Values)
                     {
-                        if (block.RowItem.ParseState<SourceBlockState>()
-                            == SourceBlockState.Planned)
+                        if (block.RowItem.State == SourceBlockState.Planned)
                         {
                             BackgroundTaskContainer.AddTask(OnQueueExportingItemAsync(
                                 block.RowItem,
                                 ct));
                         }
-                        else if (block.RowItem.ParseState<SourceBlockState>()
-                            == SourceBlockState.Exporting)
+                        else if (block.RowItem.State == SourceBlockState.Exporting)
                         {
-                            var tableIdentity = block.RowItem.GetSourceTableIdentity();
+                            var tableIdentity = block.RowItem.SourceTable;
                             var clusterQueue = _clusterQueues.EnsureClusterQueue(block.RowItem, ct);
 
                             clusterQueue.AddOperationId(block.RowItem);
@@ -336,18 +337,17 @@ namespace KustoCopyConsole.Orchestration
         {
             base.OnProcessRowItemAppended(e, ct);
 
-            if (e.Item.RowType == RowType.SourceBlock
-                && e.Item.ParseState<SourceBlockState>() == SourceBlockState.Planned)
+            if (e.Item is SourceBlockRowItem sb && sb.State == SourceBlockState.Planned)
             {
                 BackgroundTaskContainer.AddTask(OnQueueExportingItemAsync(
-                    e.Item,
+                    sb,
                     ct));
             }
         }
 
-        private async Task OnQueueExportingItemAsync(RowItem blockItem, CancellationToken ct)
+        private async Task OnQueueExportingItemAsync(SourceBlockRowItem blockItem, CancellationToken ct)
         {
-            var tableIdentity = blockItem.GetSourceTableIdentity();
+            var tableIdentity = blockItem.SourceTable;
             var clusterQueue = _clusterQueues.EnsureClusterQueue(blockItem, ct);
 
             clusterQueue.EnqueueExport(
@@ -360,11 +360,9 @@ namespace KustoCopyConsole.Orchestration
                         blockItem.BlockId)));
 
             //  We test since it might be coming from a persisted state which is "exporting" already
-            if (blockItem.ParseState<SourceBlockState>() == SourceBlockState.Planned)
+            if (blockItem.State == SourceBlockState.Planned)
             {
-                var newBlockItem = blockItem.Clone();
-
-                newBlockItem.State = SourceBlockState.Exporting.ToString();
+                var newBlockItem = blockItem.ChangeState(SourceBlockState.Exporting);
 
                 await RowItemGateway.AppendAsync(newBlockItem, ct);
             }
@@ -412,22 +410,25 @@ namespace KustoCopyConsole.Orchestration
                     while (clusterQueue.GetOperationCount() < clusterCache.ExportCapacity
                         && clusterQueue.TryPeekExport(out var blockItem))
                     {
-                        var tableIdentity = blockItem.GetSourceTableIdentity();
+                        var tableIdentity = blockItem.SourceTable;
                         var commandClient = DbClientFactory.GetDbCommandClient(
                             tableIdentity.ClusterUri,
                             tableIdentity.DatabaseName);
+                        var sourceTableRowItem = RowItemGateway.InMemoryCache
+                            .SourceTableMap[tableIdentity]
+                            .IterationMap[blockItem.IterationId]
+                            .RowItem;
                         var operationId = await commandClient.ExportBlockAsync(
                             clusterCache.ExportRootUris,
                             tableIdentity.TableName,
-                            blockItem.CursorStart,
-                            blockItem.CursorEnd,
+                            sourceTableRowItem.CursorStart,
+                            sourceTableRowItem.CursorEnd,
                             blockItem.IngestionTimeStart,
                             blockItem.IngestionTimeEnd,
                             ct);
-                        var newBlockItem = blockItem.Clone();
+                        var newBlockItem = blockItem.ChangeState(SourceBlockState.Exporting);
 
-                        newBlockItem.State = SourceBlockState.Exporting.ToString();
-                        newBlockItem.OperationId = operationId;
+                        newBlockItem = newBlockItem with { OperationId = operationId };
                         await RowItemGateway.AppendAsync(newBlockItem, ct);
                         clusterQueue.AddOperationId(newBlockItem);
                         EnsureExportedTask(true, ct);
@@ -473,9 +474,8 @@ namespace KustoCopyConsole.Orchestration
                             {
                                 case "Completed":
                                     var blockItem = clusterQueue.RemoveBlockItem(status.OperationId)
-                                        .Clone();
+                                        .ChangeState(SourceBlockState.Exported);
 
-                                    blockItem.State = SourceBlockState.Exported.ToString();
                                     await RowItemGateway.AppendAsync(blockItem, ct);
 
                                     break;

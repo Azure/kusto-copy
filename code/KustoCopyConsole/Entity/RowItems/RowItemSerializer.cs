@@ -6,14 +6,14 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class RowItemSerializer
+    internal static class RowItemSerializer
     {
-        public void Serialize(RowItemBase item, TextWriter writer)
+        public static void Serialize(RowItemBase item, TextWriter writer)
         {
             throw new NotImplementedException();
         }
 
-        public RowItemBase Deserialize(TextReader reader)
+        public static RowItemBase? Deserialize(TextReader reader)
         {
             throw new NotImplementedException();
         }

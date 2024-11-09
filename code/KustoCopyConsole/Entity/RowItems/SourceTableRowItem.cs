@@ -10,7 +10,7 @@ namespace KustoCopyConsole.Entity.RowItems
     internal record SourceTableRowItem(
         SourceTableState State,
         TableIdentity SourceTable,
-        string IterationId,
+        long IterationId,
         string CursorStart,
         string CursorEnd,
         DateTime Created)
@@ -18,6 +18,15 @@ namespace KustoCopyConsole.Entity.RowItems
     {
         public override void Validate()
         {
+        }
+
+        public RowItemBase ChangeState(SourceTableState newState)
+        {
+            return this with
+            {
+                State = newState,
+                Updated = DateTime.Now
+            };
         }
     }
 }

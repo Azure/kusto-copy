@@ -10,15 +10,24 @@ namespace KustoCopyConsole.Entity.RowItems
     internal record SourceBlockRowItem(
         SourceBlockState State,
         TableIdentity SourceTable,
-        string IterationId,
+        long IterationId,
         long BlockId,
         string IngestionTimeStart,
         string IngestionTimeEnd,
-        DateTime Created)
-        : RowItemBase(Created, DateTime.Now)
+        string OperationId)
+        : RowItemBase(DateTime.Now, DateTime.Now)
     {
         public override void Validate()
         {
+        }
+
+        public SourceBlockRowItem ChangeState(SourceBlockState newState)
+        {
+            return this with
+            {
+                State = newState,
+                Updated = DateTime.Now
+            };
         }
     }
 }
