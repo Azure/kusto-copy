@@ -1,7 +1,9 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Orchestration;
+using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Runner;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -155,18 +157,18 @@ namespace KustoCopyConsole
             };
             try
             {
-                await using (var orchestration = await MainOrchestration.CreateAsync(
+                await using (var mainRunner = await MainRunner.CreateAsync(
                     options,
                     cancellationTokenSource.Token))
                 {
                     Trace.WriteLine("");
                     Trace.WriteLine("Parameterization:");
                     Trace.WriteLine("");
-                    Trace.WriteLine(orchestration.Parameterization.ToYaml());
+                    Trace.WriteLine(mainRunner.Parameterization.ToYaml());
                     Trace.WriteLine("");
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");
-                    await orchestration.ProcessAsync(cancellationTokenSource.Token);
+                    await mainRunner.RunAsync(cancellationTokenSource.Token);
                 }
             }
             finally
