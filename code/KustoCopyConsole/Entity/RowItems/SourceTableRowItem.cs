@@ -7,26 +7,29 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal record SourceTableRowItem(
-        SourceTableState State,
-        TableIdentity SourceTable,
-        long IterationId,
-        string CursorStart,
-        string CursorEnd,
-        DateTime Created)
-        : RowItemBase(Created, DateTime.Now)
+    internal class SourceTableRowItem: RowItemBase
     {
+        public SourceTableState State { get; set; }
+
+        public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
+
+        public long IterationId { get; set; }
+
+        public string CursorStart { get; set; } = string.Empty;
+
+        public string CursorEnd { get; set; } = string.Empty;
+
         public override void Validate()
         {
         }
 
         public RowItemBase ChangeState(SourceTableState newState)
         {
-            return this with
-            {
-                State = newState,
-                Updated = DateTime.Now
-            };
+            var clone = (SourceTableRowItem)Clone();
+
+            clone.State = newState;
+
+            return clone;
         }
     }
 }

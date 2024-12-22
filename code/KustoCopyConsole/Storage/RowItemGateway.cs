@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Storage
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
         private static readonly TimeSpan FLUSH_TIME = TimeSpan.FromSeconds(5);
 
+        private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
+
         private readonly IAppendStorage _appendStorage;
         private readonly BackgroundTaskContainer _backgroundTaskContainer = new();
         private readonly ConcurrentQueue<QueueItem> _bufferToWriteQueue = new();
@@ -43,6 +45,12 @@ namespace KustoCopyConsole.Storage
             InMemoryCache = cache;
         }
 
+        private static RowItemSerializer CreateRowItemSerializer()
+        {
+            return new RowItemSerializer()
+                .AddType(RowType.FileVersion, () => new FileVersionRowItem());
+        }
+
         public static async Task<RowItemGateway> CreateAsync(
             IAppendStorage appendStorage,
             CancellationToken ct)
@@ -57,16 +65,19 @@ namespace KustoCopyConsole.Storage
                 item.Validate();
             }
 
-            var newVersionItem = new FileVersionRowItem(CURRENT_FILE_VERSION);
+            var newVersionItem = new FileVersionRowItem
+            {
+                FileVersion = CURRENT_FILE_VERSION
+            };
             var cache = new RowItemInMemoryCache(allItems);
 
             using (var tempMemoryStream = new MemoryStream())
             using (var writer = new StreamWriter(tempMemoryStream))
             {
-                RowItemSerializer.Serialize(newVersionItem, writer);
-                foreach(var item in allItems)
+                _rowItemSerializer.Serialize(newVersionItem, writer);
+                foreach (var item in allItems)
                 {
-                    RowItemSerializer.Serialize(item, writer);
+                    _rowItemSerializer.Serialize(item, writer);
                 }
                 writer.Flush();
 
@@ -83,7 +94,7 @@ namespace KustoCopyConsole.Storage
             using (var bufferStream = new MemoryStream(readBuffer))
             using (var reader = new StreamReader(bufferStream))
             {
-                var version = RowItemSerializer.Deserialize(reader) as FileVersionRowItem;
+                var version = _rowItemSerializer.Deserialize(reader) as FileVersionRowItem;
 
                 if (version == null)
                 {
@@ -99,7 +110,7 @@ namespace KustoCopyConsole.Storage
 
                 do
                 {
-                    var item = RowItemSerializer.Deserialize(reader);
+                    var item = _rowItemSerializer.Deserialize(reader);
 
                     if (item != null)
                     {
@@ -170,7 +181,7 @@ namespace KustoCopyConsole.Storage
             using (var stream = new MemoryStream())
             using (var writer = new StreamWriter(stream))
             {
-                RowItemSerializer.Serialize(item, writer);
+                _rowItemSerializer.Serialize(item, writer);
                 writer.Flush();
 
                 return stream.ToArray();
