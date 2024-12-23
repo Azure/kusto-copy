@@ -1,71 +1,64 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
     internal class RowItemSerializer
     {
-        private static readonly Regex _csvRegex = new Regex(
-            @"(?<=^|,)(?:""((?:[^""]|"""")*)""|([^,\r\n]*))",
-            RegexOptions.Compiled);
-
-        private readonly IImmutableDictionary<RowType, Func<RowItemBase>> _factoryIndex;
+        private static readonly JsonSerializerOptions _serializerOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        };
+        private readonly IImmutableDictionary<RowType, Type> _rowTypeIndex;
         private readonly IImmutableDictionary<Type, RowType> _typeIndex;
-        private readonly IImmutableDictionary<Type, IImmutableList<PropertyInfo>>
-            _typeToPropertyMap;
 
         #region Constructors
         public RowItemSerializer()
         {
-            _factoryIndex = ImmutableDictionary<RowType, Func<RowItemBase>>.Empty;
+            _rowTypeIndex = ImmutableDictionary<RowType, Type>.Empty;
             _typeIndex = ImmutableDictionary<Type, RowType>.Empty;
-            _typeToPropertyMap = ImmutableDictionary<Type, IImmutableList<PropertyInfo>>.Empty;
         }
 
         private RowItemSerializer(
-            IImmutableDictionary<RowType, Func<RowItemBase>> factoryIndex,
-            IImmutableDictionary<Type, RowType> typeIndex,
-            IImmutableDictionary<Type, IImmutableList<PropertyInfo>> typeToPropertyMap)
+            IImmutableDictionary<RowType, Type> rowTypeIndex,
+            IImmutableDictionary<Type, RowType> typeIndex)
         {
-            _factoryIndex = factoryIndex;
+            _rowTypeIndex = rowTypeIndex;
             _typeIndex = typeIndex;
-            _typeToPropertyMap = typeToPropertyMap;
         }
         #endregion
 
-        public RowItemSerializer AddType(RowType rowType, Func<RowItemBase> factory)
+        public RowItemSerializer AddType<T>(RowType rowType)
+            where T : RowItemBase
         {
-            var type = factory().GetType();
-            var properties = OrderByParent(type, type.GetProperties())
-                .ToImmutableArray();
+            var type = typeof(T);
 
             return new RowItemSerializer(
-                _factoryIndex.Add(rowType, factory),
-                _typeIndex.Add(type, rowType),
-                _typeToPropertyMap.Add(type, properties));
+                _rowTypeIndex.Add(rowType, type),
+                _typeIndex.Add(type, rowType));
         }
 
         #region Serialize
-        public void Serialize(RowItemBase item, TextWriter writer)
+        public void Serialize(RowItemBase item, Stream stream)
         {
             if (_typeIndex.TryGetValue(item.GetType(), out var rowType))
             {
-                var properties = _typeToPropertyMap[item.GetType()];
-
-                WriteEnum(writer, rowType);
-
-                foreach (var property in properties)
+                using (var writer = new StreamWriter(stream))
                 {
-                    var propertyValue = property.GetValue(item, null);
-
-                    WriteSeparator(writer);
-                    WriteValue(writer, propertyValue);
+                    writer.Write(@$"{{ ""rowType"" : ""{rowType}"", ""row"" : ");
+                    writer.Flush();
+                    JsonSerializer.Serialize(stream, item, item.GetType(), _serializerOptions);
+                    writer.Write(" }");
                 }
             }
             else
@@ -74,129 +67,138 @@ namespace KustoCopyConsole.Entity.RowItems
                     $"Row type {item.GetType().Name} isn't supported");
             }
         }
-
-        private void WriteValue(TextWriter writer, object? propertyValue)
-        {
-            switch (propertyValue)
-            {
-                case string text:
-                    WriteString(writer, text);
-                    break;
-                case Enum enumValue:
-                    WriteEnum(writer, enumValue);
-                    break;
-                case DateTime datetimeValue:
-                    WriteString(writer, datetimeValue.ToString());
-                    break;
-                case Version versionValue:
-                    WriteString(writer, versionValue.ToString());
-                    break;
-
-                default:
-                    throw new NotSupportedException(
-                        $"Type {propertyValue?.GetType().Name} isn't supported in serialization");
-            }
-        }
-
-        private static void WriteSeparator(TextWriter writer)
-        {
-            writer.Write(", ");
-        }
-
-        private static void WriteString(TextWriter writer, string text)
-        {
-            writer.Write(text);
-        }
-
-        private static void WriteEnum<T>(TextWriter writer, T enumValue)
-            where T : Enum
-        {
-            WriteString(writer, enumValue.ToString());
-        }
         #endregion
 
         #region Deserialize
-        public RowItemBase? Deserialize(TextReader reader)
+        public IImmutableList<RowItemBase> Deserialize(ReadOnlySpan<byte> buffer)
         {
-            var line = reader.ReadLine();
+            var builder = ImmutableList<RowItemBase>.Empty.ToBuilder();
+            var remainingBuffer = buffer;
 
-            if (line != null)
+            while (!IsWhitespaceOnly(remainingBuffer))
             {
-                var matches = _csvRegex
-                    .Matches(line)
-                    .Select(m => m.Value)
-                    .ToImmutableArray();
+                var reader = new Utf8JsonReader(remainingBuffer, true, default);
+                var rowType = ReadRowType(ref reader);
+                var rowItemType = _rowTypeIndex[rowType];
+                var row = ReadRow(ref reader, rowItemType);
 
-                if (matches.Length == 1)
-                {
-                    throw new InvalidDataException($"Impossible to parse CSV line:  '{line}'");
-                }
-                if (matches.Length > 1)
-                {
-                    var rowType = Enum.Parse<RowType>(matches.First());
-                    var rowItem = _factoryIndex[rowType]();
-                    var properties = _typeToPropertyMap[rowItem.GetType()];
-                    var pairs = matches.Skip(1).Zip(properties, (m, p) => new
-                    {
-                        Text = m,
-                        Property = p
-                    });
-
-                    if (matches.Length - 1 != properties.Count)
-                    {
-                        throw new InvalidDataException(
-                            $"Line with wrong number of columns:  '{line}'");
-                    }
-                    foreach (var pair in pairs)
-                    {
-                        if (pair.Property.PropertyType == typeof(string))
-                        {
-                            pair.Property.SetValue(rowItem, pair.Text);
-                        }
-                        else if (pair.Property.PropertyType == typeof(DateTime))
-                        {
-                            pair.Property.SetValue(rowItem, DateTime.Parse(pair.Text));
-                        }
-                        else if (pair.Property.PropertyType == typeof(Version))
-                        {
-                            pair.Property.SetValue(rowItem, Version.Parse(pair.Text));
-                        }
-                        else
-                        {
-                            throw new NotSupportedException(
-                                $"Type of property not supported for deserialization:  " +
-                                $"'{pair.Property.PropertyType.Name}'");
-                        }
-                    }
-
-                    return rowItem;
-                }
+                ReadEndObject(ref reader);
+                builder.Add(row);
+                remainingBuffer = remainingBuffer.Slice((int)reader.BytesConsumed);
             }
 
-            return null;
+            return builder.ToImmutableArray();
         }
-        #endregion
 
-        private static IEnumerable<PropertyInfo> OrderByParent(
-            Type parentType,
-            IEnumerable<PropertyInfo> propertyInfos)
+        private void ReadEndObject(ref Utf8JsonReader reader)
         {
-            var directProperties = propertyInfos
-                .Where(p => p.DeclaringType == parentType)
-                .OrderBy(p => p.Name);
-            var indirectProperties = propertyInfos
-                .Where(p => p.DeclaringType != parentType);
-            var baseType = parentType.BaseType!;
-
-            if (baseType == typeof(object))
+            reader.Read();
+            if (reader.TokenType == JsonTokenType.EndObject)
             {
-                return directProperties;
             }
             else
             {
-                return OrderByParent(baseType, indirectProperties)
-                    .Concat(directProperties);
+                throw new InvalidDataException(
+                    $"Expect end-of-object, not '{reader.TokenType}'");
             }
         }
+
+        private static RowItemBase ReadRow(ref Utf8JsonReader reader, Type rowItemType)
+        {
+            reader.Read();
+            if (reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var propertyName = reader.GetString();
+
+                reader.Read(); // Move to property value
+                if (propertyName == "row")
+                {
+                    var rowJson = JsonDocument.ParseValue(ref reader).RootElement.GetRawText();
+                    var row = (RowItemBase?)JsonSerializer.Deserialize(
+                        rowJson,
+                        rowItemType,
+                        _serializerOptions);
+
+                    if (row == null)
+                    {
+                        throw new InvalidDataException(
+                            $"Expected valid row object instead of '{rowJson}'");
+                    }
+
+                    return row;
+                }
+                else
+                {
+                    throw new InvalidDataException(
+                        $"Expect 'row' JSON Property, not '{propertyName}'");
+                }
+            }
+            else
+            {
+                throw new InvalidDataException("Expect JSON Property for 'row'");
+            }
+        }
+
+        private static RowType ReadRowType(ref Utf8JsonReader reader)
+        {
+            reader.Read();
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                reader.Read();
+                if (reader.TokenType == JsonTokenType.PropertyName)
+                {
+                    var propertyName = reader.GetString();
+
+                    reader.Read(); // Move to property value
+                    if (propertyName == "rowType")
+                    {
+                        var rowTypeText = reader.GetString();
+
+                        if (rowTypeText == null)
+                        {
+                            throw new InvalidDataException("Expect 'rowType' JSON Property to be non-null");
+                        }
+
+                        var rowType = Enum.Parse<RowType>(rowTypeText);
+
+                        return rowType;
+                    }
+                    else
+                    {
+                        throw new InvalidDataException(
+                            $"Expect 'rowType' JSON Property, not '{propertyName}'");
+                    }
+                }
+                else
+                {
+                    throw new InvalidDataException("Expect JSON Property for 'rowType'");
+                }
+            }
+            else
+            {
+                throw new InvalidDataException("Expect start JSON object");
+            }
+        }
+
+        private static bool IsWhitespaceOnly(ReadOnlySpan<byte> buffer)
+        {
+            if (buffer.Length == 0)
+            {
+                return true;
+            }
+            else
+            {
+                foreach (var b in buffer)
+                {
+                    if (!char.IsWhiteSpace((char)b))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+        #endregion
     }
 }
