@@ -1,6 +1,4 @@
 ﻿using Azure.Core;
-using Azure.Identity;
-using CsvHelper;
 using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;

@@ -1,7 +1,7 @@
-﻿using CsvHelper;
-using KustoCopyConsole.Concurrency;
+﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Storage
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
         private static readonly TimeSpan FLUSH_TIME = TimeSpan.FromSeconds(5);
 
+        private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
+
         private readonly IAppendStorage _appendStorage;
         private readonly BackgroundTaskContainer _backgroundTaskContainer = new();
         private readonly ConcurrentQueue<QueueItem> _bufferToWriteQueue = new();
@@ -43,69 +45,62 @@ namespace KustoCopyConsole.Storage
             InMemoryCache = cache;
         }
 
+        private static RowItemSerializer CreateRowItemSerializer()
+        {
+            return new RowItemSerializer()
+                .AddType<FileVersionRowItem>(RowType.FileVersion)
+                .AddType<SourceTableRowItem>(RowType.SourceTable)
+                .AddType<SourceBlockRowItem>(RowType.SourceBlock);
+        }
+
         public static async Task<RowItemGateway> CreateAsync(
             IAppendStorage appendStorage,
             CancellationToken ct)
         {
             var readBuffer = await appendStorage.LoadAllAsync(ct);
-            var allItems = readBuffer.Length == 0
-                ? Array.Empty<RowItem>()
-                : DeserializeBuffer(readBuffer);
+            var allItems = _rowItemSerializer.Deserialize(readBuffer);
 
             if (allItems.Any())
             {
-                var versionItem = allItems.First();
+                var version = allItems.First() as FileVersionRowItem;
 
-                if (!Version.TryParse(versionItem.FileVersion, out var version)
-                    || version != CURRENT_FILE_VERSION)
+                if (version == null)
                 {
-                    throw new CopyException($"Incompatible file version:  '{version}'", false);
+                    throw new InvalidDataException("First row is expected to be a version row");
                 }
-                allItems = allItems.Skip(1);
+                if (version.FileVersion != CURRENT_FILE_VERSION)
+                {
+                    throw new NotSupportedException(
+                        $"Only support version is {CURRENT_FILE_VERSION}");
+                }
+                //  Validate all
+                foreach (var item in allItems)
+                {
+                    item.Validate();
+                }
+                //  Remove file version from it
+                allItems = allItems.RemoveAt(0);
             }
 
-            var newVersionItem = new RowItem
+            var newVersionItem = new FileVersionRowItem
             {
-                FileVersion = CURRENT_FILE_VERSION.ToString(),
-                RowType = RowType.FileVersion,
+                FileVersion = CURRENT_FILE_VERSION
             };
-
-            foreach (var item in allItems)
-            {
-                item.Validate();
-            }
-
             var cache = new RowItemInMemoryCache(allItems);
 
             using (var tempMemoryStream = new MemoryStream())
-            using (var writer = new StreamWriter(tempMemoryStream))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                csv.WriteHeader<RowItem>();
-                csv.NextRecord();
-                csv.WriteRecords(cache.GetItems().Prepend(newVersionItem));
-                csv.NextRecord();
-                csv.Flush();
-                writer.Flush();
+                _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
+                foreach (var item in allItems)
+                {
+                    _rowItemSerializer.Serialize(item, tempMemoryStream);
+                }
 
                 var writeBuffer = tempMemoryStream.ToArray();
 
                 await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
 
                 return new RowItemGateway(appendStorage, cache);
-            }
-        }
-
-        private static IEnumerable<RowItem> DeserializeBuffer(byte[] readBuffer)
-        {
-            using (var bufferStream = new MemoryStream(readBuffer))
-            using (var reader = new StreamReader(bufferStream))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-            {
-                var allItems = csv.GetRecords<RowItem>()
-                    .ToImmutableArray();
-
-                return allItems;
             }
         }
         #endregion
@@ -118,7 +113,7 @@ namespace KustoCopyConsole.Storage
             await _appendStorage.DisposeAsync();
         }
 
-        public async Task<RowItemAppend> AppendAsync(RowItem item, CancellationToken ct)
+        public async Task<RowItemAppend> AppendAsync(RowItemBase item, CancellationToken ct)
         {
             var binaryItem = GetBytes(item);
 
@@ -160,16 +155,11 @@ namespace KustoCopyConsole.Storage
             await _backgroundTaskContainer.ObserveCompletedTasksAsync(ct);
         }
 
-        private static byte[] GetBytes(RowItem item)
+        private static byte[] GetBytes(RowItemBase item)
         {
             using (var stream = new MemoryStream())
-            using (var writer = new StreamWriter(stream))
-            using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                csv.WriteRecord(item);
-                csv.NextRecord();
-                csv.Flush();
-                writer.Flush();
+                _rowItemSerializer.Serialize(item, stream);
 
                 return stream.ToArray();
             }

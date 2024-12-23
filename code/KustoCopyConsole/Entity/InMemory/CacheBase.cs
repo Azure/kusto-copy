@@ -1,12 +1,15 @@
-﻿namespace KustoCopyConsole.Entity.InMemory
+﻿using KustoCopyConsole.Entity.RowItems;
+
+namespace KustoCopyConsole.Entity.InMemory
 {
-    internal abstract class CacheBase
+    internal abstract class CacheBase<T>
+        where T : RowItemBase
     {
-        public CacheBase(RowItem rowItem)
+        public CacheBase(T rowItem)
         {
             RowItem = rowItem;
         }
 
-        public RowItem RowItem { get; }
+        public T RowItem { get; }
     }
 }

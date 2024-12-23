@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -38,19 +39,23 @@ namespace KustoCopyConsole.Orchestration
                     : Array.Empty<SourceTableIterationCache>();
                 var completedItems = cachedIterations
                     .Select(c => c.RowItem)
-                    .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed);
+                    .Where(i => i.State == SourceTableState.Completed);
                 var activeItems = cachedIterations
                     .Select(c => c.RowItem)
-                    .Where(i => i.ParseState<SourceTableState>() != SourceTableState.Completed);
+                    .Where(i => i.State != SourceTableState.Completed);
 
                 if (!cachedIterations.Any()
                     || (a.TableOption.ExportMode != ExportMode.BackFillOnly && !activeItems.Any()))
                 {
                     var lastIteration = cachedIterations.Any()
                         ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
-                        : new RowItem();
-                    var newIterationId = lastIteration.IterationId + 1;
-                    var cursorStart = lastIteration.CursorEnd;
+                        : null;
+                    var newIterationId = lastIteration != null
+                        ? lastIteration.IterationId + 1
+                        : 1;
+                    var cursorStart = lastIteration != null
+                        ? lastIteration.CursorEnd
+                        : string.Empty;
 
                     await StartIterationAsync(tableIdentity, newIterationId, cursorStart, ct);
                 }
@@ -67,13 +72,10 @@ namespace KustoCopyConsole.Orchestration
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
-            var newIterationItem = new RowItem
+            var newIterationItem = new SourceTableRowItem
             {
-                RowType = RowType.SourceTable,
-                State = SourceTableState.Planning.ToString(),
-                SourceClusterUri = tableIdentity.ClusterUri.ToString(),
-                SourceDatabaseName = tableIdentity.DatabaseName,
-                SourceTableName = tableIdentity.TableName,
+                State = SourceTableState.Planning,
+                SourceTable = tableIdentity,
                 IterationId = newIterationId,
                 CursorStart = cursorStart,
                 CursorEnd = cursorEnd

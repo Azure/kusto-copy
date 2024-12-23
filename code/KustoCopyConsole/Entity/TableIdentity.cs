@@ -6,14 +6,14 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity
 {
-    public record TableIdentity(
-        Uri ClusterUri,
-        string DatabaseName,
-        string TableName)
+    public record TableIdentity(Uri ClusterUri, string DatabaseName, string TableName)
     {
+        public static TableIdentity Empty { get; }
+            = new TableIdentity(new Uri("http://tempuri"), string.Empty, string.Empty);
+
         public override string ToString()
         {
-            return $"{{Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
+            return $"(Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
         }
     }
 }

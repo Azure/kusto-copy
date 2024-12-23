@@ -3,6 +3,7 @@ using Azure.Core;
 using Azure.Identity;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -206,8 +207,8 @@ namespace KustoCopyConsole.Orchestration
             TaskCompletionSource monitoringCompletenessSource,
             CancellationToken ct)
         {
-            if (e.Item.RowType == RowType.SourceTable
-                && e.Item.ParseState<SourceTableState>() == SourceTableState.Completed)
+            if (e.Item is SourceTableRowItem st
+                && st.State == SourceTableState.Completed)
             {
                 MonitorCompleteness(processStartTime, monitoringCompletenessSource);
             }
@@ -234,9 +235,9 @@ namespace KustoCopyConsole.Orchestration
                         : Array.Empty<SourceTableIterationCache>();
                     var completedItems = cachedIterations
                         .Select(c => c.RowItem)
-                        .Where(i => i.ParseState<SourceTableState>() == SourceTableState.Completed);
+                        .Where(i => i.State == SourceTableState.Completed);
                     var lastCompletedItem = completedItems.Any()
-                        ? completedItems.ArgMax(i => i.Updated!.Value)
+                        ? completedItems.ArgMax(i => i.Updated)
                         : null;
 
                     if (a.TableOption.ExportMode == ExportMode.BackFillOnly

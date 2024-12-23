@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.RowItems;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -13,7 +14,7 @@ namespace KustoCopyConsole.Entity.InMemory
         private volatile IImmutableDictionary<TableIdentity, SourceTableCache> _sourceTableMap =
             ImmutableDictionary<TableIdentity, SourceTableCache>.Empty;
 
-        public RowItemInMemoryCache(IEnumerable<RowItem> items)
+        public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
         {
             lock (_lock)
             {
@@ -27,7 +28,7 @@ namespace KustoCopyConsole.Entity.InMemory
         public IImmutableDictionary<TableIdentity, SourceTableCache> SourceTableMap
             => _sourceTableMap;
 
-        public IEnumerable<RowItem> GetItems()
+        public IEnumerable<RowItemBase> GetItems()
         {
             foreach (var sourceTable in SourceTableMap.Values)
             {
@@ -42,37 +43,33 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        public void AppendItem(RowItem item)
+        public void AppendItem(RowItemBase item)
         {
             lock (_lock)
             {
-                if (item.RowType != RowType.FileVersion && item.RowType != RowType.Unspecified)
-                {
-                    Interlocked.Exchange(
-                        ref _sourceTableMap,
-                        AppendItemToCache(item));
-                }
+                Interlocked.Exchange(ref _sourceTableMap, AppendItemToCache(item));
             }
         }
 
         private IImmutableDictionary<TableIdentity, SourceTableCache> AppendItemToCache(
-            RowItem item)
+            RowItemBase item)
         {
-            switch (item.RowType)
+            switch (item)
             {
-                case RowType.SourceTable:
-                    return AppendSourceTable(item);
-                case RowType.SourceBlock:
-                    return AppendSourceBlock(item);
+                case SourceTableRowItem st:
+                    return AppendSourceTable(st);
+                case SourceBlockRowItem sb:
+                    return AppendSourceBlock(sb);
                 default:
-                    throw new NotSupportedException($"Not supported row type:  {item.RowType}");
+                    throw new NotSupportedException(
+                        $"Not supported row item type:  {item.GetType().Name}");
             }
         }
 
         private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceTable(
-            RowItem item)
+            SourceTableRowItem item)
         {
-            var tableId = item.GetSourceTableIdentity();
+            var tableId = item.SourceTable;
 
             if (_sourceTableMap.ContainsKey(tableId))
             {
@@ -88,9 +85,9 @@ namespace KustoCopyConsole.Entity.InMemory
         }
 
         private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceBlock(
-            RowItem item)
+            SourceBlockRowItem item)
         {
-            var tableId = item.GetSourceTableIdentity();
+            var tableId = item.SourceTable;
 
             if (_sourceTableMap.ContainsKey(tableId))
             {
