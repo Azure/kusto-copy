@@ -100,7 +100,7 @@ namespace KustoCopyConsole.Storage
                 {
                     throw new InvalidDataException("First row is expected to be a version row");
                 }
-                if (version.FileVersion == CURRENT_FILE_VERSION)
+                if (version.FileVersion != CURRENT_FILE_VERSION)
                 {
                     throw new NotSupportedException(
                         $"Only support version is {CURRENT_FILE_VERSION}");

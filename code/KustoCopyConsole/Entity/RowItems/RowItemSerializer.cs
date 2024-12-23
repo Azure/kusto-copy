@@ -4,12 +4,17 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
     internal class RowItemSerializer
     {
+        private static readonly Regex _csvRegex = new Regex(
+            @"(?<=^|,)(?:""((?:[^""]|"""")*)""|([^,\r\n]*))",
+            RegexOptions.Compiled);
+
         private readonly IImmutableDictionary<RowType, Func<RowItemBase>> _factoryIndex;
         private readonly IImmutableDictionary<Type, RowType> _typeIndex;
         private readonly IImmutableDictionary<Type, IImmutableList<PropertyInfo>>
@@ -110,10 +115,67 @@ namespace KustoCopyConsole.Entity.RowItems
         }
         #endregion
 
+        #region Deserialize
         public RowItemBase? Deserialize(TextReader reader)
         {
-            throw new NotImplementedException();
+            var line = reader.ReadLine();
+
+            if (line != null)
+            {
+                var matches = _csvRegex
+                    .Matches(line)
+                    .Select(m => m.Value)
+                    .ToImmutableArray();
+
+                if (matches.Length == 1)
+                {
+                    throw new InvalidDataException($"Impossible to parse CSV line:  '{line}'");
+                }
+                if (matches.Length > 1)
+                {
+                    var rowType = Enum.Parse<RowType>(matches.First());
+                    var rowItem = _factoryIndex[rowType]();
+                    var properties = _typeToPropertyMap[rowItem.GetType()];
+                    var pairs = matches.Skip(1).Zip(properties, (m, p) => new
+                    {
+                        Text = m,
+                        Property = p
+                    });
+
+                    if (matches.Length - 1 != properties.Count)
+                    {
+                        throw new InvalidDataException(
+                            $"Line with wrong number of columns:  '{line}'");
+                    }
+                    foreach (var pair in pairs)
+                    {
+                        if (pair.Property.PropertyType == typeof(string))
+                        {
+                            pair.Property.SetValue(rowItem, pair.Text);
+                        }
+                        else if (pair.Property.PropertyType == typeof(DateTime))
+                        {
+                            pair.Property.SetValue(rowItem, DateTime.Parse(pair.Text));
+                        }
+                        else if (pair.Property.PropertyType == typeof(Version))
+                        {
+                            pair.Property.SetValue(rowItem, Version.Parse(pair.Text));
+                        }
+                        else
+                        {
+                            throw new NotSupportedException(
+                                $"Type of property not supported for deserialization:  " +
+                                $"'{pair.Property.PropertyType.Name}'");
+                        }
+                    }
+
+                    return rowItem;
+                }
+            }
+
+            return null;
         }
+        #endregion
 
         private static IEnumerable<PropertyInfo> OrderByParent(
             Type parentType,
