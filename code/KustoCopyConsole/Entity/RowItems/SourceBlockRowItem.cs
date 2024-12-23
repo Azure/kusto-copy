@@ -7,27 +7,33 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal record SourceBlockRowItem(
-        SourceBlockState State,
-        TableIdentity SourceTable,
-        long IterationId,
-        long BlockId,
-        string IngestionTimeStart,
-        string IngestionTimeEnd,
-        string OperationId)
-        : RowItemBase(DateTime.Now, DateTime.Now)
+    internal class SourceBlockRowItem : RowItemBase
     {
+        public SourceBlockState State { get; set; }
+
+        public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
+
+        public long IterationId { get; set; }
+
+        public long BlockId { get; set; }
+
+        public string IngestionTimeStart { get; set; } = string.Empty;
+
+        public string IngestionTimeEnd { get; set; } = string.Empty;
+
+        public string OperationId { get; set; } = string.Empty;
+
         public override void Validate()
         {
         }
 
         public SourceBlockRowItem ChangeState(SourceBlockState newState)
         {
-            return this with
-            {
-                State = newState,
-                Updated = DateTime.Now
-            };
+            var clone = (SourceBlockRowItem)Clone();
+
+            clone.State = newState;
+
+            return clone;
         }
     }
 }

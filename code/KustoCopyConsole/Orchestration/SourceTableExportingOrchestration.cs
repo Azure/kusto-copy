@@ -428,7 +428,7 @@ namespace KustoCopyConsole.Orchestration
                             ct);
                         var newBlockItem = blockItem.ChangeState(SourceBlockState.Exporting);
 
-                        newBlockItem = newBlockItem with { OperationId = operationId };
+                        newBlockItem.OperationId = operationId;
                         await RowItemGateway.AppendAsync(newBlockItem, ct);
                         clusterQueue.AddOperationId(newBlockItem);
                         EnsureExportedTask(true, ct);

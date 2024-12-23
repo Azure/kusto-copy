@@ -98,16 +98,17 @@ namespace KustoCopyConsole.Orchestration
                             distributions,
                             timeResolutionInSeconds != 1);
 
-                        foreach(var distribution in aggregatedDistributions)
+                        foreach (var distribution in aggregatedDistributions)
                         {
-                            var newBlockItem = new SourceBlockRowItem(
-                                SourceBlockState.Planned,
-                                tableIdentity,
-                                iterationItem.IterationId,
-                                lastBlockItem == null ? 0 : lastBlockItem.BlockId + 1,
-                                distribution.IngestionTimeStart,
-                                distribution.IngestionTimeEnd,
-                                string.Empty);
+                            var newBlockItem = new SourceBlockRowItem
+                            {
+                                State = SourceBlockState.Planned,
+                                SourceTable = tableIdentity,
+                                IterationId = iterationItem.IterationId,
+                                BlockId = lastBlockItem == null ? 0 : lastBlockItem.BlockId + 1,
+                                IngestionTimeStart = distribution.IngestionTimeStart,
+                                IngestionTimeEnd = distribution.IngestionTimeEnd
+                            };
 
                             lastBlockItem = newBlockItem;
                             await RowItemGateway.AppendAsync(newBlockItem, ct);

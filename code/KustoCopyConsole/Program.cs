@@ -1,7 +1,9 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Orchestration;
+using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Runner;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -146,6 +148,7 @@ namespace KustoCopyConsole
 
             var cancellationTokenSource = new CancellationTokenSource();
             var taskCompletionSource = new TaskCompletionSource();
+            var parameterization = MainJobParameterization.FromOptions(options);
 
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
@@ -155,18 +158,20 @@ namespace KustoCopyConsole
             };
             try
             {
-                await using (var orchestration = await MainOrchestration.CreateAsync(
-                    options,
+                await using (var mainRunner = await MainRunner.CreateAsync(
+                    parameterization,
+                    options.Authentication,
+                    options.LogFilePath,
                     cancellationTokenSource.Token))
                 {
                     Trace.WriteLine("");
                     Trace.WriteLine("Parameterization:");
                     Trace.WriteLine("");
-                    Trace.WriteLine(orchestration.Parameterization.ToYaml());
+                    Trace.WriteLine(parameterization.ToYaml());
                     Trace.WriteLine("");
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");
-                    await orchestration.ProcessAsync(cancellationTokenSource.Token);
+                    await mainRunner.RunAsync(cancellationTokenSource.Token);
                 }
             }
             finally

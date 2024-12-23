@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Storage
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
         private static readonly TimeSpan FLUSH_TIME = TimeSpan.FromSeconds(5);
 
+        private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
+
         private readonly IAppendStorage _appendStorage;
         private readonly BackgroundTaskContainer _backgroundTaskContainer = new();
         private readonly ConcurrentQueue<QueueItem> _bufferToWriteQueue = new();
@@ -43,74 +45,62 @@ namespace KustoCopyConsole.Storage
             InMemoryCache = cache;
         }
 
+        private static RowItemSerializer CreateRowItemSerializer()
+        {
+            return new RowItemSerializer()
+                .AddType<FileVersionRowItem>(RowType.FileVersion)
+                .AddType<SourceTableRowItem>(RowType.SourceTable)
+                .AddType<SourceBlockRowItem>(RowType.SourceBlock);
+        }
+
         public static async Task<RowItemGateway> CreateAsync(
             IAppendStorage appendStorage,
             CancellationToken ct)
         {
             var readBuffer = await appendStorage.LoadAllAsync(ct);
-            var allItems = readBuffer.Length == 0
-                ? Array.Empty<RowItemBase>()
-                : DeserializeBuffer(readBuffer);
+            var allItems = _rowItemSerializer.Deserialize(readBuffer);
 
-            foreach (var item in allItems)
+            if (allItems.Any())
             {
-                item.Validate();
+                var version = allItems.First() as FileVersionRowItem;
+
+                if (version == null)
+                {
+                    throw new InvalidDataException("First row is expected to be a version row");
+                }
+                if (version.FileVersion != CURRENT_FILE_VERSION)
+                {
+                    throw new NotSupportedException(
+                        $"Only support version is {CURRENT_FILE_VERSION}");
+                }
+                //  Validate all
+                foreach (var item in allItems)
+                {
+                    item.Validate();
+                }
+                //  Remove file version from it
+                allItems = allItems.RemoveAt(0);
             }
 
-            var newVersionItem = new FileVersionRowItem(CURRENT_FILE_VERSION);
+            var newVersionItem = new FileVersionRowItem
+            {
+                FileVersion = CURRENT_FILE_VERSION
+            };
             var cache = new RowItemInMemoryCache(allItems);
 
             using (var tempMemoryStream = new MemoryStream())
-            using (var writer = new StreamWriter(tempMemoryStream))
             {
-                RowItemSerializer.Serialize(newVersionItem, writer);
-                foreach(var item in allItems)
+                _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
+                foreach (var item in allItems)
                 {
-                    RowItemSerializer.Serialize(item, writer);
+                    _rowItemSerializer.Serialize(item, tempMemoryStream);
                 }
-                writer.Flush();
 
                 var writeBuffer = tempMemoryStream.ToArray();
 
                 await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
 
                 return new RowItemGateway(appendStorage, cache);
-            }
-        }
-
-        private static IEnumerable<RowItemBase> DeserializeBuffer(byte[] readBuffer)
-        {
-            using (var bufferStream = new MemoryStream(readBuffer))
-            using (var reader = new StreamReader(bufferStream))
-            {
-                var version = RowItemSerializer.Deserialize(reader) as FileVersionRowItem;
-
-                if (version == null)
-                {
-                    throw new InvalidDataException("First row is expected to be a version row");
-                }
-                if (version.FileVersion == CURRENT_FILE_VERSION)
-                {
-                    throw new NotSupportedException(
-                        $"Only support version is {CURRENT_FILE_VERSION}");
-                }
-
-                var list = new List<RowItemBase>();
-
-                do
-                {
-                    var item = RowItemSerializer.Deserialize(reader);
-
-                    if (item != null)
-                    {
-                        list.Add(item);
-                    }
-                    else
-                    {
-                        return list;
-                    }
-                }
-                while (true);
             }
         }
         #endregion
@@ -168,10 +158,8 @@ namespace KustoCopyConsole.Storage
         private static byte[] GetBytes(RowItemBase item)
         {
             using (var stream = new MemoryStream())
-            using (var writer = new StreamWriter(stream))
             {
-                RowItemSerializer.Serialize(item, writer);
-                writer.Flush();
+                _rowItemSerializer.Serialize(item, stream);
 
                 return stream.ToArray();
             }

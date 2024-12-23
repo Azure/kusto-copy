@@ -72,13 +72,14 @@ namespace KustoCopyConsole.Orchestration
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
-            var newIterationItem = new SourceTableRowItem(
-                SourceTableState.Planning,
-                tableIdentity,
-                newIterationId,
-                cursorStart,
-                cursorEnd,
-                DateTime.Now);
+            var newIterationItem = new SourceTableRowItem
+            {
+                State = SourceTableState.Planning,
+                SourceTable = tableIdentity,
+                IterationId = newIterationId,
+                CursorStart = cursorStart,
+                CursorEnd = cursorEnd
+            };
 
             await RowItemGateway.AppendAsync(newIterationItem, ct);
         }

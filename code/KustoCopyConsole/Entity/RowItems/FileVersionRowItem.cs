@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal record FileVersionRowItem(Version FileVersion)
-        : RowItemBase(DateTime.Now, DateTime.Now)
+    internal class FileVersionRowItem : RowItemBase
     {
+        public Version FileVersion { get; set; } = new Version();
+
         public override void Validate()
         {
         }

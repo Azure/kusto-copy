@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.0.2.0</Version>
+    <Version>0.0.3.0</Version>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -21,6 +21,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Orchestration\DestinationTableLifeCycleOrchestration.cs" />
+    <Compile Remove="Orchestration\MainOrchestration.cs" />
+    <Compile Remove="Orchestration\SourceTableExportingOrchestration.cs" />
+    <Compile Remove="Orchestration\SourceTableIterationOrchestration.cs" />
+    <Compile Remove="Orchestration\SourceTablePlanningOrchestration.cs" />
+    <Compile Remove="Orchestration\SubOrchestrationBase.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Explicitly include Legacy files as None -->
     <None Update="Legacy\**\*.cs" />
   </ItemGroup>
@@ -36,6 +45,15 @@
 
   <ItemGroup>
     <Folder Include="Storage\AzureStorage\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Orchestration\DestinationTableLifeCycleOrchestration.cs" />
+    <None Include="Orchestration\MainOrchestration.cs" />
+    <None Include="Orchestration\SourceTableExportingOrchestration.cs" />
+    <None Include="Orchestration\SourceTableIterationOrchestration.cs" />
+    <None Include="Orchestration\SourceTablePlanningOrchestration.cs" />
+    <None Include="Orchestration\SubOrchestrationBase.cs" />
   </ItemGroup>
 
 </Project>
