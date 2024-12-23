@@ -2,8 +2,8 @@
 {
     public enum ExportMode
     {
-        BackFillOnly,
+        BackfillOnly,
         NewOnly,
-        BackFillAndNew
+        BackfillAndNew
     }
 }

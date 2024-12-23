@@ -148,6 +148,7 @@ namespace KustoCopyConsole
 
             var cancellationTokenSource = new CancellationTokenSource();
             var taskCompletionSource = new TaskCompletionSource();
+            var parameterization = MainJobParameterization.FromOptions(options);
 
             AppDomain.CurrentDomain.ProcessExit += (e, s) =>
             {
@@ -158,13 +159,15 @@ namespace KustoCopyConsole
             try
             {
                 await using (var mainRunner = await MainRunner.CreateAsync(
-                    options,
+                    parameterization,
+                    options.Authentication,
+                    options.LogFilePath,
                     cancellationTokenSource.Token))
                 {
                     Trace.WriteLine("");
                     Trace.WriteLine("Parameterization:");
                     Trace.WriteLine("");
-                    Trace.WriteLine(mainRunner.Parameterization.ToYaml());
+                    Trace.WriteLine(parameterization.ToYaml());
                     Trace.WriteLine("");
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");

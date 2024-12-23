@@ -48,7 +48,9 @@ namespace KustoCopyConsole.Storage
         private static RowItemSerializer CreateRowItemSerializer()
         {
             return new RowItemSerializer()
-                .AddType<FileVersionRowItem>(RowType.FileVersion);
+                .AddType<FileVersionRowItem>(RowType.FileVersion)
+                .AddType<SourceTableRowItem>(RowType.SourceTable)
+                .AddType<SourceBlockRowItem>(RowType.SourceBlock);
         }
 
         public static async Task<RowItemGateway> CreateAsync(
@@ -76,6 +78,8 @@ namespace KustoCopyConsole.Storage
                 {
                     item.Validate();
                 }
+                //  Remove file version from it
+                allItems = allItems.RemoveAt(0);
             }
 
             var newVersionItem = new FileVersionRowItem

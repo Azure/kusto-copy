@@ -53,12 +53,12 @@ namespace KustoCopyConsole.Entity.RowItems
         {
             if (_typeIndex.TryGetValue(item.GetType(), out var rowType))
             {
-                using (var writer = new StreamWriter(stream))
+                using (var writer = new StreamWriter(stream, leaveOpen: true))
                 {
                     writer.Write(@$"{{ ""rowType"" : ""{rowType}"", ""row"" : ");
                     writer.Flush();
                     JsonSerializer.Serialize(stream, item, item.GetType(), _serializerOptions);
-                    writer.Write(" }");
+                    writer.WriteLine(" }");
                 }
             }
             else

@@ -10,39 +10,36 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.State;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class MainRunner : IAsyncDisposable
+    internal class MainRunner : RunnerBase, IAsyncDisposable
     {
-        private readonly RowItemGateway _rowItemGateway;
-        private readonly DbClientFactory _dbClientFactory;
-
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
-            CommandLineOptions options,
+            MainJobParameterization parameterization,
+            string authentication,
+            string logFilePath,
             CancellationToken ct)
         {
-            var parameterization = CreateParameterization(options);
-
-            var appendStorage = CreateAppendStorage(options);
+            var appendStorage = CreateAppendStorage(logFilePath);
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
-                CreateCredentials(options.Authentication),
+                CreateCredentials(authentication),
                 ct);
 
-            return new MainRunner(parameterization, dbClientFactory, rowItemGateway);
+            return new MainRunner(parameterization, rowItemGateway, dbClientFactory);
         }
 
         private MainRunner(
             MainJobParameterization parameterization,
-            DbClientFactory dbClientFactory,
-            RowItemGateway rowItemGateway)
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory)
+            : base(parameterization, rowItemGateway, dbClientFactory)
         {
-            Parameterization = parameterization;
-            _dbClientFactory = dbClientFactory;
-            _rowItemGateway = rowItemGateway;
         }
 
         private static TokenCredential CreateCredentials(string authentication)
@@ -58,117 +55,53 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private static IAppendStorage CreateAppendStorage(CommandLineOptions options)
+        private static IAppendStorage CreateAppendStorage(string logFilePath)
         {
-            return new LocalAppendStorage(GetLocalLogFilePath(options));
+            return new LocalAppendStorage(GetLocalLogFilePath(logFilePath));
         }
 
-        private static string GetLocalLogFilePath(CommandLineOptions options)
+        private static string GetLocalLogFilePath(string logFilePath)
         {
             const string DEFAULT_FILE_NAME = "kusto-copy.log";
 
-            if (string.IsNullOrWhiteSpace(options.LogFilePath))
+            if (string.IsNullOrWhiteSpace(logFilePath))
             {
                 return DEFAULT_FILE_NAME;
             }
-            else if (Directory.Exists(options.LogFilePath))
+            else if (Directory.Exists(logFilePath))
             {
-                return Path.Combine(options.LogFilePath, DEFAULT_FILE_NAME);
+                return Path.Combine(logFilePath, DEFAULT_FILE_NAME);
             }
             else
             {
-                return options.LogFilePath;
-            }
-        }
-
-        private static MainJobParameterization CreateParameterization(CommandLineOptions options)
-        {
-            if (!string.IsNullOrWhiteSpace(options.Source))
-            {
-                if (string.IsNullOrWhiteSpace(options.Destination))
-                {
-                    throw new CopyException(
-                        $"Source is specified ('options.Source'):  destination is expected",
-                        false);
-                }
-
-                if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
-                {
-                    throw new CopyException($"Can't parse source:  '{options.Source}'", false);
-                }
-                if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
-                {
-                    throw new CopyException(
-                        $"Can't parse destination:  '{options.Destination}'",
-                        false);
-                }
-                var sourceBuilder = new UriBuilder(source);
-                var sourcePathParts = sourceBuilder.Path.Split('/');
-                var destinationBuilder = new UriBuilder(destination);
-                var destinationPathParts = destinationBuilder.Path.Split('/');
-
-                if (sourcePathParts.Length != 3)
-                {
-                    throw new CopyException(
-                        $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
-                        false);
-                }
-                if (destinationPathParts.Length != 2)
-                {
-                    throw new CopyException(
-                        $"Destination ('{options.Destination}') should be of the form 'https://mycluster.eastus.kusto.windows.net/mydb'",
-                        false);
-                }
-
-                var sourceDb = sourcePathParts[1];
-                var sourceTable = sourcePathParts[2];
-                var destinationDb = sourcePathParts[1];
-
-                sourceBuilder.Path = string.Empty;
-                destinationBuilder.Path = string.Empty;
-
-                return new MainJobParameterization
-                {
-                    IsContinuousRun = options.IsContinuousRun,
-                    Activities = ImmutableList.Create(
-                        new ActivityParameterization
-                        {
-                            Source = new TableParameterization
-                            {
-                                ClusterUri = sourceBuilder.ToString(),
-                                DatabaseName = sourceDb,
-                                TableName = sourceTable
-                            },
-                            Destinations = ImmutableList.Create(new TableParameterization
-                            {
-                                ClusterUri = destinationBuilder.ToString(),
-                                DatabaseName = destinationDb
-                            }),
-                            Query = options.Query,
-                            TableOption = new TableOption()
-                        })
-                };
-            }
-            else
-            {
-                throw new NotImplementedException();
+                return logFilePath;
             }
         }
         #endregion
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await ((IAsyncDisposable)_rowItemGateway).DisposeAsync();
-            ((IDisposable)_dbClientFactory).Dispose();
+            await ((IAsyncDisposable)RowItemGateway).DisposeAsync();
+            ((IDisposable)DbClientFactory).Dispose();
         }
 
-        public MainJobParameterization Parameterization { get; }
 
-        public async Task RunAsync(CancellationToken token)
+        public async Task RunAsync(CancellationToken ct)
         {
-            await Task.CompletedTask;
+            var tableIterationRunner =
+                new TableIterationRunner(Parameterization, RowItemGateway, DbClientFactory);
+            var sourceTableIdentities = Parameterization.Activities
+                .Select(a => a.Source.GetTableIdentity())
+                .ToImmutableArray();
 
-            return;
+            while (true)
+            {
+                var runTasks = sourceTableIdentities
+                    .Select(i => tableIterationRunner.RunAsync(i, ct))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(runTasks);
+            }
         }
     }
 }
