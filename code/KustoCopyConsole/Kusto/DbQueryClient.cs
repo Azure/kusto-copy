@@ -68,8 +68,7 @@ declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
     {INGESTION_TIME_START_PARAM}:string);
-let MaxRowCount = 16000000;
-let MaxStatCount = 500000;
+let MaxStatCount = 1000;
 let BaseData = ['{tableName}']
     | project IngestionTime = ingestion_time()
     | where iif(isempty(CursorStart), true, cursor_after(CursorStart))
@@ -82,13 +81,10 @@ let ProfileData = BaseData
     | summarize RowCount=count() by IngestionTime, ExtentId=tostring(extent_id());
 let MaxIngestionTime = toscalar(ProfileData
     | top MaxStatCount by IngestionTime asc
-    | extend RowCountCummulativeSum=row_cumsum(RowCount)
-    | where RowCountCummulativeSum <= MaxRowCount
     | summarize max(IngestionTime));
 //  Recompute in case we did split an ingestion time in two
 ProfileData
 | where IngestionTime <= MaxIngestionTime
-| extend IngestionTime=tostring(IngestionTime)
 ";
                     var properties = new ClientRequestProperties();
 
@@ -104,7 +100,7 @@ ProfileData
                     var result = reader.ToDataSet().Tables[0].Rows
                         .Cast<DataRow>()
                         .Select(r => new RecordDistribution(
-                            (string)(r[0]),
+                            (DateTime)(r[0]),
                             (string)(r[1]),
                             (long)r[2]))
                         .ToImmutableArray();

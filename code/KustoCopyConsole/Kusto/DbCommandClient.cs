@@ -155,7 +155,7 @@ BlockData
                     var extentList = string.Join(", ", extentIds);
                     var commandText = @$"
 .show table ['{tableName}'] extents ({extentList})
-| project ExtentId=tostring(ExtentId), MinCreatedOn=tostring(MinCreatedOn)";
+| project ExtentId=tostring(ExtentId), MinCreatedOn";
                     var properties = new ClientRequestProperties();
                     var reader = await _provider.ExecuteControlCommandAsync(
                         _databaseName,
@@ -165,7 +165,7 @@ BlockData
                         .Cast<DataRow>()
                         .Select(r => new ExtentDate(
                             (string)(r[0]),
-                            (string)(r[1])))
+                            (DateTime)(r[1])))
                         .ToImmutableArray();
 
                     return result;

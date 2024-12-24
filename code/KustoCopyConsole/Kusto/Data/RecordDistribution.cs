@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Kusto.Data
 {
     internal record RecordDistribution(
-        string IngestionTime,
+        DateTime IngestionTime,
         string ExtentId,
         long RowCount);
 }
