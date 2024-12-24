@@ -52,7 +52,7 @@ namespace KustoCopyConsole.Kusto
             string tableName,
             string cursorStart,
             string cursorEnd,
-            string ingestionTimeStart,
+            DateTime? ingestionTimeStart,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
@@ -90,7 +90,14 @@ ProfileData
 
                     properties.SetParameter(CURSOR_START_PARAM, cursorStart);
                     properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
-                    properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart);
+                    if (ingestionTimeStart != null)
+                    {
+                        properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart.Value);
+                    }
+                    else
+                    {
+                        properties.SetParameter(INGESTION_TIME_START_PARAM, "");
+                    }
 
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,

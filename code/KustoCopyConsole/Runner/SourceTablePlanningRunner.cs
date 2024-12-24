@@ -59,7 +59,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var ingestionTimeStart = lastBlockItem == null
-                ? string.Empty
+                ? (DateTime?)null
                 : lastBlockItem.IngestionTimeEnd;
             var queryClient = DbClientFactory.GetDbQueryClient(
                 sourceTableItem.SourceTable.ClusterUri,
@@ -90,6 +90,16 @@ namespace KustoCopyConsole.Runner
                         && (cummulativeRowCount + distribution.RowCount > idealRowCount
                         || distribution.MinCreatedOn != currentMinCreatedOn))
                     {
+                        var block = new SourceBlockRowItem
+                        {
+                            State = SourceBlockState.Planned,
+                            SourceTable = sourceTableItem.SourceTable,
+                            IterationId = sourceTableItem.IterationId,
+                            BlockId = (lastBlockItem?.BlockId ?? 0) + 1,
+                            IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
+                            IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)
+                        };
+
                         cummulativeDistributions.Clear();
                         currentMinCreatedOn = distribution.MinCreatedOn;
                         cummulativeRowCount = distribution.RowCount;
@@ -108,7 +118,7 @@ namespace KustoCopyConsole.Runner
 
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
             SourceTableRowItem sourceTableItem,
-            string ingestionTimeStart,
+            DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)

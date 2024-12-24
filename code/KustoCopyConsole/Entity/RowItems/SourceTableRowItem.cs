@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class SourceTableRowItem: RowItemBase
+    internal class SourceTableRowItem : RowItemBase
     {
         public SourceTableState State { get; set; }
 
@@ -21,6 +21,16 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public override void Validate()
         {
+            SourceTable.Validate();
+            if (IterationId < 1)
+            {
+                throw new InvalidDataException(
+                    $"{nameof(IterationId)} should be positive but is {IterationId}");
+            }
+            if (string.IsNullOrWhiteSpace(CursorEnd))
+            {
+                throw new InvalidDataException($"{nameof(CursorEnd)} should have a value");
+            }
         }
 
         public RowItemBase ChangeState(SourceTableState newState)
