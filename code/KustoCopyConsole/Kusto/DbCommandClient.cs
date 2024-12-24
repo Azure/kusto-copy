@@ -141,5 +141,35 @@ BlockData
                     return operationId.ToString();
                 });
         }
+
+        public async Task<IImmutableList<ExtentDate>> GetExtentDatesAsync(
+            long iterationId,
+            string tableName,
+            IEnumerable<string> extentIds,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+                new KustoDbPriority(iterationId, tableName),
+                async () =>
+                {
+                    var extentList = string.Join(", ", extentIds);
+                    var commandText = @$"
+.show table ['{tableName}'] extents ({extentList})
+| project ExtentId=tostring(ExtentId), MinCreatedOn=tostring(MinCreatedOn)";
+                    var properties = new ClientRequestProperties();
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        _databaseName,
+                        commandText,
+                        properties);
+                    var result = reader.ToDataSet().Tables[0].Rows
+                        .Cast<DataRow>()
+                        .Select(r => new ExtentDate(
+                            (string)(r[0]),
+                            (string)(r[1])))
+                        .ToImmutableArray();
+
+                    return result;
+                });
+        }
     }
 }

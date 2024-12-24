@@ -53,15 +53,20 @@ namespace KustoCopyConsole.Runner
             var queryClient = DbClientFactory.GetDbQueryClient(
                 sourceTableItem.SourceTable.ClusterUri,
                 sourceTableItem.SourceTable.DatabaseName);
-            var timeResolutionInSeconds = 100000;
-            var timeResolution = TimeSpan.FromSeconds(timeResolutionInSeconds);
+            var dbCommandClient = DbClientFactory.GetDbCommandClient(
+                sourceTableItem.SourceTable.ClusterUri,
+                sourceTableItem.SourceTable.DatabaseName);
             var distributions = await queryClient.GetRecordDistributionAsync(
                 sourceTableItem.IterationId,
                 sourceTableItem.SourceTable.TableName,
                 sourceTableItem.CursorStart,
                 sourceTableItem.CursorEnd,
                 ingestionTimeStart,
-                timeResolution,
+                ct);
+            var extentDates = await dbCommandClient.GetExtentDatesAsync(
+                sourceTableItem.IterationId,
+                sourceTableItem.SourceTable.TableName,
+                distributions.Select(d=>d.ExtentId).Distinct(),
                 ct);
 
             throw new NotImplementedException();

@@ -53,7 +53,6 @@ namespace KustoCopyConsole.Kusto
             string cursorStart,
             string cursorEnd,
             string ingestionTimeStart,
-            TimeSpan timeResolution,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
