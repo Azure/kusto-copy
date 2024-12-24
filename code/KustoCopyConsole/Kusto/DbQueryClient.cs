@@ -62,34 +62,40 @@ namespace KustoCopyConsole.Kusto
                 {
                     const string CURSOR_START_PARAM = "CursorStart";
                     const string CURSOR_END_PARAM = "CursorEnd";
-                    const string INGESTION_TIME_START_PARAM = "ingestionTimeStartText";
-                    const string TIME_RESOLUTION_PARAM = "timeResolution";
+                    const string INGESTION_TIME_START_PARAM = "IngestionTimeStartText";
 
                     var query = @$"
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
-    {INGESTION_TIME_START_PARAM}:string,
-    {TIME_RESOLUTION_PARAM}:timespan);
-let IngestionTimeStart = todatetime({INGESTION_TIME_START_PARAM});
+    {INGESTION_TIME_START_PARAM}:string);
+let MaxRowCount = 16000000;
+let MaxStatCount = 500000;
 let BaseData = ['{tableName}']
     | project IngestionTime = ingestion_time()
-    | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
-    | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
-    | where iif(isempty({INGESTION_TIME_START_PARAM}), true, IngestionTime>IngestionTimeStart);
-BaseData
-| summarize Cardinality=count() by IngestionTimeStart=bin(IngestionTime, {TIME_RESOLUTION_PARAM})
-| top 1000 by IngestionTimeStart asc
-| project
-    tostring(IngestionTimeStart),
-    IngestionTimeEnd=tostring(IngestionTimeStart+{TIME_RESOLUTION_PARAM}),
-    Cardinality";
+    | where iif(isempty(CursorStart), true, cursor_after(CursorStart))
+    | where iif(isempty(CursorEnd), true, cursor_before_or_at(CursorEnd))
+    | where iif(isempty(IngestionTimeStartText), true, IngestionTime>todatetime(IngestionTimeStartText));
+let MinIngestionTime = toscalar(BaseData
+    | summarize min(IngestionTime));
+let ProfileData = BaseData
+    | where IngestionTime < MinIngestionTime + 1d
+    | summarize RowCount=count() by IngestionTime, ExtentId=tostring(extent_id());
+let MaxIngestionTime = toscalar(ProfileData
+    | top MaxStatCount by IngestionTime asc
+    | extend RowCountCummulativeSum=row_cumsum(RowCount)
+    | where RowCountCummulativeSum <= MaxRowCount
+    | summarize max(IngestionTime));
+//  Recompute in case we did split an ingestion time in two
+ProfileData
+| where IngestionTime <= MaxIngestionTime
+| extend IngestionTime=tostring(IngestionTime)
+";
                     var properties = new ClientRequestProperties();
 
                     properties.SetParameter(CURSOR_START_PARAM, cursorStart);
                     properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
                     properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart);
-                    properties.SetParameter(TIME_RESOLUTION_PARAM, timeResolution);
 
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
