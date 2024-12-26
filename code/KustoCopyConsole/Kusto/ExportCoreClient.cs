@@ -30,6 +30,8 @@ namespace KustoCopyConsole.Kusto
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
+            var tempUri = await blobPathFactory(ct);
+
             await Task.CompletedTask;
 
             throw new NotImplementedException();

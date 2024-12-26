@@ -48,12 +48,10 @@ namespace KustoCopyConsole.Runner
                     Parameterization,
                     RowItemGateway,
                     DbClientFactory);
-                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
-                    sourceTableRowItem.SourceTable.ClusterUri,
-                    sourceTableRowItem.SourceTable.DatabaseName));
+                var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
                 var exportingTasks = blockMap.Values
                     .Select(b => exportingRunner.RunAsync(
-                        tempUriProvider.FetchUriAsync,
+                        blobPathFactory,
                         sourceTableRowItem,
                         b.RowItem.BlockId,
                         b.RowItem.IngestionTimeStart,
@@ -69,7 +67,7 @@ namespace KustoCopyConsole.Runner
                         : null;
                     var newTasks = await PlanNewBlocksAsync(
                         exportingRunner,
-                        tempUriProvider.FetchUriAsync,
+                        blobPathFactory,
                         sourceTableRowItem,
                         (lastBlockItem?.BlockId ?? 0) + 1,
                         lastBlockItem?.IngestionTimeEnd,
@@ -79,6 +77,32 @@ namespace KustoCopyConsole.Runner
                     sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
                     await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                 }
+            }
+        }
+
+        private Func<CancellationToken, Task<Uri>> GetBlobPathFactory(TableIdentity sourceTable)
+        {
+            var activity = Parameterization.Activities
+                .Where(a => a.Source.GetTableIdentity() == sourceTable)
+                .FirstOrDefault();
+
+            if(activity == null)
+            {
+                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
+            }
+            else if(activity.Destinations.Count == 1 && !Parameterization.StorageUrls.Any())
+            {
+                var destinationTable = activity.Destinations.First().GetTableIdentity();
+                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName));
+
+                return tempUriProvider.FetchUriAsync;
+            }
+            else
+            {
+                throw new NotImplementedException(
+                    "Only single destination without storage account is supported");
             }
         }
 
