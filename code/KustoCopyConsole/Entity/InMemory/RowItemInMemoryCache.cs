@@ -38,6 +38,11 @@ namespace KustoCopyConsole.Entity.InMemory
                     foreach (var block in sourceTableIteration.BlockMap.Values)
                     {
                         yield return block.RowItem;
+                        foreach (var url in block.Urls)
+                        {
+                            yield return url.RowItem;
+                        }
+
                     }
                 }
             }
@@ -60,6 +65,8 @@ namespace KustoCopyConsole.Entity.InMemory
                     return AppendSourceTable(st);
                 case SourceBlockRowItem sb:
                     return AppendSourceBlock(sb);
+                case SourceUrlRowItem url:
+                    return AppendSourceUrl(url);
                 default:
                     throw new NotSupportedException(
                         $"Not supported row item type:  {item.GetType().Name}");
@@ -76,7 +83,7 @@ namespace KustoCopyConsole.Entity.InMemory
                 return _sourceTableMap.SetItem(
                     tableId,
                     _sourceTableMap[tableId].AppendIteration(
-                        new SourceTableIterationCache(item)));
+                        new SourceIterationCache(item)));
             }
             else
             {
@@ -99,7 +106,47 @@ namespace KustoCopyConsole.Entity.InMemory
 
                     return _sourceTableMap.SetItem(
                         tableId,
-                        sourceTable.AppendIteration(sourceIteration.AppendBlock(item)));
+                        sourceTable.AppendIteration(
+                            sourceIteration.AppendBlock(new SourceBlockCache(item))));
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Table should come before block in logs");
+            }
+        }
+
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendSourceUrl(
+            SourceUrlRowItem item)
+        {
+            var tableId = item.SourceTable;
+
+            if (_sourceTableMap.ContainsKey(tableId))
+            {
+                var sourceTable = _sourceTableMap[tableId];
+
+                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+
+                    if(sourceIteration.BlockMap.ContainsKey(item.BlockId))
+                    {
+                        var block = sourceIteration.BlockMap[item.BlockId];
+
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendBlock(
+                                    block.AppendUrl(new SourceUrlCache(item)))));
+                    }
+                    else
+                    {
+                        throw new NotSupportedException("Block should come before url in logs");
+                    }
                 }
                 else
                 {

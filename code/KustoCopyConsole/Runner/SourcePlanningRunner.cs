@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class SourceTablePlanningRunner : RunnerBase
+    internal class SourcePlanningRunner : RunnerBase
     {
         #region Inner Types
         private record RecordDistributionInExtent(
@@ -28,7 +28,7 @@ namespace KustoCopyConsole.Runner
         private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
-        public SourceTablePlanningRunner(
+        public SourcePlanningRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -44,7 +44,7 @@ namespace KustoCopyConsole.Runner
                     .SourceTableMap[sourceTableRowItem.SourceTable]
                     .IterationMap[sourceTableRowItem.IterationId]
                     .BlockMap;
-                var exportingRunner = new SourceTableExportingRunner(
+                var exportingRunner = new SourceExportingRunner(
                     Parameterization,
                     RowItemGateway,
                     DbClientFactory);
@@ -78,7 +78,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
-            SourceTableExportingRunner exportingRunner,
+            SourceExportingRunner exportingRunner,
             SourceTableRowItem sourceTableItem,
             long nextBlockId,
             DateTime? nextIngestionTimeStart,
@@ -121,7 +121,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private IEnumerable<Task> PlanBlockBatch(
-            SourceTableExportingRunner exportingRunner,
+            SourceExportingRunner exportingRunner,
             SourceTableRowItem sourceTableItem,
             ref long nextBlockId,
             ref DateTime? nextIngestionTimeStart,

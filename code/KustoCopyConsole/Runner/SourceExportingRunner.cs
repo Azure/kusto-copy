@@ -6,9 +6,9 @@ using KustoCopyConsole.Storage;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class SourceTableExportingRunner : RunnerBase
+    internal class SourceExportingRunner : RunnerBase
     {
-        public SourceTableExportingRunner(
+        public SourceExportingRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -23,10 +23,39 @@ namespace KustoCopyConsole.Runner
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
-            if (!RowItemGateway.InMemoryCache
+            var blockItem = await EnsureBlockCreatedAsync(
+                sourceTableRowItem,
+                blockId,
+                ingestionTimeStart,
+                ingestionTimeEnd,
+                ct);
+
+            if (blockItem.State != SourceBlockState.Exported)
+            {
+                await CleanUrlsAsync(blockItem);
+            }
+        }
+
+        private async Task CleanUrlsAsync(SourceBlockRowItem blockItem)
+        {
+            await Task.CompletedTask;
+
+            throw new NotImplementedException();
+        }
+
+        private async Task<SourceBlockRowItem> EnsureBlockCreatedAsync(
+            SourceTableRowItem sourceTableRowItem,
+            long blockId,
+            DateTime ingestionTimeStart,
+            DateTime ingestionTimeEnd,
+            CancellationToken ct)
+        {
+            var blockMap = RowItemGateway.InMemoryCache
                 .SourceTableMap[sourceTableRowItem.SourceTable]
                 .IterationMap[sourceTableRowItem.IterationId]
-                .BlockMap.ContainsKey(blockId))
+                .BlockMap;
+
+            if (!blockMap.ContainsKey(blockId))
             {
                 var newBlockItem = new SourceBlockRowItem
                 {
@@ -39,16 +68,12 @@ namespace KustoCopyConsole.Runner
                 };
 
                 await RowItemGateway.AppendAsync(newBlockItem, ct);
+
+                return newBlockItem;
             }
-
-            var blockItem = RowItemGateway.InMemoryCache
-                .SourceTableMap[sourceTableRowItem.SourceTable]
-                .IterationMap[sourceTableRowItem.IterationId]
-                .BlockMap[blockId]
-                .RowItem;
-
-            if (blockItem.State == SourceBlockState.Exporting)
+            else
             {
+                return blockMap[blockId].RowItem;
             }
         }
     }

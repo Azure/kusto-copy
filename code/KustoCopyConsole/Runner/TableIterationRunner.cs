@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
     /// </summary>
     internal class TableIterationRunner : RunnerBase
     {
-        private readonly SourceTablePlanningRunner _sourceTablePlanningRunner;
+        private readonly SourcePlanningRunner _sourceTablePlanningRunner;
 
         public TableIterationRunner(
             MainJobParameterization parameterization,
@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Runner
             var cache = RowItemGateway.InMemoryCache;
             var cachedIterations = cache.SourceTableMap.ContainsKey(sourceTableIdentity)
                 ? cache.SourceTableMap[sourceTableIdentity].IterationMap.Values
-                : Array.Empty<SourceTableIterationCache>();
+                : Array.Empty<SourceIterationCache>();
             var completedItems = cachedIterations
                 .Select(c => c.RowItem)
                 .Where(i => i.State == SourceTableState.Completed);

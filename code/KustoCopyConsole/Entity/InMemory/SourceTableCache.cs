@@ -6,7 +6,7 @@ namespace KustoCopyConsole.Entity.InMemory
     internal class SourceTableCache
     {
         public SourceTableCache(
-            IImmutableDictionary<long, SourceTableIterationCache> iterationMap)
+            IImmutableDictionary<long, SourceIterationCache> iterationMap)
         {
             IterationMap = iterationMap;
         }
@@ -15,14 +15,14 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var iterationId = iterationItem.IterationId;
 
-            IterationMap = ImmutableDictionary<long, SourceTableIterationCache>
+            IterationMap = ImmutableDictionary<long, SourceIterationCache>
                 .Empty
-                .Add(iterationId, new SourceTableIterationCache(iterationItem));
+                .Add(iterationId, new SourceIterationCache(iterationItem));
         }
 
-        public IImmutableDictionary<long, SourceTableIterationCache> IterationMap { get; }
+        public IImmutableDictionary<long, SourceIterationCache> IterationMap { get; }
 
-        public SourceTableCache AppendIteration(SourceTableIterationCache iteration)
+        public SourceTableCache AppendIteration(SourceIterationCache iteration)
         {
             var iterationId = iteration.RowItem.IterationId;
 
