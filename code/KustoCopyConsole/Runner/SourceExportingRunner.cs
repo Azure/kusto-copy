@@ -32,15 +32,24 @@ namespace KustoCopyConsole.Runner
 
             if (blockItem.State != SourceBlockState.Exported)
             {
-                await CleanUrlsAsync(blockItem);
+                await CleanUrlsAsync(blockItem, ct);
             }
         }
 
-        private async Task CleanUrlsAsync(SourceBlockRowItem blockItem)
+        private async Task CleanUrlsAsync(SourceBlockRowItem blockItem, CancellationToken ct)
         {
-            await Task.CompletedTask;
+            var existingUrls = RowItemGateway.InMemoryCache
+                .SourceTableMap[blockItem.SourceTable]
+                .IterationMap[blockItem.IterationId]
+                .BlockMap[blockItem.BlockId]
+                .Urls;
 
-            throw new NotImplementedException();
+            foreach (var url in existingUrls)
+            {
+                await RowItemGateway.AppendAsync(
+                    url.RowItem.ChangeState(SourceUrlState.Deleted),
+                    ct);
+            }
         }
 
         private async Task<SourceBlockRowItem> EnsureBlockCreatedAsync(

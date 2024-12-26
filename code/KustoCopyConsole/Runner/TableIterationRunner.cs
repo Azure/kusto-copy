@@ -83,8 +83,6 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableArray();
 
                 await Task.WhenAll(planningTasks);
-
-                throw new NotImplementedException();
             }
 
             return isBackfillOnly;
