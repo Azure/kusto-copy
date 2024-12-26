@@ -25,8 +25,7 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const int MAX_STATS_COUNT = 100;
-        //private const int MAX_STATS_COUNT = 1000;
+        private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
         public SourceTablePlanningRunner(
