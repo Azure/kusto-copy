@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(SourceTableRowItem sourceTableRowItem, CancellationToken ct)
         {
-            if (sourceTableRowItem.State == SourceTableState.Planning)
+            if (sourceTableRowItem.State != SourceTableState.Completed)
             {
                 var blockMap = RowItemGateway.InMemoryCache
                     .SourceTableMap[sourceTableRowItem.SourceTable]
@@ -56,19 +56,24 @@ namespace KustoCopyConsole.Runner
                         b.RowItem.IngestionTimeEnd,
                         ct))
                     .ToImmutableArray();
-                var lastBlockItem = blockMap.Any()
-                    ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
-                    : null;
-                var newTasks = await PlanNewBlocksAsync(
-                    exportingRunner,
-                    sourceTableRowItem,
-                    (lastBlockItem?.BlockId ?? 0) + 1,
-                    lastBlockItem?.IngestionTimeEnd,
-                    ct);
 
-                exportingTasks = exportingTasks.AddRange(newTasks);
-                sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
-                await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                //  Complete planning
+                if (sourceTableRowItem.State == SourceTableState.Planning)
+                {
+                    var lastBlockItem = blockMap.Any()
+                        ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
+                        : null;
+                    var newTasks = await PlanNewBlocksAsync(
+                        exportingRunner,
+                        sourceTableRowItem,
+                        (lastBlockItem?.BlockId ?? 0) + 1,
+                        lastBlockItem?.IngestionTimeEnd,
+                        ct);
+
+                    exportingTasks = exportingTasks.AddRange(newTasks);
+                    sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
+                    await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                }
             }
         }
 

@@ -2,7 +2,7 @@
 {
     public enum SourceUrlState
     {
-        Active,
+        Exported,
         Deleted
     }
 }
