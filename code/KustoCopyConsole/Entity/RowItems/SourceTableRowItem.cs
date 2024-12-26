@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Entity.RowItems
             }
         }
 
-        public RowItemBase ChangeState(SourceTableState newState)
+        public SourceTableRowItem ChangeState(SourceTableState newState)
         {
             var clone = (SourceTableRowItem)Clone();
 

@@ -67,6 +67,8 @@ namespace KustoCopyConsole.Runner
                     ct);
 
                 exportingTasks = exportingTasks.AddRange(newTasks);
+                sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
+                await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
             }
         }
 
