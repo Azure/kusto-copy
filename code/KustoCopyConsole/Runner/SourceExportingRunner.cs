@@ -34,6 +34,17 @@ namespace KustoCopyConsole.Runner
             {
                 await CleanUrlsAsync(blockItem, ct);
             }
+            if (blockItem.State == SourceBlockState.Planned)
+            {
+                blockItem = ExportBlockAsync(blockItem, ct);
+            }
+        }
+
+        private SourceBlockRowItem ExportBlockAsync(
+            SourceBlockRowItem blockItem,
+            CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
 
         private async Task CleanUrlsAsync(SourceBlockRowItem blockItem, CancellationToken ct)
