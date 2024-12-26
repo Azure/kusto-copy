@@ -31,10 +31,16 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             var tempUri = await blobPathFactory(ct);
+            var operationId = await exportCommandClient.ExportBlockAsync(
+                tempUri,
+                tableName,
+                cursorStart,
+                cursorEnd,
+                ingestionTimeStart,
+                ingestionTimeEnd,
+                ct);
 
-            await Task.CompletedTask;
-
-            throw new NotImplementedException();
+            return operationId;
         }
 
         public async Task AwaitExportAsync(string operationId, CancellationToken ct)

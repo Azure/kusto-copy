@@ -24,25 +24,6 @@ namespace KustoCopyConsole.Kusto
             _databaseName = databaseName;
         }
 
-        public async Task<int> GetExportCapacityAsync()
-        {
-            return await _commandQueue.RequestRunAsync(
-                KustoDbPriority.HighestPriority,
-                async () =>
-                {
-                    var commandText = @"
-.show capacity
-| where Resource == 'DataExport'
-| project Total";
-                    var reader = await _provider.ExecuteControlCommandAsync(
-                        _databaseName,
-                        commandText);
-                    var exportCapacity = (long)reader.ToDataSet().Tables[0].Rows[0][0];
-
-                    return (int)exportCapacity;
-                });
-        }
-
         public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
             IEnumerable<string> operationIds,
             CancellationToken ct)
@@ -79,12 +60,12 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> ExportBlockAsync(
-            IImmutableList<Uri> storageRoots,
+            Uri storageRootUri,
             string tableName,
             string cursorStart,
             string cursorEnd,
-            string ingestionTimeStart,
-            string ingestionTimeEnd,
+            DateTime ingestionTimeStart,
+            DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
@@ -93,18 +74,12 @@ namespace KustoCopyConsole.Kusto
                 {
                     const string CURSOR_START_PARAM = "CursorStart";
                     const string CURSOR_END_PARAM = "CursorEnd";
-                    const string INGESTION_TIME_START_PARAM = "ingestionTimeStartText";
-                    const string INGESTION_TIME_END_PARAM = "ingestionTimeEndText";
+                    const string INGESTION_TIME_START_PARAM = "IngestionTimeStart";
+                    const string INGESTION_TIME_END_PARAM = "IngestionTimeEnd";
 
-                    //  Shuffle the storage roots for better long term round robin
-                    var shuffledStorageRoots = storageRoots
-                        .OrderBy(i => _random.Next());
-                    var quotedRoots = shuffledStorageRoots
-                        .Select(r => @$"h""{r}""");
-                    var rootsText = string.Join(", ", quotedRoots);
                     var commandText = @$"
 .export async compressed to parquet (
-    {rootsText}
+    h'{storageRootUri}'
 )
 with (
     namePrefix=""export"",
@@ -114,15 +89,13 @@ with (
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
-    {INGESTION_TIME_START_PARAM}:string,
-    {INGESTION_TIME_END_PARAM}:string);
-let IngestionTimeStart = todatetime({INGESTION_TIME_START_PARAM});
+    {INGESTION_TIME_START_PARAM}:datetime,
+    {INGESTION_TIME_END_PARAM}:datetime);
 let BlockData = ['{tableName}']
-    | project IngestionTime = ingestion_time()
     | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
     | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
-    | where iif(isempty({INGESTION_TIME_START_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_START_PARAM}))
-    | where iif(isempty({INGESTION_TIME_END_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_END_PARAM}));
+    | where iif(isnull({INGESTION_TIME_START_PARAM}), true, ingestion_time()>=todatetime({INGESTION_TIME_START_PARAM}))
+    | where iif(isnull({INGESTION_TIME_END_PARAM}), true, ingestion_time()<=todatetime({INGESTION_TIME_END_PARAM}));
 BlockData
 ";
                     var properties = new ClientRequestProperties();
