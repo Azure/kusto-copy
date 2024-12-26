@@ -24,6 +24,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
+            Func<CancellationToken, Task<Uri>> blobPathFactory,
             string cursorStart,
             string cursorEnd,
             DateTime ingestionTimeStart,
@@ -31,6 +32,7 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             return await _exportCoreClient.NewExportAsync(
+                blobPathFactory,
                 _exportCommandClient,
                 _tableName,
                 cursorStart,

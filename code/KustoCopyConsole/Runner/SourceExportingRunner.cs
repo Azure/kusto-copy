@@ -17,6 +17,7 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task RunAsync(
+            Func<CancellationToken, Task<Uri>> blobPathFactory,
             SourceTableRowItem sourceTableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
@@ -36,11 +37,12 @@ namespace KustoCopyConsole.Runner
             }
             if (blockItem.State == SourceBlockState.Planned)
             {
-                blockItem = await ExportBlockAsync(blockItem, ct);
+                blockItem = await ExportBlockAsync(blobPathFactory, blockItem, ct);
             }
         }
 
         private async Task<SourceBlockRowItem> ExportBlockAsync(
+            Func<CancellationToken, Task<Uri>> blobPathFactory,
             SourceBlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -53,6 +55,7 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
             var operationId = await exportClient.NewExportAsync(
+                blobPathFactory,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 blockItem.IngestionTimeStart,

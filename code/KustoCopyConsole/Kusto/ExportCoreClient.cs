@@ -21,6 +21,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
+            Func<CancellationToken, Task<Uri>> blobPathFactory,
             DbCommandClient exportCommandClient,
             string tableName,
             string cursorStart,
