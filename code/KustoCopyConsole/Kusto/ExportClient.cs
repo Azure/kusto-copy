@@ -25,6 +25,8 @@ namespace KustoCopyConsole.Kusto
 
         public async Task<string> NewExportAsync(
             Func<CancellationToken, Task<Uri>> blobPathFactory,
+            long iterationId,
+            long blockId,
             string cursorStart,
             string cursorEnd,
             DateTime ingestionTimeStart,
@@ -35,6 +37,8 @@ namespace KustoCopyConsole.Kusto
                 blobPathFactory,
                 _exportCommandClient,
                 _tableName,
+                iterationId,
+                blockId,
                 cursorStart,
                 cursorEnd,
                 ingestionTimeStart,

@@ -56,6 +56,8 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.TableName);
             var operationId = await exportClient.NewExportAsync(
                 blobPathFactory,
+                blockItem.IterationId,
+                blockItem.BlockId,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 blockItem.IngestionTimeStart,

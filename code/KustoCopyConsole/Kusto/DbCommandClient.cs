@@ -12,7 +12,6 @@ namespace KustoCopyConsole.Kusto
         private readonly Random _random = new();
         private readonly ICslAdminProvider _provider;
         private readonly PriorityExecutionQueue<KustoDbPriority> _commandQueue;
-        private readonly string _databaseName;
 
         public DbCommandClient(
             ICslAdminProvider provider,
@@ -21,8 +20,10 @@ namespace KustoCopyConsole.Kusto
         {
             _provider = provider;
             _commandQueue = commandQueue;
-            _databaseName = databaseName;
+            DatabaseName = databaseName;
         }
+
+        public string DatabaseName { get; }
 
         public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
             IEnumerable<string> operationIds,
@@ -38,7 +39,7 @@ namespace KustoCopyConsole.Kusto
                         var commandText = @$".show operations({operationIdsText})
 | project OperationId, State, Status, ShouldRetry";
                         var reader = await _provider.ExecuteControlCommandAsync(
-                            _databaseName,
+                            DatabaseName,
                             commandText);
                         var result = reader.ToDataSet().Tables[0].Rows
                             .Cast<DataRow>()
@@ -106,7 +107,7 @@ BlockData
                     properties.SetParameter(INGESTION_TIME_END_PARAM, ingestionTimeEnd);
 
                     var reader = await _provider.ExecuteControlCommandAsync(
-                        _databaseName,
+                        DatabaseName,
                         commandText,
                         properties);
                     var operationId = (Guid)reader.ToDataSet().Tables[0].Rows[0][0];
@@ -131,7 +132,7 @@ BlockData
 | project ExtentId=tostring(ExtentId), MinCreatedOn";
                     var properties = new ClientRequestProperties();
                     var reader = await _provider.ExecuteControlCommandAsync(
-                        _databaseName,
+                        DatabaseName,
                         commandText,
                         properties);
                     var result = reader.ToDataSet().Tables[0].Rows

@@ -90,7 +90,7 @@ namespace KustoCopyConsole.Kusto
                             providerFactory.GetDbCommandProvider(o.Source.Uri),
                             sourceClusterCommandQueueMap[o.Source.Uri],
                             string.Empty),
-                        new PriorityExecutionQueue<KustoDbPriority>(o.Task.Result.export))
+                        o.Task.Result.export)
                 })
                 .ToImmutableDictionary(o => o.Uri, o => o.Client);
 
