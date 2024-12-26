@@ -30,16 +30,19 @@ namespace KustoCopyConsole.Kusto
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
-            await Task.CompletedTask;
-
-            throw new NotImplementedException();
+            return await _exportCoreClient.NewExportAsync(
+                _exportCommandClient,
+                _tableName,
+                cursorStart,
+                cursorEnd,
+                ingestionTimeStart,
+                ingestionTimeEnd,
+                ct);
         }
 
         public async Task AwaitExportAsync(string operationId, CancellationToken ct)
         {
-            await Task.CompletedTask;
-
-            throw new NotImplementedException();
+            await _exportCoreClient.AwaitExportAsync(operationId, ct);
         }
     }
 }

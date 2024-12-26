@@ -36,15 +36,34 @@ namespace KustoCopyConsole.Runner
             }
             if (blockItem.State == SourceBlockState.Planned)
             {
-                blockItem = ExportBlockAsync(blockItem, ct);
+                blockItem = await ExportBlockAsync(blockItem, ct);
             }
         }
 
-        private SourceBlockRowItem ExportBlockAsync(
+        private async Task<SourceBlockRowItem> ExportBlockAsync(
             SourceBlockRowItem blockItem,
             CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var iteration = RowItemGateway.InMemoryCache
+                .SourceTableMap[blockItem.SourceTable]
+                .IterationMap[blockItem.IterationId]
+                .RowItem;
+            var exportClient = DbClientFactory.GetExportClient(
+                blockItem.SourceTable.ClusterUri,
+                blockItem.SourceTable.DatabaseName,
+                blockItem.SourceTable.TableName);
+            var operationId = await exportClient.NewExportAsync(
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                blockItem.IngestionTimeStart,
+                blockItem.IngestionTimeEnd,
+                ct);
+
+            await exportClient.AwaitExportAsync(operationId, ct);
+
+            throw new NotImplementedException("Append URLs");
+            //blockItem.ChangeState(SourceBlockState.Exported);
+            //await RowItemGateway.AppendAsync(blockItem, ct);
         }
 
         private async Task CleanUrlsAsync(SourceBlockRowItem blockItem, CancellationToken ct)
