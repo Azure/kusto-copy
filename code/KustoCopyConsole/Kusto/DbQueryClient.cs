@@ -53,6 +53,7 @@ namespace KustoCopyConsole.Kusto
             string cursorStart,
             string cursorEnd,
             DateTime? ingestionTimeStart,
+            int maxStatCount,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
@@ -61,19 +62,19 @@ namespace KustoCopyConsole.Kusto
                 {
                     const string CURSOR_START_PARAM = "CursorStart";
                     const string CURSOR_END_PARAM = "CursorEnd";
-                    const string INGESTION_TIME_START_PARAM = "IngestionTimeStartText";
+                    const string INGESTION_TIME_START_PARAM = "IngestionTimeStart";
 
                     var query = @$"
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
-    {INGESTION_TIME_START_PARAM}:string);
-let MaxStatCount = 1000;
+    {INGESTION_TIME_START_PARAM}:datetime=datetime(null));
+let MaxStatCount = {maxStatCount};
 let BaseData = ['{tableName}']
     | project IngestionTime = ingestion_time()
-    | where iif(isempty(CursorStart), true, cursor_after(CursorStart))
-    | where iif(isempty(CursorEnd), true, cursor_before_or_at(CursorEnd))
-    | where iif(isempty(IngestionTimeStartText), true, IngestionTime>todatetime(IngestionTimeStartText));
+    | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
+    | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
+    | where iif(isnull({INGESTION_TIME_START_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_START_PARAM}));
 let MinIngestionTime = toscalar(BaseData
     | summarize min(IngestionTime));
 let ProfileData = BaseData
@@ -93,10 +94,6 @@ ProfileData
                     if (ingestionTimeStart != null)
                     {
                         properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart.Value);
-                    }
-                    else
-                    {
-                        properties.SetParameter(INGESTION_TIME_START_PARAM, "");
                     }
 
                     var reader = await _provider.ExecuteQueryAsync(

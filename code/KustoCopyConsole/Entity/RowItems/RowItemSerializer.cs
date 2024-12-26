@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
@@ -15,6 +16,7 @@ namespace KustoCopyConsole.Entity.RowItems
     {
         private static readonly JsonSerializerOptions _serializerOptions = new()
         {
+            Converters = { new JsonStringEnumConverter() },
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false

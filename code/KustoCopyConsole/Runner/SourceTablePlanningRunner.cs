@@ -18,9 +18,16 @@ namespace KustoCopyConsole.Runner
             string ExtentId,
             long RowCount,
             DateTime? MinCreatedOn);
+
+        private record BatchExportBlock(
+            IEnumerable<Task> exportingTasks,
+            long nextBlockId,
+            DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const long MAX_RECORDS_PER_BLOCK = 1048576;
+        private const int MAX_STATS_COUNT = 100;
+        //private const int MAX_STATS_COUNT = 1000;
+        private const long RECORDS_PER_BLOCK = 1048576;
 
         public SourceTablePlanningRunner(
            MainJobParameterization parameterization,
@@ -38,48 +45,90 @@ namespace KustoCopyConsole.Runner
                     .SourceTableMap[sourceTableRowItem.SourceTable]
                     .IterationMap[sourceTableRowItem.IterationId]
                     .BlockMap;
+                var exportingRunner = new SourceTableExportingRunner(
+                    Parameterization,
+                    RowItemGateway,
+                    DbClientFactory);
+                var exportingTasks = blockMap.Values
+                    .Select(b => exportingRunner.RunAsync(
+                        sourceTableRowItem,
+                        b.RowItem.BlockId,
+                        b.RowItem.IngestionTimeStart,
+                        b.RowItem.IngestionTimeEnd,
+                        ct))
+                    .ToImmutableArray();
                 var lastBlockItem = blockMap.Any()
                     ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
                     : null;
+                var newTasks = await PlanNewBlocksAsync(
+                    exportingRunner,
+                    sourceTableRowItem,
+                    (lastBlockItem?.BlockId ?? 0) + 1,
+                    lastBlockItem?.IngestionTimeEnd,
+                    ct);
 
-                while (true)
-                {
-                    //lastBlockItem =
-                    await PlanNewBlockAsync(
-                        sourceTableRowItem,
-                        lastBlockItem,
-                        ct);
-                }
+                exportingTasks = exportingTasks.AddRange(newTasks);
             }
         }
 
-        private async Task PlanNewBlockAsync(
+        private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
+            SourceTableExportingRunner exportingRunner,
             SourceTableRowItem sourceTableItem,
-            SourceBlockRowItem? lastBlockItem,
+            long nextBlockId,
+            DateTime? nextIngestionTimeStart,
             CancellationToken ct)
         {
-            var ingestionTimeStart = lastBlockItem == null
-                ? (DateTime?)null
-                : lastBlockItem.IngestionTimeEnd;
+            var exportingTasks = ImmutableArray<Task>.Empty.ToBuilder();
             var queryClient = DbClientFactory.GetDbQueryClient(
                 sourceTableItem.SourceTable.ClusterUri,
                 sourceTableItem.SourceTable.DatabaseName);
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 sourceTableItem.SourceTable.ClusterUri,
                 sourceTableItem.SourceTable.DatabaseName);
-            var distributionInExtents = await GetRecordDistributionInExtents(
-                sourceTableItem,
-                ingestionTimeStart,
-                queryClient,
-                dbCommandClient,
-                ct);
+
+            //  Loop on block batch
+            while (true)
+            {
+                var distributionInExtents = await GetRecordDistributionInExtents(
+                    sourceTableItem,
+                    nextIngestionTimeStart,
+                    queryClient,
+                    dbCommandClient,
+                    ct);
+                var newExportingTasks = PlanBlockBatch(
+                    exportingRunner,
+                    sourceTableItem,
+                    ref nextBlockId,
+                    ref nextIngestionTimeStart,
+                    distributionInExtents,
+                    ct);
+
+                if (newExportingTasks.Any())
+                {
+                    exportingTasks.AddRange(newExportingTasks);
+                }
+                else
+                {
+                    return exportingTasks.ToImmutableArray();
+                }
+            }
+        }
+
+        private IEnumerable<Task> PlanBlockBatch(
+            SourceTableExportingRunner exportingRunner,
+            SourceTableRowItem sourceTableItem,
+            ref long nextBlockId,
+            ref DateTime? nextIngestionTimeStart,
+            IImmutableList<RecordDistributionInExtent> distributionInExtents,
+            CancellationToken ct)
+        {
+            var exportingTasks = new List<Task>();
 
             if (distributionInExtents.Any())
             {
                 var orderedDistributionInExtents = distributionInExtents
                     .OrderBy(d => d.IngestionTime)
                     .ThenBy(d => d.MinCreatedOn);
-                var idealRowCount = 1048576;
                 long cummulativeRowCount = 0;
                 var cummulativeDistributions = new List<RecordDistributionInExtent>();
                 var currentMinCreatedOn = distributionInExtents.First().MinCreatedOn;
@@ -87,23 +136,20 @@ namespace KustoCopyConsole.Runner
                 foreach (var distribution in orderedDistributionInExtents)
                 {
                     if (cummulativeDistributions.Any()
-                        && (cummulativeRowCount + distribution.RowCount > idealRowCount
+                        && (cummulativeRowCount + distribution.RowCount > RECORDS_PER_BLOCK
                         || distribution.MinCreatedOn != currentMinCreatedOn))
                     {
-                        var block = new SourceBlockRowItem
-                        {
-                            State = SourceBlockState.Planned,
-                            SourceTable = sourceTableItem.SourceTable,
-                            IterationId = sourceTableItem.IterationId,
-                            BlockId = (lastBlockItem?.BlockId ?? 0) + 1,
-                            IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
-                            IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)
-                        };
-
+                        exportingTasks.Add(exportingRunner.RunAsync(
+                            sourceTableItem,
+                            nextBlockId++,
+                            cummulativeDistributions.Min(d => d.IngestionTime),
+                            cummulativeDistributions.Max(d => d.IngestionTime),
+                            ct));
+                        nextIngestionTimeStart =
+                            cummulativeDistributions.Max(d => d.IngestionTime);
                         cummulativeDistributions.Clear();
                         currentMinCreatedOn = distribution.MinCreatedOn;
                         cummulativeRowCount = distribution.RowCount;
-                        //  Generate block
                     }
                     else
                     {
@@ -111,9 +157,21 @@ namespace KustoCopyConsole.Runner
                     }
                     cummulativeDistributions.Add(distribution);
                 }
-
-                throw new NotImplementedException();
+                if (distributionInExtents.Count() < MAX_STATS_COUNT
+                    && cummulativeDistributions.Any())
+                {
+                    exportingTasks.Add(exportingRunner.RunAsync(
+                        sourceTableItem,
+                        nextBlockId++,
+                        cummulativeDistributions.Min(d => d.IngestionTime),
+                        cummulativeDistributions.Max(d => d.IngestionTime),
+                        ct));
+                    nextIngestionTimeStart =
+                        cummulativeDistributions.Max(d => d.IngestionTime);
+                }
             }
+
+            return exportingTasks;
         }
 
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
@@ -129,6 +187,7 @@ namespace KustoCopyConsole.Runner
                 sourceTableItem.CursorStart,
                 sourceTableItem.CursorEnd,
                 ingestionTimeStart,
+                MAX_STATS_COUNT,
                 ct);
 
             if (distributions.Any())
