@@ -15,7 +15,7 @@ namespace KustoCopyConsole.Kusto
 
         private readonly DmCommandClient _dmCommandClient;
         private readonly Random _random = new Random();
-        private InnerCache? _innerCache;
+        private volatile InnerCache? _innerCache;
 
         public TempUriProvider(DmCommandClient dmCommandClient)
         {

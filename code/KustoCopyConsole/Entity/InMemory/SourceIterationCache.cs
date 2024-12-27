@@ -5,7 +5,7 @@ namespace KustoCopyConsole.Entity.InMemory
 {
     internal class SourceIterationCache : CacheBase<SourceTableRowItem>
     {
-        private SourceIterationCache(
+        public SourceIterationCache(
             SourceTableRowItem item,
             IImmutableDictionary<long, SourceBlockCache> blockMap)
             : base(item)

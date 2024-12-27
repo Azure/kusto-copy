@@ -80,10 +80,22 @@ namespace KustoCopyConsole.Entity.InMemory
 
             if (_sourceTableMap.ContainsKey(tableId))
             {
-                return _sourceTableMap.SetItem(
-                    tableId,
-                    _sourceTableMap[tableId].AppendIteration(
-                        new SourceIterationCache(item)));
+                var table = _sourceTableMap[tableId];
+
+                if (table.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var iteration = table.IterationMap[item.IterationId];
+
+                    return _sourceTableMap.SetItem(
+                        tableId,
+                        table.AppendIteration(new SourceIterationCache(item, iteration.BlockMap)));
+                }
+                else
+                {
+                    return _sourceTableMap.SetItem(
+                        tableId,
+                        table.AppendIteration(new SourceIterationCache(item)));
+                }
             }
             else
             {
@@ -133,7 +145,7 @@ namespace KustoCopyConsole.Entity.InMemory
                 {
                     var sourceIteration = sourceTable.IterationMap[item.IterationId];
 
-                    if(sourceIteration.BlockMap.ContainsKey(item.BlockId))
+                    if (sourceIteration.BlockMap.ContainsKey(item.BlockId))
                     {
                         var block = sourceIteration.BlockMap[item.BlockId];
 
