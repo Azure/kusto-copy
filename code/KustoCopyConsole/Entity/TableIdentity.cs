@@ -27,5 +27,10 @@ namespace KustoCopyConsole.Entity
         {
             return $"(Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
         }
+
+        public string ToStringCompact()
+        {
+            return $"{ClusterUri}{DatabaseName}/{TableName}";
+        }
     }
 }

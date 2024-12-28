@@ -40,44 +40,90 @@ namespace KustoCopyConsole.Runner
         {
             if (sourceTableRowItem.State != SourceTableState.Completed)
             {
-                var blockMap = RowItemGateway.InMemoryCache
-                    .SourceTableMap[sourceTableRowItem.SourceTable]
-                    .IterationMap[sourceTableRowItem.IterationId]
-                    .BlockMap;
-                var exportingRunner = new SourceExportingRunner(
-                    Parameterization,
-                    RowItemGateway,
-                    DbClientFactory);
-                var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
-                var exportingTasks = blockMap.Values
-                    .Select(b => exportingRunner.RunAsync(
-                        blobPathFactory,
-                        sourceTableRowItem,
-                        b.RowItem.BlockId,
-                        b.RowItem.IngestionTimeStart,
-                        b.RowItem.IngestionTimeEnd,
-                        ct))
-                    .ToImmutableArray();
-
-                //  Complete planning
-                if (sourceTableRowItem.State == SourceTableState.Planning)
+                await using (var exportingProgress =
+                    CreateExportingProgressBar(sourceTableRowItem))
                 {
-                    var lastBlockItem = blockMap.Any()
-                        ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
-                        : null;
-                    var newTasks = await PlanNewBlocksAsync(
-                        exportingRunner,
-                        blobPathFactory,
-                        sourceTableRowItem,
-                        (lastBlockItem?.BlockId ?? 0) + 1,
-                        lastBlockItem?.IngestionTimeEnd,
-                        ct);
+                    var blockMap = RowItemGateway.InMemoryCache
+                        .SourceTableMap[sourceTableRowItem.SourceTable]
+                        .IterationMap[sourceTableRowItem.IterationId]
+                        .BlockMap;
+                    var exportingRunner = new SourceExportingRunner(
+                        Parameterization,
+                        RowItemGateway,
+                        DbClientFactory);
+                    var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
+                    var exportingTasks = blockMap.Values
+                        .Select(b => exportingRunner.RunAsync(
+                            blobPathFactory,
+                            sourceTableRowItem,
+                            b.RowItem.BlockId,
+                            b.RowItem.IngestionTimeStart,
+                            b.RowItem.IngestionTimeEnd,
+                            ct))
+                        .ToImmutableArray();
 
-                    exportingTasks = exportingTasks.AddRange(newTasks);
-                    sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
-                    await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                    //  Complete planning
+                    if (sourceTableRowItem.State == SourceTableState.Planning)
+                    {
+                        await using (var planningProgress =
+                            CreatePlanningProgressBar(sourceTableRowItem))
+                        {
+                            var lastBlockItem = blockMap.Any()
+                                ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
+                                : null;
+                            var newTasks = await PlanNewBlocksAsync(
+                                exportingRunner,
+                                blobPathFactory,
+                                sourceTableRowItem,
+                                (lastBlockItem?.BlockId ?? 0) + 1,
+                                lastBlockItem?.IngestionTimeEnd,
+                                ct);
+
+                            await planningProgress.CompleteAsync();
+                            exportingTasks = exportingTasks.AddRange(newTasks);
+                            sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
+                            await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                        }
+                    }
+                    await Task.WhenAll(exportingTasks);
+                    await exportingProgress.CompleteAsync();
                 }
             }
+        }
+
+        private ProgressBar CreateExportingProgressBar(SourceTableRowItem sourceTableRowItem)
+        {
+            return new ProgressBar(
+                TimeSpan.FromSeconds(10),
+                () =>
+                {
+                    var blockMap = RowItemGateway.InMemoryCache
+                        .SourceTableMap[sourceTableRowItem.SourceTable]
+                        .IterationMap[sourceTableRowItem.IterationId]
+                        .BlockMap;
+                    var exportedCount = blockMap.Values
+                    .Where(b => b.RowItem.State == SourceBlockState.Exported)
+                    .Count();
+
+                    return $"{sourceTableRowItem.SourceTable.ToStringCompact()} exported " +
+                    $"{exportedCount}/{blockMap.Count} blocks";
+                });
+        }
+
+        private ProgressBar CreatePlanningProgressBar(SourceTableRowItem sourceTableRowItem)
+        {
+            return new ProgressBar(
+                TimeSpan.FromSeconds(5),
+                () =>
+                {
+                    var blockMap = RowItemGateway.InMemoryCache
+                        .SourceTableMap[sourceTableRowItem.SourceTable]
+                        .IterationMap[sourceTableRowItem.IterationId]
+                        .BlockMap;
+
+                    return $"{sourceTableRowItem.SourceTable.ToStringCompact()} planned "
+                    + $"{blockMap.Count} blocks";
+                });
         }
 
         private Func<CancellationToken, Task<Uri>> GetBlobPathFactory(TableIdentity sourceTable)
@@ -86,11 +132,11 @@ namespace KustoCopyConsole.Runner
                 .Where(a => a.Source.GetTableIdentity() == sourceTable)
                 .FirstOrDefault();
 
-            if(activity == null)
+            if (activity == null)
             {
                 throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
             }
-            else if(activity.Destinations.Count == 1 && !Parameterization.StorageUrls.Any())
+            else if (activity.Destinations.Count == 1 && !Parameterization.StorageUrls.Any())
             {
                 var destinationTable = activity.Destinations.First().GetTableIdentity();
                 var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
