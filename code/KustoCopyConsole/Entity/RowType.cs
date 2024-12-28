@@ -5,6 +5,7 @@
         Unspecified,
         FileVersion,
         SourceTable,
-        SourceBlock
+        SourceBlock,
+        SourceUrl
     }
 }

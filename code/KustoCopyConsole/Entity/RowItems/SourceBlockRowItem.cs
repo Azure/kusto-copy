@@ -46,12 +46,11 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeEnd)} hasn't been populated");
             }
-            if (State == SourceBlockState.Exporting && string.IsNullOrWhiteSpace(OperationId))
+            if (State != SourceBlockState.Planned && string.IsNullOrWhiteSpace(OperationId))
             {
-                throw new InvalidDataException(
-                    $"{nameof(OperationId)} hasn't been populated");
+                throw new InvalidDataException($"{nameof(OperationId)} hasn't been populated");
             }
-            if (State != SourceBlockState.Exporting && !string.IsNullOrWhiteSpace(OperationId))
+            if (State == SourceBlockState.Planned && !string.IsNullOrWhiteSpace(OperationId))
             {
                 throw new InvalidDataException(
                     $"{nameof(OperationId)} should be empty but is '{OperationId}'");

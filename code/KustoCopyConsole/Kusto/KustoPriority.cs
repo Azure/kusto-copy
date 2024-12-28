@@ -16,6 +16,9 @@ namespace KustoCopyConsole.Kusto
             KustoDbPriority = kustoDbPriority;
         }
 
+        public static KustoPriority HighestPriority { get; } =
+            new KustoPriority(string.Empty, KustoDbPriority.HighestPriority);
+
         public string DatabaseName { get; }
 
         public KustoDbPriority KustoDbPriority { get; }

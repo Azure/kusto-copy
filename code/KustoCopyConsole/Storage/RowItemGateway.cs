@@ -50,7 +50,8 @@ namespace KustoCopyConsole.Storage
             return new RowItemSerializer()
                 .AddType<FileVersionRowItem>(RowType.FileVersion)
                 .AddType<SourceTableRowItem>(RowType.SourceTable)
-                .AddType<SourceBlockRowItem>(RowType.SourceBlock);
+                .AddType<SourceBlockRowItem>(RowType.SourceBlock)
+                .AddType<SourceUrlRowItem>(RowType.SourceUrl);
         }
 
         public static async Task<RowItemGateway> CreateAsync(

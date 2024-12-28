@@ -145,5 +145,35 @@ BlockData
                     return result;
                 });
         }
+
+        public async Task<IImmutableList<ExportDetail>> ShowExportDetailsAsync(
+            long iterationId,
+            string tableName,
+            string operationId,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+                new KustoDbPriority(iterationId, tableName),
+                async () =>
+                {
+                    var commandText = @$"
+.show operation {operationId} details
+";
+                    var properties = new ClientRequestProperties();
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText,
+                        properties);
+                    var result = reader.ToDataSet().Tables[0].Rows
+                        .Cast<DataRow>()
+                        .Select(r => new ExportDetail(
+                            new Uri((string)(r[0])),
+                            (long)(r[1]),
+                            (long)(r[2])))
+                        .ToImmutableArray();
+
+                    return result;
+                });
+        }
     }
 }

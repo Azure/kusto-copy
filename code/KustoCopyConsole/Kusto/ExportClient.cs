@@ -1,6 +1,8 @@
 ﻿using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -46,9 +48,17 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task AwaitExportAsync(string operationId, CancellationToken ct)
+        public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
+            long iterationId,
+            string tableName,
+            string operationId,
+            CancellationToken ct)
         {
-            await _exportCoreClient.AwaitExportAsync(operationId, ct);
+            return await _exportCoreClient.AwaitExportAsync(
+                iterationId,
+                tableName,
+                operationId,
+                ct);
         }
     }
 }
