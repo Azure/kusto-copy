@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Entity.InMemory
                     foreach (var block in sourceTableIteration.BlockMap.Values)
                     {
                         yield return block.RowItem;
-                        foreach (var url in block.Urls)
+                        foreach (var url in block.UrlMap.Values)
                         {
                             yield return url.RowItem;
                         }
@@ -116,10 +116,23 @@ namespace KustoCopyConsole.Entity.InMemory
                 {
                     var sourceIteration = sourceTable.IterationMap[item.IterationId];
 
-                    return _sourceTableMap.SetItem(
-                        tableId,
-                        sourceTable.AppendIteration(
-                            sourceIteration.AppendBlock(new SourceBlockCache(item))));
+                    if (sourceIteration.BlockMap.ContainsKey(item.BlockId))
+                    {
+                        var sourceBlock = sourceIteration.BlockMap[item.BlockId];
+
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendBlock(
+                                    new SourceBlockCache(item, sourceBlock.UrlMap))));
+                    }
+                    else
+                    {
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendBlock(new SourceBlockCache(item))));
+                    }
                 }
                 else
                 {

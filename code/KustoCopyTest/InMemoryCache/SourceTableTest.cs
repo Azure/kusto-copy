@@ -2,17 +2,15 @@ using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyTest.InMemoryCache
 {
-    public class SourceTableTest
+    public class SourceTableTest : CacheTestBase
     {
         [Fact]
         public void CreateTableAndIteration()
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
-            var sourceTable = new TableIdentity(new Uri("https://mycluster.com"), "MyDb", "MyTable");
             var iterationId = 1;
             var state = SourceTableState.Planning;
 
@@ -20,25 +18,24 @@ namespace KustoCopyTest.InMemoryCache
             {
                 State = state,
                 IterationId = iterationId,
-                SourceTable = sourceTable
+                SourceTable = TABLE_IDENTITY
             });
 
             Assert.Single(cache.SourceTableMap);
-            Assert.Equal(sourceTable, cache.SourceTableMap.Keys.First());
-            Assert.Single(cache.SourceTableMap[sourceTable].IterationMap);
+            Assert.Equal(TABLE_IDENTITY, cache.SourceTableMap.Keys.First());
+            Assert.Single(cache.SourceTableMap[TABLE_IDENTITY].IterationMap);
             Assert.Equal(
                 iterationId,
-                cache.SourceTableMap[sourceTable].IterationMap.Keys.First());
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap.Keys.First());
             Assert.Equal(
                 state,
-                cache.SourceTableMap[sourceTable].IterationMap[iterationId].RowItem.State);
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
         }
 
         [Fact]
         public void UpdateEmptyIteration()
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
-            var sourceTable = new TableIdentity(new Uri("https://mycluster.com"), "MyDb", "MyTable");
             var iterationId = 1;
             var state1 = SourceTableState.Planning;
             var state2 = SourceTableState.Planned;
@@ -47,31 +44,30 @@ namespace KustoCopyTest.InMemoryCache
             {
                 State = state1,
                 IterationId = iterationId,
-                SourceTable = sourceTable
+                SourceTable = TABLE_IDENTITY
             });
 
             Assert.Equal(
                 state1,
-                cache.SourceTableMap[sourceTable].IterationMap[iterationId].RowItem.State);
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
 
             //  Update
             cache.AppendItem(new SourceTableRowItem
             {
                 State = state2,
                 IterationId = iterationId,
-                SourceTable = sourceTable
+                SourceTable = TABLE_IDENTITY
             });
 
             Assert.Equal(
                 state2,
-                cache.SourceTableMap[sourceTable].IterationMap[iterationId].RowItem.State);
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
         }
 
         [Fact]
         public void UpdateIterationWithChildren()
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
-            var sourceTable = new TableIdentity(new Uri("https://mycluster.com"), "MyDb", "MyTable");
             var iterationId = 1;
             var iterationState1 = SourceTableState.Planning;
             var iterationState2 = SourceTableState.Planned;
@@ -81,33 +77,33 @@ namespace KustoCopyTest.InMemoryCache
             {
                 State = iterationState1,
                 IterationId = iterationId,
-                SourceTable = sourceTable
+                SourceTable = TABLE_IDENTITY
             });
             cache.AppendItem(new SourceBlockRowItem
             {
                 State = SourceBlockState.Planned,
                 IterationId = iterationId,
-                SourceTable = sourceTable,
+                SourceTable = TABLE_IDENTITY,
                 BlockId = blockId
             });
 
             Assert.Equal(
                 iterationState1,
-                cache.SourceTableMap[sourceTable].IterationMap[iterationId].RowItem.State);
-            Assert.Single(cache.SourceTableMap[sourceTable].IterationMap[iterationId].BlockMap);
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+            Assert.Single(cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
 
             //  Update
             cache.AppendItem(new SourceTableRowItem
             {
                 State = iterationState2,
                 IterationId = iterationId,
-                SourceTable = sourceTable
+                SourceTable = TABLE_IDENTITY
             });
 
             Assert.Equal(
                 iterationState2,
-                cache.SourceTableMap[sourceTable].IterationMap[iterationId].RowItem.State);
-            Assert.Single(cache.SourceTableMap[sourceTable].IterationMap[iterationId].BlockMap);
+                cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+            Assert.Single(cache.SourceTableMap[TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
         }
     }
 }

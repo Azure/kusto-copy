@@ -6,41 +6,41 @@ namespace KustoCopyConsole.Entity.InMemory
 {
     internal class SourceBlockCache : CacheBase<SourceBlockRowItem>
     {
-        private SourceBlockCache(SourceBlockRowItem item, IImmutableList<SourceUrlCache> urls)
+        public SourceBlockCache(
+            SourceBlockRowItem item,
+            IImmutableDictionary<string, SourceUrlCache> urlMap)
             : base(item)
         {
-            Urls = urls;
+            UrlMap = urlMap;
         }
 
         public SourceBlockCache(SourceBlockRowItem item)
-            : this(item, ImmutableArray<SourceUrlCache>.Empty)
+            : this(item, ImmutableDictionary<string, SourceUrlCache>.Empty)
         {
         }
 
-        public IImmutableList<SourceUrlCache> Urls { get; }
+        public IImmutableDictionary<string, SourceUrlCache> UrlMap { get; }
 
         public SourceBlockCache AppendUrl(SourceUrlCache url)
         {
-            var existingUrlCache = Urls
-                .Where(u => u.RowItem.Url == url.RowItem.Url)
-                .FirstOrDefault();
-
-            if (existingUrlCache != null)
+            if (url.RowItem.State == SourceUrlState.Deleted)
             {
-                var newUrls = Urls.Remove(existingUrlCache);
-
-                if (url.RowItem.State != SourceUrlState.Deleted)
+                if (UrlMap.ContainsKey(url.RowItem.Url))
                 {
-                    newUrls = newUrls.Add(url);
+                    return new SourceBlockCache(
+                        RowItem,
+                        UrlMap.Remove(url.RowItem.Url));
                 }
-
-                return new SourceBlockCache(RowItem, newUrls);
+                else
+                {
+                    return this;
+                }
             }
             else
             {
-                var newUrls = Urls.Add(url);
-
-                return new SourceBlockCache(RowItem, newUrls);
+                return new SourceBlockCache(
+                    RowItem,
+                    UrlMap.SetItem(url.RowItem.Url, url));
             }
         }
     }

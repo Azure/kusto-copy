@@ -100,7 +100,8 @@ namespace KustoCopyConsole.Runner
                 .SourceTableMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId]
                 .BlockMap[blockItem.BlockId]
-                .Urls;
+                .UrlMap
+                .Values;
 
             foreach (var url in existingUrls)
             {
