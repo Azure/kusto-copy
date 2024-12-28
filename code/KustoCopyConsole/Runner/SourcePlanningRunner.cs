@@ -51,7 +51,6 @@ namespace KustoCopyConsole.Runner
                         Parameterization,
                         RowItemGateway,
                         DbClientFactory);
-                    Lazy<int> a;
                     var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
