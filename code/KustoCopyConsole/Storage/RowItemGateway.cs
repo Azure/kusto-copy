@@ -51,7 +51,9 @@ namespace KustoCopyConsole.Storage
                 .AddType<FileVersionRowItem>(RowType.FileVersion)
                 .AddType<SourceTableRowItem>(RowType.SourceTable)
                 .AddType<SourceBlockRowItem>(RowType.SourceBlock)
-                .AddType<SourceUrlRowItem>(RowType.SourceUrl);
+                .AddType<SourceUrlRowItem>(RowType.SourceUrl)
+                .AddType<SourceUrlRowItem>(RowType.DestinationTable)
+                .AddType<SourceUrlRowItem>(RowType.DestinationBlock);
         }
 
         public static async Task<RowItemGateway> CreateAsync(

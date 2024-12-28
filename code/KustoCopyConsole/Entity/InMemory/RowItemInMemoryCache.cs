@@ -67,6 +67,10 @@ namespace KustoCopyConsole.Entity.InMemory
                     return AppendSourceBlock(sb);
                 case SourceUrlRowItem url:
                     return AppendSourceUrl(url);
+                case DestinationTableRowItem dt:
+                    return AppendDestinationTable(dt);
+                case DestinationBlockRowItem db:
+                    return AppendDestinationBlock(db);
                 default:
                     throw new NotSupportedException(
                         $"Not supported row item type:  {item.GetType().Name}");
@@ -174,6 +178,77 @@ namespace KustoCopyConsole.Entity.InMemory
                     else
                     {
                         throw new NotSupportedException("Block should come before url in logs");
+                    }
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Table should come before block in logs");
+            }
+        }
+
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendDestinationTable(
+            DestinationTableRowItem item)
+        {
+            var tableId = item.SourceTable;
+
+            if (_sourceTableMap.ContainsKey(tableId))
+            {
+                var sourceTable = _sourceTableMap[tableId];
+
+                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+
+                    return _sourceTableMap.SetItem(
+                        tableId,
+                        sourceTable.AppendIteration(
+                            sourceIteration.AppendDestination(
+                                new DestinationIterationCache(item))));
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Table should come before block in logs");
+            }
+        }
+
+        private IImmutableDictionary<TableIdentity, SourceTableCache> AppendDestinationBlock(
+            DestinationBlockRowItem item)
+        {
+            var tableId = item.SourceTable;
+
+            if (_sourceTableMap.ContainsKey(tableId))
+            {
+                var sourceTable = _sourceTableMap[tableId];
+
+                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+
+                    if (sourceIteration.DestinationMap.ContainsKey(item.DestinationTable))
+                    {
+                        var destinationIteration =
+                            sourceIteration.DestinationMap[item.DestinationTable];
+
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendDestination(
+                                    destinationIteration.AppendBlock(
+                                        new DestinationBlockCache(item)))));
+                    }
+                    else
+                    {
+                        throw new NotSupportedException("Destination Iteration should come before block in logs");
                     }
                 }
                 else

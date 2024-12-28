@@ -6,6 +6,8 @@
         FileVersion,
         SourceTable,
         SourceBlock,
-        SourceUrl
+        SourceUrl,
+        DestinationTable,
+        DestinationBlock
     }
 }

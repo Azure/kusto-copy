@@ -34,7 +34,7 @@ namespace KustoCopyConsole.Entity.InMemory
             return new SourceIterationCache(RowItem, newBlockMap, DestinationMap);
         }
 
-        public SourceIterationCache AppendDestinationIteration(
+        public SourceIterationCache AppendDestination(
             DestinationIterationCache destination)
         {
             var newDestinationMap =
