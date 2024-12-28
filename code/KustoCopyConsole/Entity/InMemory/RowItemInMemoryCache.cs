@@ -88,7 +88,10 @@ namespace KustoCopyConsole.Entity.InMemory
 
                     return _sourceTableMap.SetItem(
                         tableId,
-                        table.AppendIteration(new SourceIterationCache(item, iteration.BlockMap)));
+                        table.AppendIteration(
+                            new SourceIterationCache(
+                                item,
+                                iteration.BlockMap, iteration.DestinationMap)));
                 }
                 else
                 {
