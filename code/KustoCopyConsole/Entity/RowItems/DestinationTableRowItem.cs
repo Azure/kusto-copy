@@ -12,7 +12,7 @@ namespace KustoCopyConsole.Entity.RowItems
         public DestinationTableState State { get; set; }
 
         public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
-        
+
         public TableIdentity DestinationTable { get; set; } = TableIdentity.Empty;
 
         public long IterationId { get; set; }
