@@ -2,8 +2,8 @@
 {
     public enum DestinationTableState
     {
-        Staging,
-        Staged,
-        Completed
+        TempTableCreating,
+        TempTableCreated,
+        TempTableDropped
     }
 }
