@@ -4,6 +4,6 @@
     {
         Planning,
         Planned,
-        Completed
+        Exported
     }
 }

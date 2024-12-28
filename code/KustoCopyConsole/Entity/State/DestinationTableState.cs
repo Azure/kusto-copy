@@ -2,7 +2,8 @@
 {
     public enum DestinationTableState
     {
-        Started,
+        Staging,
+        Staged,
         Completed
     }
 }

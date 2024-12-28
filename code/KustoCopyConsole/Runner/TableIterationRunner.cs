@@ -46,10 +46,10 @@ namespace KustoCopyConsole.Runner
                 : Array.Empty<SourceIterationCache>();
             var completedItems = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State == SourceTableState.Completed);
+                .Where(i => i.State == SourceTableState.Exported);
             var activeItems = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State != SourceTableState.Completed);
+                .Where(i => i.State != SourceTableState.Exported);
             var activityParameterization = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTableIdentity)
                 .First();

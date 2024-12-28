@@ -89,10 +89,11 @@ namespace KustoCopyConsole.Storage
             };
             var cache = new RowItemInMemoryCache(allItems);
 
+            //  Re-write the logs by taking items "compressed" by the cache
             using (var tempMemoryStream = new MemoryStream())
             {
                 _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
-                foreach (var item in allItems)
+                foreach (var item in cache.GetItems())
                 {
                     _rowItemSerializer.Serialize(item, tempMemoryStream);
                 }
@@ -129,14 +130,16 @@ namespace KustoCopyConsole.Storage
                         _backgroundTaskContainer.AddTask(
                             AutoPersistAsync(_persistanceTaskSource, ct));
                     }
-                    if (_bufferStream.Length + binaryItem.Length <= _appendStorage.MaxBufferSize)
-                    {
-                        _bufferStream.Write(binaryItem);
-                    }
-                    else
+                    if (_bufferStream.Length + binaryItem.Length > _appendStorage.MaxBufferSize)
                     {
                         QueueCurrentStream();
                     }
+                    if (_bufferStream.Length + binaryItem.Length > _appendStorage.MaxBufferSize)
+                    {
+                        throw new InvalidDataException(
+                            $"Item too big to be appended:  {binaryItem.Length}");
+                    }
+                    _bufferStream.Write(binaryItem);
                     OnRowItemAppended(package);
 
                     return package;

@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(SourceTableRowItem sourceTableRowItem, CancellationToken ct)
         {
-            if (sourceTableRowItem.State != SourceTableState.Completed)
+            if (sourceTableRowItem.State != SourceTableState.Exported)
             {
                 await using (var exportingProgress =
                     CreateExportingProgressBar(sourceTableRowItem))
@@ -51,6 +51,7 @@ namespace KustoCopyConsole.Runner
                         Parameterization,
                         RowItemGateway,
                         DbClientFactory);
+                    Lazy<int> a;
                     var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
@@ -87,6 +88,8 @@ namespace KustoCopyConsole.Runner
                     }
                     await Task.WhenAll(exportingTasks);
                     await exportingProgress.CompleteAsync();
+                    sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Exported);
+                    await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                 }
             }
         }
@@ -105,8 +108,8 @@ namespace KustoCopyConsole.Runner
                     .Where(b => b.RowItem.State == SourceBlockState.Exported)
                     .Count();
 
-                    return $"{sourceTableRowItem.SourceTable.ToStringCompact()} exported " +
-                    $"{exportedCount}/{blockMap.Count} blocks";
+                    return $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
+                    $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}";
                 });
         }
 
@@ -121,8 +124,8 @@ namespace KustoCopyConsole.Runner
                         .IterationMap[sourceTableRowItem.IterationId]
                         .BlockMap;
 
-                    return $"{sourceTableRowItem.SourceTable.ToStringCompact()} planned "
-                    + $"{blockMap.Count} blocks";
+                    return $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
+                    $"({sourceTableRowItem.IterationId}) {blockMap.Count}";
                 });
         }
 

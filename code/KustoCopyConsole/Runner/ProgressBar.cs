@@ -42,14 +42,14 @@ namespace KustoCopyConsole.Runner
                 {
                     var text = progressFunc();
 
-                    Console.WriteLine($"Progress:  {text}");
+                    Console.WriteLine($"{text} (progress)");
                 }
             }
             if (_isCompleted)
             {
                 var text = progressFunc();
 
-                Console.WriteLine($"Completed:  {text}");
+                Console.WriteLine($"{text} (completed)");
             }
         }
     }
