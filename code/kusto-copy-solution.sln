@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KustoCopyConsole", "KustoCopyConsole\KustoCopyConsole.csproj", "{A645FEB6-763F-4F4D-8250-78A450BAD716}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KustoCopyTest", "KustoCopyTest\KustoCopyTest.csproj", "{FEBF91EF-3BF4-4CBC-88E9-9723255D0878}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A645FEB6-763F-4F4D-8250-78A450BAD716}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FEBF91EF-3BF4-4CBC-88E9-9723255D0878}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEBF91EF-3BF4-4CBC-88E9-9723255D0878}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FEBF91EF-3BF4-4CBC-88E9-9723255D0878}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FEBF91EF-3BF4-4CBC-88E9-9723255D0878}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
