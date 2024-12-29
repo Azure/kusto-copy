@@ -9,7 +9,9 @@ namespace KustoCopyTest.InMemoryCache
 {
     public class CacheTestBase
     {
-        protected readonly TableIdentity TABLE_IDENTITY =
+        protected readonly TableIdentity SOURCE_TABLE_IDENTITY =
             new(new Uri("https://mycluster.com"), "MyDb", "MyTable");
+        protected readonly TableIdentity DESTINATION_TABLE_IDENTITY =
+            new(new Uri("https://myothercluster.com"), "MyOtherDb", "MyTable");
     }
 }

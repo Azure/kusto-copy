@@ -204,11 +204,25 @@ namespace KustoCopyConsole.Entity.InMemory
                 {
                     var sourceIteration = sourceTable.IterationMap[item.IterationId];
 
-                    return _sourceTableMap.SetItem(
-                        tableId,
-                        sourceTable.AppendIteration(
-                            sourceIteration.AppendDestination(
-                                new DestinationIterationCache(item))));
+                    if (sourceIteration.DestinationMap.ContainsKey(item.DestinationTable))
+                    {
+                        var destinationIteration =
+                            sourceIteration.DestinationMap[item.DestinationTable];
+
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendDestination(
+                                    new DestinationIterationCache(item, destinationIteration.BlockMap))));
+                    }
+                    else
+                    {
+                        return _sourceTableMap.SetItem(
+                            tableId,
+                            sourceTable.AppendIteration(
+                                sourceIteration.AppendDestination(
+                                    new DestinationIterationCache(item))));
+                    }
                 }
                 else
                 {
