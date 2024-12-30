@@ -7,5 +7,5 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage
 {
-    internal record RowItemAppend(RowItemBase Item, Task ItemAppended);
+    internal record RowItemAppend(RowItemBase Item, Task ItemAppendTask);
 }

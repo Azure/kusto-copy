@@ -79,7 +79,15 @@ namespace KustoCopyConsole.Runner
             if (activeItems.Any())
             {
                 var planningTasks = activeItems
-                    .Select(i => _sourceTablePlanningRunner.RunAsync(i, ct))
+                    .Select(i => new
+                    {
+                        SourceTableRowItem = i,
+                        TableMap = CreateTempTableMap(i, ct)
+                    })
+                    .Select(o => _sourceTablePlanningRunner.RunAsync(
+                        o.SourceTableRowItem,
+                        o.TableMap,
+                        ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(planningTasks);
@@ -98,9 +106,15 @@ namespace KustoCopyConsole.Runner
                 tableIdentity.ClusterUri,
                 tableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
+            var hasNewData = await queryClient.HasNewDataAsync(
+                tableIdentity.TableName,
+                newIterationId,
+                cursorStart,
+                cursorEnd,
+                ct);
             var newIterationItem = new SourceTableRowItem
             {
-                State = SourceTableState.Planning,
+                State = hasNewData ? SourceTableState.Planning : SourceTableState.Completed,
                 SourceTable = tableIdentity,
                 IterationId = newIterationId,
                 CursorStart = cursorStart,
@@ -110,6 +124,37 @@ namespace KustoCopyConsole.Runner
             await RowItemGateway.AppendAsync(newIterationItem, ct);
 
             return newIterationItem;
+        }
+
+        private IImmutableDictionary<TableIdentity, Task> CreateTempTableMap(
+            SourceTableRowItem sourceTableRowItem,
+            CancellationToken ct)
+        {
+            var tempTableCreatingRunner = new DestinationTempTableCreatingRunner(
+                Parameterization,
+                RowItemGateway,
+                DbClientFactory);
+            var destinationTables = Parameterization.Activities
+                .Where(a => a.Source.GetTableIdentity() == sourceTableRowItem.SourceTable)
+                .Select(a => a.Destinations)
+                .First();
+            var map = destinationTables
+                .Select(d => d.GetTableIdentity())
+                .Select(i => string.IsNullOrWhiteSpace(i.TableName)
+                ? new TableIdentity(
+                    i.ClusterUri,
+                    i.DatabaseName,
+                    sourceTableRowItem.SourceTable.TableName)
+                : i)
+                .Select(d => new
+                {
+                    DestinationTable = d,
+                    Task = tempTableCreatingRunner.RunAsync(sourceTableRowItem, d, ct)
+                })
+                .ToImmutableArray()
+                .ToImmutableDictionary(o => o.DestinationTable, o => o.Task);
+
+            return map;
         }
     }
 }

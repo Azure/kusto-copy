@@ -44,7 +44,7 @@ namespace KustoCopyTest.InMemoryCache
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY,
                 IterationId = iterationId,
-                StagingTableName = "MyTemp"
+                TempTableName = "MyTemp"
             });
             cache.AppendItem(sourceBlockItem);
             cache.AppendItem(destinationBlockItem);

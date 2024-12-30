@@ -52,8 +52,8 @@ namespace KustoCopyConsole.Storage
                 .AddType<SourceTableRowItem>(RowType.SourceTable)
                 .AddType<SourceBlockRowItem>(RowType.SourceBlock)
                 .AddType<SourceUrlRowItem>(RowType.SourceUrl)
-                .AddType<SourceUrlRowItem>(RowType.DestinationTable)
-                .AddType<SourceUrlRowItem>(RowType.DestinationBlock);
+                .AddType<DestinationTableRowItem>(RowType.DestinationTable)
+                .AddType<DestinationBlockRowItem>(RowType.DestinationBlock);
         }
 
         public static async Task<RowItemGateway> CreateAsync(
@@ -119,6 +119,8 @@ namespace KustoCopyConsole.Storage
 
         public async Task<RowItemAppend> AppendAsync(RowItemBase item, CancellationToken ct)
         {
+            item.Validate();
+
             var binaryItem = GetBytes(item);
 
             try
@@ -135,11 +137,6 @@ namespace KustoCopyConsole.Storage
                     if (_bufferStream.Length + binaryItem.Length > _appendStorage.MaxBufferSize)
                     {
                         QueueCurrentStream();
-                    }
-                    if (_bufferStream.Length + binaryItem.Length > _appendStorage.MaxBufferSize)
-                    {
-                        throw new InvalidDataException(
-                            $"Item too big to be appended:  {binaryItem.Length}");
                     }
                     _bufferStream.Write(binaryItem);
                     OnRowItemAppended(package);
@@ -173,29 +170,33 @@ namespace KustoCopyConsole.Storage
 
         private async Task WriteQueueAsync(CancellationToken ct)
         {
-            using (var disposableLock = _asyncLock.TryGetLock())
-            {
-                if (disposableLock != null)
-                {
-                    while (_bufferToWriteQueue.TryDequeue(out var queueItem))
-                    {
-                        var success = await _appendStorage.AtomicAppendAsync(queueItem.Buffer, ct);
-
-                        if (!success)
-                        {
-                            throw new NotImplementedException("Must compact");
-                        }
-                        else
-                        {
-                            queueItem.TaskSource.SetResult();
-                        }
-                    }
-                }
-            }
             //  Combat racing condition
             if (_bufferToWriteQueue.Any())
             {
-                await WriteQueueAsync(ct);
+                using (var disposableLock = _asyncLock.TryGetLock())
+                {
+                    if (disposableLock != null)
+                    {
+                        while (_bufferToWriteQueue.TryDequeue(out var queueItem))
+                        {
+                            var success =
+                                await _appendStorage.AtomicAppendAsync(queueItem.Buffer, ct);
+
+                            if (!success)
+                            {
+                                throw new NotImplementedException("Must compact");
+                            }
+                            else
+                            {
+                                queueItem.TaskSource.SetResult();
+                            }
+                        }
+                    }
+                    else
+                    {   //  Another thread got the lock
+                        return;
+                    }
+                }
             }
         }
 
@@ -225,9 +226,15 @@ namespace KustoCopyConsole.Storage
             {
                 if (_bufferStream.Length > 0)
                 {
-                    _bufferToWriteQueue.Enqueue(new QueueItem(
-                        _bufferStream.ToArray(),
-                        _persistanceTaskSource));
+                    var buffer = _bufferStream.ToArray();
+
+                    if (buffer.Length > _appendStorage.MaxBufferSize)
+                    {
+                        throw new InvalidDataException(
+                            $"Buffer stream is larger than accepted storage block:  " +
+                            $"{buffer.Length}");
+                    }
+                    _bufferToWriteQueue.Enqueue(new QueueItem(buffer, _persistanceTaskSource));
                     _persistanceTaskSource = new();
                     _bufferStream.SetLength(0);
                 }

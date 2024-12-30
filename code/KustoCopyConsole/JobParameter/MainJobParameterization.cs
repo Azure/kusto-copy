@@ -24,9 +24,6 @@ namespace KustoCopyConsole.JobParameter
         public IImmutableList<ActivityParameterization> Activities { get; set; } =
             ImmutableArray<ActivityParameterization>.Empty;
 
-        public IImmutableList<ClusterOption> ClusterOptions { get; set; } =
-            ImmutableArray<ClusterOption>.Empty;
-
         public static MainJobParameterization FromOptions(CommandLineOptions options)
         {
             if (!string.IsNullOrWhiteSpace(options.Source))
@@ -68,7 +65,7 @@ namespace KustoCopyConsole.JobParameter
 
                 var sourceDb = sourcePathParts[1];
                 var sourceTable = sourcePathParts[2];
-                var destinationDb = sourcePathParts[1];
+                var destinationDb = destinationPathParts[1];
 
                 sourceBuilder.Path = string.Empty;
                 destinationBuilder.Path = string.Empty;
@@ -106,10 +103,6 @@ namespace KustoCopyConsole.JobParameter
             foreach (var a in Activities)
             {
                 a.Validate();
-            }
-            foreach (var c in ClusterOptions)
-            {
-                c.Validate();
             }
         }
 

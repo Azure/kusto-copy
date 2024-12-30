@@ -27,7 +27,7 @@ namespace KustoCopyTest.InMemoryCache
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY,
                 IterationId = iterationId,
-                StagingTableName = "MyTemptable"
+                TempTableName = "MyTemptable"
             });
 
             Assert.Single(cache.SourceTableMap);
@@ -60,7 +60,7 @@ namespace KustoCopyTest.InMemoryCache
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY,
                 IterationId = iterationId,
-                StagingTableName = "MyTemp"
+                TempTableName = "MyTemp"
             };
 
             cache.AppendItem(new SourceTableRowItem

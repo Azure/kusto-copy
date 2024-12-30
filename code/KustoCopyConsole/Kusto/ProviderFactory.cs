@@ -12,9 +12,8 @@ namespace KustoCopyConsole.Kusto
     {
         private const string APPLICATION_NAME = "KustoCopy";
 
-        private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
-        private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dbCommandProviderMap;
+        private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dmCommandProviderMap;
 
         #region Constructor
@@ -23,25 +22,25 @@ namespace KustoCopyConsole.Kusto
             var sourceClusterUris = parameterization.Activities
                 .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
                 .Distinct();
+            var destinationClusterUris = parameterization.Activities
+                .SelectMany(a => a.Destinations)
+                .Select(d => NormalizedUri.NormalizeUri(d.ClusterUri))
+                .Distinct();
+            var allClusterUris = sourceClusterUris
+                .Concat(destinationClusterUris)
+                .Distinct();
             var sourceBuilders = sourceClusterUris
                 .Select(uri => new
                 {
                     Uri = uri,
                     Builder = CreateBuilder(credentials, uri)
                 });
-            var destinationClusterUris = parameterization.Activities
-                .SelectMany(a => a.Destinations)
-                .Select(d => NormalizedUri.NormalizeUri(d.ClusterUri))
-                .Distinct();
             var destinationIngestionBuilders = destinationClusterUris
                 .Select(uri => new
                 {
                     Uri = uri,
                     Builder = CreateBuilder(credentials, GetIngestUri(uri))
                 });
-            var allClusterUris = sourceClusterUris
-                .Concat(destinationClusterUris)
-                .Distinct();
             var allBuilders = allClusterUris
                 .Select(uri => new
                 {
@@ -49,15 +48,11 @@ namespace KustoCopyConsole.Kusto
                     Builder = CreateBuilder(credentials, uri)
                 });
 
-            _commandProviderMap = sourceBuilders
-                .ToImmutableDictionary(
-                e => e.Uri,
-                e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
             _queryProviderMap = allBuilders
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoClientFactory.CreateCslQueryProvider(e.Builder));
-            _dbCommandProviderMap = allBuilders
+            _commandProviderMap = allBuilders
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
@@ -74,7 +69,7 @@ namespace KustoCopyConsole.Kusto
             var builder = new KustoConnectionStringBuilder(uri.ToString())
                 .WithAadAzureTokenCredentialsAuthentication(credentials);
 
-            builder.ApplicationNameForTracing = "APPLICATION_NAME";
+            builder.ApplicationNameForTracing = "KUSTO-COPY";
 
             return builder;
         }
@@ -92,19 +87,14 @@ namespace KustoCopyConsole.Kusto
             }
         }
 
-        public ICslAdminProvider GetCommandProvider(Uri clusterUri)
-        {
-            return _commandProviderMap[clusterUri];
-        }
-
         public ICslQueryProvider GetQueryProvider(Uri clusterUri)
         {
             return _queryProviderMap[clusterUri];
         }
 
-        public ICslAdminProvider GetDbCommandProvider(Uri clusterUri)
+        public ICslAdminProvider GetCommandProvider(Uri clusterUri)
         {
-            return _dbCommandProviderMap[clusterUri];
+            return _commandProviderMap[clusterUri];
         }
 
         public ICslAdminProvider GetDmCommandProvider(Uri clusterUri)

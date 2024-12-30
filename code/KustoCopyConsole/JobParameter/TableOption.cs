@@ -2,8 +2,6 @@
 {
     public class TableOption
     {
-        public TimeSpan ExtentTimeRange { get; set; } = TimeSpan.FromDays(1);
-
         public ExportMode ExportMode { get; set; } = ExportMode.BackfillAndNew;
 
         public TimeSpan IterationWait { get; set; } = TimeSpan.FromMinutes(5);

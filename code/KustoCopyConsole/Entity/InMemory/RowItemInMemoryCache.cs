@@ -44,6 +44,14 @@ namespace KustoCopyConsole.Entity.InMemory
                         }
 
                     }
+                    foreach (var destinationIteration in sourceTableIteration.DestinationMap.Values)
+                    {
+                        yield return destinationIteration.RowItem;
+                        foreach (var block in destinationIteration.BlockMap.Values)
+                        {
+                            yield return block.RowItem;
+                        }
+                    }
                 }
             }
         }

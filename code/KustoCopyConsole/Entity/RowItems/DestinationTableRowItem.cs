@@ -17,7 +17,7 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long IterationId { get; set; }
 
-        public string StagingTableName { get; set; } = string.Empty;
+        public string TempTableName { get; set; } = string.Empty;
 
         public override void Validate()
         {
@@ -28,9 +28,9 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IterationId)} should be positive but is {IterationId}");
             }
-            if (string.IsNullOrWhiteSpace(StagingTableName))
+            if (string.IsNullOrWhiteSpace(TempTableName))
             {
-                throw new InvalidDataException($"{nameof(StagingTableName)} should have a value");
+                throw new InvalidDataException($"{nameof(TempTableName)} should have a value");
             }
         }
 

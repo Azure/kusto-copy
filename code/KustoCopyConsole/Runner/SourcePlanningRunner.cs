@@ -1,5 +1,4 @@
-﻿using Azure.Data.Tables;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -36,21 +35,25 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(SourceTableRowItem sourceTableRowItem, CancellationToken ct)
+        public async Task RunAsync(
+            SourceTableRowItem sourceTableRowItem,
+            IImmutableDictionary<TableIdentity, Task> tableMap,
+            CancellationToken ct)
         {
-            if (sourceTableRowItem.State != SourceTableState.Exported)
+            if (sourceTableRowItem.State == SourceTableState.Planning
+                || sourceTableRowItem.State == SourceTableState.Planned)
             {
                 await using (var exportingProgress =
                     CreateExportingProgressBar(sourceTableRowItem))
                 {
-                    var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[sourceTableRowItem.SourceTable]
-                        .IterationMap[sourceTableRowItem.IterationId]
-                        .BlockMap;
                     var exportingRunner = new SourceExportingRunner(
                         Parameterization,
                         RowItemGateway,
                         DbClientFactory);
+                    var blockMap = RowItemGateway.InMemoryCache
+                        .SourceTableMap[sourceTableRowItem.SourceTable]
+                        .IterationMap[sourceTableRowItem.IterationId]
+                        .BlockMap;
                     var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(

@@ -1,4 +1,5 @@
-﻿using Kusto.Cloud.Platform.Data;
+﻿using Azure;
+using Kusto.Cloud.Platform.Data;
 using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
@@ -175,5 +176,94 @@ BlockData
                     return result;
                 });
         }
+
+        #region Table Management
+        public async Task DropTableIfExistsAsync(
+            long iterationId,
+            string tableName,
+            CancellationToken ct)
+        {
+            await _commandQueue.RequestRunAsync(
+                new KustoDbPriority(iterationId, tableName),
+                async () =>
+                {
+                    var commandText = @$"
+.drop table ['{tableName}'] ifexists
+";
+                    var properties = new ClientRequestProperties();
+
+                    await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText,
+                        properties);
+                });
+        }
+
+        public async Task CreateTempTableAsync(
+            long iterationId,
+            string tableName,
+            string tempTableName,
+            CancellationToken ct)
+        {
+            await _commandQueue.RequestRunAsync(
+                new KustoDbPriority(iterationId, tableName),
+                async () =>
+                {
+                    var commandText = @$"
+.execute database script with (ContinueOnErrors=true) <|
+    .create table ['{tempTableName}'] based-on ['{tableName}'] with (folder=""kc"")
+
+    .delete table ['{tempTableName}'] policy extent_tags_retention
+
+    .alter table ['{tempTableName}'] policy ingestionbatching
+    ```
+    {{
+        ""MaximumBatchingTimeSpan"" : ""00:00:15"",
+        ""MaximumNumberOfItems"" : 2000,
+        ""MaximumRawDataSizeMB"": 2048
+    }}
+    ```
+
+    .alter-merge table ['{tempTableName}'] policy merge
+    ```
+    {{
+        ""AllowRebuild"": false,
+        ""AllowMerge"": false
+    }}
+    ```
+
+    .delete table ['{tempTableName}'] policy partitioning
+
+    .alter table ['{tempTableName}'] policy restricted_view_access true
+";
+                    var properties = new ClientRequestProperties();
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText,
+                        properties);
+                    var result = reader.ToDataSet().Tables[0].Rows
+                        .Cast<DataRow>()
+                        .Select(r => new
+                        {
+                            OperationId = (Guid)(r[0]),
+                            CommandType = (string)(r[1]),
+                            CommandText = (string)(r[2]),
+                            Result = (string)(r[3]),
+                            Reason = (string)(r[4])
+                        })
+                        .Where(o => o.Result != "Completed")
+                        .FirstOrDefault();
+
+                    if (result != null)
+                    {
+                        throw new CopyException(
+                            $"Command failed in operation '{result.OperationId}':  "
+                            + $"{result.CommandType} / '{result.CommandText}' / {result.Result} "
+                            + $"'{result.Reason}'",
+                            false);
+                    }
+                });
+        }
+        #endregion
     }
 }
