@@ -81,7 +81,7 @@ namespace KustoCopyConsole.Kusto
             return operationId;
         }
 
-        public void RegisterExistingOperation(string operationId, CancellationToken ct)
+        public void RegisterExistingOperation(string operationId)
         {
             var exportCompletedSource = new TaskCompletionSource();
             var slotReleasedTask = _queue.RequestRunAsync(

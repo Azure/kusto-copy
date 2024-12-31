@@ -38,18 +38,26 @@ namespace KustoCopyConsole.Runner
                 ingestionTimeStart,
                 ingestionTimeEnd,
                 ct);
+            var exportClient = DbClientFactory.GetExportClient(
+                blockItem.SourceTable.ClusterUri,
+                blockItem.SourceTable.DatabaseName,
+                blockItem.SourceTable.TableName);
 
+            if (blockItem.State == SourceBlockState.Exporting)
+            {   //  The block is already exporting, so we track its progress
+                exportClient.RegisterExistingOperation(blockItem.OperationId);
+            }
             if (blockItem.State != SourceBlockState.Exported)
             {
                 await CleanUrlsAsync(blockItem, ct);
             }
             if (blockItem.State == SourceBlockState.Planned)
             {
-                blockItem = await ExportBlockAsync(blobPathProvider, blockItem, ct);
+                blockItem = await ExportBlockAsync(blobPathProvider, exportClient, blockItem, ct);
             }
             if (blockItem.State == SourceBlockState.Exporting)
             {
-                blockItem = await AwaitExportBlockAsync(blockItem, ct);
+                blockItem = await AwaitExportBlockAsync(exportClient, blockItem, ct);
             }
             if (blockItem.State == SourceBlockState.Exported)
             {   //  Ingest in all destinations
@@ -72,13 +80,10 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<SourceBlockRowItem> AwaitExportBlockAsync(
+            ExportClient exportClient,
             SourceBlockRowItem blockItem,
             CancellationToken ct)
         {
-            var exportClient = DbClientFactory.GetExportClient(
-                blockItem.SourceTable.ClusterUri,
-                blockItem.SourceTable.DatabaseName,
-                blockItem.SourceTable.TableName);
             var exportDetails = await exportClient.AwaitExportAsync(
                 blockItem.IterationId,
                 blockItem.SourceTable.TableName,
@@ -111,6 +116,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<SourceBlockRowItem> ExportBlockAsync(
             IBlobPathProvider blobPathProvider,
+            ExportClient exportClient,
             SourceBlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -118,10 +124,6 @@ namespace KustoCopyConsole.Runner
                 .SourceTableMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId]
                 .RowItem;
-            var exportClient = DbClientFactory.GetExportClient(
-                blockItem.SourceTable.ClusterUri,
-                blockItem.SourceTable.DatabaseName,
-                blockItem.SourceTable.TableName);
             var operationId = await exportClient.NewExportAsync(
                 blobPathProvider,
                 blockItem.IterationId,

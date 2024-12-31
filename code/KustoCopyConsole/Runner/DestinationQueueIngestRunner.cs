@@ -54,10 +54,16 @@ namespace KustoCopyConsole.Runner
                 .UrlMap
                 .Values
                 .Select(u => u.RowItem);
+            var tempTableName = RowItemGateway.InMemoryCache
+                .SourceTableMap[blockItem.SourceTable]
+                .IterationMap[blockItem.IterationId]
+                .DestinationMap[blockItem.DestinationTable]
+                .RowItem
+                .TempTableName;
             var ingestClient = DbClientFactory.GetIngestClient(
                 blockItem.DestinationTable.ClusterUri,
                 blockItem.DestinationTable.DatabaseName,
-                blockItem.DestinationTable.TableName);
+                tempTableName);
             var blockTag = $"kusto-copy:{Guid.NewGuid()}";
             var authorizeTasks = urlItems
                 .Select(u => new Uri(u.Url))

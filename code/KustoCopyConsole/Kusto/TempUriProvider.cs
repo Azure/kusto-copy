@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Kusto
         {
             var innerCache = await GetOrFetchCacheAsync(ct);
             var queryString = innerCache.TempUris
-                .Where(t => uri.ToString().StartsWith(t.LocalPath))
+                .Where(u => uri.ToString().StartsWith(RemoveQueryString(u).ToString()))
                 .Select(t => t.Query)
                 .FirstOrDefault();
 
@@ -48,6 +48,15 @@ namespace KustoCopyConsole.Kusto
             var builder = new UriBuilder(uri);
 
             builder.Query = queryString;
+
+            return builder.Uri;
+        }
+
+        private static Uri RemoveQueryString(Uri uri)
+        {
+            var builder = new UriBuilder(uri);
+
+            builder.Query = string.Empty;
 
             return builder.Uri;
         }

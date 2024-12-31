@@ -1,6 +1,7 @@
 ﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -46,6 +47,11 @@ namespace KustoCopyConsole.Kusto
                 ingestionTimeStart,
                 ingestionTimeEnd,
                 ct);
+        }
+
+        public void RegisterExistingOperation(string operationId)
+        {
+            _exportCoreClient.RegisterExistingOperation(operationId);
         }
 
         public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
