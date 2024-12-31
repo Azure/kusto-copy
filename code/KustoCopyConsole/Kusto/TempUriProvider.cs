@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class TempUriProvider
+    internal class TempUriProvider : IBlobPathProvider
     {
         #region Inner Types
         private record InnerCache(DateTime CacheTime, IImmutableList<Uri> TempUris);
@@ -24,7 +24,35 @@ namespace KustoCopyConsole.Kusto
             _dmCommandClient = dmCommandClient;
         }
 
-        public async Task<Uri> FetchUriAsync(CancellationToken ct)
+        async Task<Uri> IBlobPathProvider.FetchUriAsync(CancellationToken ct)
+        {
+            var innerCache = await GetOrFetchCacheAsync(ct);
+            var tempUris = innerCache.TempUris;
+
+            return tempUris[_random.Next(tempUris.Count)];
+        }
+
+        async Task<Uri> IBlobPathProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
+        {
+            var innerCache = await GetOrFetchCacheAsync(ct);
+            var queryString = innerCache.TempUris
+                .Where(t => uri.ToString().StartsWith(t.LocalPath))
+                .Select(t => t.Query)
+                .FirstOrDefault();
+
+            if (queryString == null)
+            {
+                throw new CopyException($"Can't find container for '{uri}'", false);
+            }
+
+            var builder = new UriBuilder(uri);
+
+            builder.Query = queryString;
+
+            return builder.Uri;
+        }
+
+        private async Task<InnerCache> GetOrFetchCacheAsync(CancellationToken ct)
         {
             var innerCache = _innerCache;
 
@@ -37,9 +65,7 @@ namespace KustoCopyConsole.Kusto
                 Interlocked.Exchange(ref _innerCache, innerCache);
             }
 
-            var tempUris = innerCache.TempUris;
-
-            return tempUris[_random.Next(tempUris.Count)];
+            return innerCache;
         }
     }
 }

@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Entity.RowItems
         public long BlockId { get; set; }
 
         public string Url { get; set; } = string.Empty;
-        
+
         public long RowCount { get; set; }
 
         public override void Validate()

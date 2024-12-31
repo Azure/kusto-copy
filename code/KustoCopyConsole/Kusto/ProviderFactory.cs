@@ -15,6 +15,7 @@ namespace KustoCopyConsole.Kusto
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dmCommandProviderMap;
+        private readonly ImmutableDictionary<Uri, IKustoQueuedIngestClient> _ingestProviderMap;
 
         #region Constructor
         public ProviderFactory(MainJobParameterization parameterization, TokenCredential credentials)
@@ -60,6 +61,10 @@ namespace KustoCopyConsole.Kusto
                 .ToImmutableDictionary(
                 e => e.Uri,
                 e => KustoClientFactory.CreateCslAdminProvider(e.Builder));
+            _ingestProviderMap = destinationIngestionBuilders
+                .ToImmutableDictionary(
+                e => e.Uri,
+                e => KustoIngestFactory.CreateQueuedIngestClient(e.Builder));
         }
 
         private static KustoConnectionStringBuilder CreateBuilder(
@@ -100,6 +105,11 @@ namespace KustoCopyConsole.Kusto
         public ICslAdminProvider GetDmCommandProvider(Uri clusterUri)
         {
             return _dmCommandProviderMap[clusterUri];
+        }
+
+        public IKustoQueuedIngestClient GetIngestProvider(Uri clusterUri)
+        {
+            return _ingestProviderMap[clusterUri];
         }
 
         private static Uri GetIngestUri(Uri uri)

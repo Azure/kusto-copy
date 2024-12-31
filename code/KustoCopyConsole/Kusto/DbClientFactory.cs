@@ -192,5 +192,20 @@ namespace KustoCopyConsole.Kusto
                 throw new CopyException($"Can't find cluster '{clusterUri}'", false, ex);
             }
         }
+
+        public IngestClient GetIngestClient(Uri clusterUri, string database, string table)
+        {
+            try
+            {
+                var ingestProvider = _providerFactory.GetIngestProvider(clusterUri);
+                var ingestClient = new IngestClient(ingestProvider, database, table);
+
+                return ingestClient;
+            }
+            catch (KeyNotFoundException ex)
+            {
+                throw new CopyException($"Can't find cluster '{clusterUri}'", false, ex);
+            }
+        }
     }
 }

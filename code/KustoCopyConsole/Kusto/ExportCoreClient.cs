@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
-            Func<CancellationToken, Task<Uri>> blobPathFactory,
+            IBlobPathProvider blobPathProvider,
             DbCommandClient exportCommandClient,
             string tableName,
             long iterationId,
@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Kusto
                     new KustoDbPriority(iterationId, tableName, blockId)),
                 async () =>
                 {
-                    var tempUri = await blobPathFactory(ct);
+                    var tempUri = await blobPathProvider.FetchUriAsync(ct);
                     var operationId = await exportCommandClient.ExportBlockAsync(
                         tempUri,
                         tableName,

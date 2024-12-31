@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(
             SourceTableRowItem sourceTableRowItem,
-            IImmutableDictionary<TableIdentity, Task> tableMap,
+            IImmutableDictionary<TableIdentity, Task> tempTableMap,
             CancellationToken ct)
         {
             if (sourceTableRowItem.State == SourceTableState.Planning
@@ -54,10 +54,11 @@ namespace KustoCopyConsole.Runner
                         .SourceTableMap[sourceTableRowItem.SourceTable]
                         .IterationMap[sourceTableRowItem.IterationId]
                         .BlockMap;
-                    var blobPathFactory = GetBlobPathFactory(sourceTableRowItem.SourceTable);
+                    var blobPathProvider = GetBlobPathFactory(sourceTableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
-                            blobPathFactory,
+                            blobPathProvider,
+                            tempTableMap,
                             sourceTableRowItem,
                             b.RowItem.BlockId,
                             b.RowItem.IngestionTimeStart,
@@ -75,8 +76,9 @@ namespace KustoCopyConsole.Runner
                                 ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
                                 : null;
                             var newTasks = await PlanNewBlocksAsync(
+                                tempTableMap,
                                 exportingRunner,
-                                blobPathFactory,
+                                blobPathProvider,
                                 sourceTableRowItem,
                                 (lastBlockItem?.BlockId ?? 0) + 1,
                                 lastBlockItem?.IngestionTimeEnd,
@@ -131,7 +133,7 @@ namespace KustoCopyConsole.Runner
                 });
         }
 
-        private Func<CancellationToken, Task<Uri>> GetBlobPathFactory(TableIdentity sourceTable)
+        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
         {
             var activity = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTable)
@@ -148,7 +150,7 @@ namespace KustoCopyConsole.Runner
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName));
 
-                return tempUriProvider.FetchUriAsync;
+                return tempUriProvider;
             }
             else
             {
@@ -158,8 +160,9 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
+            IImmutableDictionary<TableIdentity, Task> tempTableMap,
             SourceExportingRunner exportingRunner,
-            Func<CancellationToken, Task<Uri>> blobPathFactory,
+            IBlobPathProvider blobPathProvider,
             SourceTableRowItem sourceTableItem,
             long nextBlockId,
             DateTime? nextIngestionTimeStart,
@@ -183,7 +186,8 @@ namespace KustoCopyConsole.Runner
                     dbCommandClient,
                     ct);
                 var newExportingTasks = PlanBlockBatch(
-                    blobPathFactory,
+                    blobPathProvider,
+                    tempTableMap,
                     exportingRunner,
                     sourceTableItem,
                     ref nextBlockId,
@@ -203,7 +207,8 @@ namespace KustoCopyConsole.Runner
         }
 
         private IEnumerable<Task> PlanBlockBatch(
-            Func<CancellationToken, Task<Uri>> blobPathFactory,
+            IBlobPathProvider blobPathProvider,
+            IImmutableDictionary<TableIdentity, Task> tempTableMap,
             SourceExportingRunner exportingRunner,
             SourceTableRowItem sourceTableItem,
             ref long nextBlockId,
@@ -229,7 +234,8 @@ namespace KustoCopyConsole.Runner
                         || distribution.MinCreatedOn != currentMinCreatedOn))
                     {
                         exportingTasks.Add(exportingRunner.RunAsync(
-                            blobPathFactory,
+                            blobPathProvider,
+                            tempTableMap,
                             sourceTableItem,
                             nextBlockId++,
                             cummulativeDistributions.Min(d => d.IngestionTime),
@@ -251,7 +257,8 @@ namespace KustoCopyConsole.Runner
                     && cummulativeDistributions.Any())
                 {
                     exportingTasks.Add(exportingRunner.RunAsync(
-                        blobPathFactory,
+                        blobPathProvider,
+                        tempTableMap,
                         sourceTableItem,
                         nextBlockId++,
                         cummulativeDistributions.Min(d => d.IngestionTime),

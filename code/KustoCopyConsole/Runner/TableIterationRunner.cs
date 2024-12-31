@@ -82,15 +82,16 @@ namespace KustoCopyConsole.Runner
                     .Select(i => new
                     {
                         SourceTableRowItem = i,
-                        TableMap = CreateTempTableMap(i, ct)
+                        TempTableMap = CreateTempTableMap(i, ct)
                     })
                     .Select(o => _sourceTablePlanningRunner.RunAsync(
                         o.SourceTableRowItem,
-                        o.TableMap,
+                        o.TempTableMap,
                         ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(planningTasks);
+                throw new NotImplementedException();
             }
 
             return isBackfillOnly;

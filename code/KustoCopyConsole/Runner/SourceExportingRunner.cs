@@ -1,8 +1,11 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using Azure;
+using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
@@ -17,13 +20,18 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task RunAsync(
-            Func<CancellationToken, Task<Uri>> blobPathFactory,
+            IBlobPathProvider blobPathProvider,
+            IImmutableDictionary<TableIdentity, Task> tempTableMap,
             SourceTableRowItem sourceTableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
+            var queueIngestRunner = new DestinationQueueIngestRunner(
+                Parameterization,
+                RowItemGateway,
+                DbClientFactory);
             var blockItem = await EnsureBlockCreatedAsync(
                 sourceTableRowItem,
                 blockId,
@@ -37,12 +45,72 @@ namespace KustoCopyConsole.Runner
             }
             if (blockItem.State == SourceBlockState.Planned)
             {
-                blockItem = await ExportBlockAsync(blobPathFactory, blockItem, ct);
+                blockItem = await ExportBlockAsync(blobPathProvider, blockItem, ct);
+            }
+            if (blockItem.State == SourceBlockState.Exporting)
+            {
+                blockItem = await AwaitExportBlockAsync(blockItem, ct);
+            }
+            if (blockItem.State == SourceBlockState.Exported)
+            {   //  Ingest in all destinations
+                var ingestionTasks = tempTableMap
+                    .Select(pair => new
+                    {
+                        DestinationTable = pair.Key,
+                        Task = pair.Value
+                    })
+                    .Select(o => queueIngestRunner.RunAsync(
+                        blobPathProvider,
+                        blockItem,
+                        o.DestinationTable,
+                        o.Task,
+                        ct))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(ingestionTasks);
             }
         }
 
+        private async Task<SourceBlockRowItem> AwaitExportBlockAsync(
+            SourceBlockRowItem blockItem,
+            CancellationToken ct)
+        {
+            var exportClient = DbClientFactory.GetExportClient(
+                blockItem.SourceTable.ClusterUri,
+                blockItem.SourceTable.DatabaseName,
+                blockItem.SourceTable.TableName);
+            var exportDetails = await exportClient.AwaitExportAsync(
+                blockItem.IterationId,
+                blockItem.SourceTable.TableName,
+                blockItem.OperationId,
+                ct);
+            var urlItems = exportDetails
+                .Select(e => new SourceUrlRowItem
+                {
+                    State = SourceUrlState.Exported,
+                    SourceTable = blockItem.SourceTable,
+                    IterationId = blockItem.IterationId,
+                    BlockId = blockItem.BlockId,
+                    Url = e.BlobUri.ToString(),
+                    RowCount = e.RecordCount
+                });
+
+            if (!urlItems.Any())
+            {
+                throw new InvalidDataException("No URL exported");
+            }
+            foreach (var urlItem in urlItems)
+            {
+                await RowItemGateway.AppendAsync(urlItem, ct);
+            }
+            blockItem = blockItem.ChangeState(SourceBlockState.Exported);
+            await RowItemGateway.AppendAsync(blockItem, ct);
+
+            return blockItem;
+        }
+
         private async Task<SourceBlockRowItem> ExportBlockAsync(
-            Func<CancellationToken, Task<Uri>> blobPathFactory,
+            IBlobPathProvider blobPathProvider,
             SourceBlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -55,7 +123,7 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
             var operationId = await exportClient.NewExportAsync(
-                blobPathFactory,
+                blobPathProvider,
                 blockItem.IterationId,
                 blockItem.BlockId,
                 iteration.CursorStart,
@@ -66,29 +134,6 @@ namespace KustoCopyConsole.Runner
 
             blockItem = blockItem.ChangeState(SourceBlockState.Exporting);
             blockItem.OperationId = operationId;
-            await RowItemGateway.AppendAsync(blockItem, ct);
-
-            var exportDetails = await exportClient.AwaitExportAsync(
-                blockItem.IterationId,
-                blockItem.SourceTable.TableName,
-                operationId,
-                ct);
-            var urlItems = exportDetails
-                .Select(e => new SourceUrlRowItem
-                {
-                    State = SourceUrlState.Exported,
-                    SourceTable = blockItem.SourceTable,
-                    IterationId = iteration.IterationId,
-                    BlockId = blockItem.BlockId,
-                    Url = e.BlobUri.ToString(),
-                    RowCount = e.RecordCount
-                });
-
-            foreach (var urlItem in urlItems)
-            {
-                await RowItemGateway.AppendAsync(urlItem, ct);
-            }
-            blockItem = blockItem.ChangeState(SourceBlockState.Exported);
             await RowItemGateway.AppendAsync(blockItem, ct);
 
             return blockItem;

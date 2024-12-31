@@ -19,6 +19,8 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long BlockId { get; set; }
 
+        public string BlockTag { get; set; } = string.Empty;
+
         public override void Validate()
         {
             SourceTable.Validate();
@@ -32,6 +34,16 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 throw new InvalidDataException(
                     $"{nameof(BlockId)} should be positive but is {BlockId}");
+            }
+            if (State == DestinationBlockState.Queuing
+                && !string.IsNullOrWhiteSpace(BlockTag))
+            {
+                throw new InvalidDataException($"{nameof(BlockTag)} should be empty");
+            }
+            if (State != DestinationBlockState.Queuing
+                && string.IsNullOrWhiteSpace(BlockTag))
+            {
+                throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
             }
         }
 
