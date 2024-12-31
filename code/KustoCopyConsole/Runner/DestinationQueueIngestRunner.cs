@@ -33,13 +33,16 @@ namespace KustoCopyConsole.Runner
                 sourceBlockItem,
                 destinationTable,
                 ct);
+            var awaitIngestRunner = new DestinationAwaitIngestRunner(
+                Parameterization,
+                RowItemGateway,
+                DbClientFactory);
 
             if (blockItem.State == DestinationBlockState.Queuing)
             {
                 blockItem = await QueueIngestBlockAsync(blobPathProvider, blockItem, ct);
             }
-
-            throw new NotImplementedException();
+            blockItem = await awaitIngestRunner.RunAsync(blockItem, ct);
         }
 
         private async Task<DestinationBlockRowItem> QueueIngestBlockAsync(

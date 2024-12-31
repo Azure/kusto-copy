@@ -265,5 +265,34 @@ BlockData
                 });
         }
         #endregion
+
+        public async Task<long> GetExtentRowCountAsync(
+            long iterationId,
+            string tableName,
+            string tempTableName,
+            string blockTag,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+               new KustoDbPriority(iterationId, tableName),
+               async () =>
+               {
+                   var commandText = @$"
+.show table ['{tempTableName}'] extents where tags contains '{blockTag}'
+| summarize sum(RowCount)
+";
+                   var properties = new ClientRequestProperties();
+                   var reader = await _provider.ExecuteControlCommandAsync(
+                       DatabaseName,
+                       commandText,
+                       properties);
+                   var result = reader.ToDataSet().Tables[0].Rows
+                       .Cast<DataRow>()
+                       .Select(r => (long)r[0])
+                       .First();
+
+                   return result;
+               });
+        }
     }
 }
