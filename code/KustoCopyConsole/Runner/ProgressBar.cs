@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.Runner
         private readonly Task _timerTask;
         private bool _isCompleted = false;
 
-        public ProgressBar(TimeSpan refreshRate, Func<string> progressFunc)
+        public ProgressBar(TimeSpan refreshRate, Func<ProgressReport> progressFunc)
         {
             _timerTask = MonitorAsync(refreshRate, progressFunc);
         }
@@ -23,14 +24,7 @@ namespace KustoCopyConsole.Runner
             await _timerTask;
         }
 
-        public async Task CompleteAsync()
-        {
-            _isCompleted = true;
-            _timerCompletionSource.SetResult();
-            await _timerTask;
-        }
-
-        private async Task MonitorAsync(TimeSpan refreshRate, Func<string> progressFunc)
+        private async Task MonitorAsync(TimeSpan refreshRate, Func<ProgressReport> progressFunc)
         {
             while (!_timerCompletionSource.Task.IsCompleted)
             {
@@ -40,9 +34,24 @@ namespace KustoCopyConsole.Runner
 
                 if (!_timerCompletionSource.Task.IsCompleted)
                 {
-                    var text = progressFunc();
+                    var report = progressFunc();
 
-                    Console.WriteLine($"{text} (progress)");
+                    switch (report.ProgessStatus)
+                    {
+                        case ProgessStatus.Nothing:
+                            break;
+                        case ProgessStatus.Progress:
+                            Console.WriteLine($"{report.Text} (progress)");
+                            break;
+                        case ProgessStatus.Completed:
+                            _isCompleted = true;
+                            _timerCompletionSource.TrySetResult();
+                            break;
+
+                        default:
+                            throw new NotSupportedException(
+                                $"{nameof(ProgessStatus)} with {report.ProgessStatus}");
+                    }
                 }
             }
             if (_isCompleted)

@@ -40,11 +40,11 @@ namespace KustoCopyConsole.Runner
             IImmutableDictionary<TableIdentity, Task> tempTableMap,
             CancellationToken ct)
         {
-            if (sourceTableRowItem.State == SourceTableState.Planning
-                || sourceTableRowItem.State == SourceTableState.Planned)
+            await using (var planningProgress = CreatePlanningProgressBar(sourceTableRowItem))
+            await using (var exportingProgress = CreateExportingProgressBar(sourceTableRowItem))
             {
-                await using (var exportingProgress =
-                    CreateExportingProgressBar(sourceTableRowItem))
+                if (sourceTableRowItem.State == SourceTableState.Planning
+                    || sourceTableRowItem.State == SourceTableState.Planned)
                 {
                     var exportingRunner = new SourceExportingRunner(
                         Parameterization,
@@ -69,69 +69,95 @@ namespace KustoCopyConsole.Runner
                     //  Complete planning
                     if (sourceTableRowItem.State == SourceTableState.Planning)
                     {
-                        await using (var planningProgress =
-                            CreatePlanningProgressBar(sourceTableRowItem))
-                        {
-                            var lastBlockItem = blockMap.Any()
-                                ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
-                                : null;
-                            var newTasks = await PlanNewBlocksAsync(
-                                tempTableMap,
-                                exportingRunner,
-                                blobPathProvider,
-                                sourceTableRowItem,
-                                (lastBlockItem?.BlockId ?? 0) + 1,
-                                lastBlockItem?.IngestionTimeEnd,
-                                ct);
+                        var lastBlockItem = blockMap.Any()
+                            ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
+                            : null;
+                        var newTasks = await PlanNewBlocksAsync(
+                            tempTableMap,
+                            exportingRunner,
+                            blobPathProvider,
+                            sourceTableRowItem,
+                            (lastBlockItem?.BlockId ?? 0) + 1,
+                            lastBlockItem?.IngestionTimeEnd,
+                            ct);
 
-                            await planningProgress.CompleteAsync();
-                            exportingTasks = exportingTasks.AddRange(newTasks);
-                            sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
-                            await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
-                        }
+                        exportingTasks = exportingTasks.AddRange(newTasks);
+                        sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
+                        await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                     }
                     await Task.WhenAll(exportingTasks);
-                    await exportingProgress.CompleteAsync();
                     sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Exported);
                     await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                 }
             }
         }
 
-        private ProgressBar CreateExportingProgressBar(SourceTableRowItem sourceTableRowItem)
-        {
-            return new ProgressBar(
-                TimeSpan.FromSeconds(10),
-                () =>
-                {
-                    var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[sourceTableRowItem.SourceTable]
-                        .IterationMap[sourceTableRowItem.IterationId]
-                        .BlockMap;
-                    var exportedCount = blockMap.Values
-                    .Where(b => b.RowItem.State == SourceBlockState.Exported)
-                    .Count();
-
-                    return $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
-                    $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}";
-                });
-        }
-
+        #region Progress bars
         private ProgressBar CreatePlanningProgressBar(SourceTableRowItem sourceTableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(5),
                 () =>
                 {
-                    var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[sourceTableRowItem.SourceTable]
-                        .IterationMap[sourceTableRowItem.IterationId]
-                        .BlockMap;
+                    var iteration = RowItemGateway.InMemoryCache
+                    .SourceTableMap[sourceTableRowItem.SourceTable]
+                    .IterationMap[sourceTableRowItem.IterationId];
+                    var iterationItem = iteration
+                    .RowItem;
+                    var blockMap = iteration
+                    .BlockMap;
 
-                    return $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
-                    $"({sourceTableRowItem.IterationId}) {blockMap.Count}";
+                    if (iterationItem.State == SourceTableState.Planning)
+                    {
+                        return new ProgressReport(
+                            ProgessStatus.Progress,
+                            $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
+                            $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
+                    }
+                    else
+                    {
+                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
+                    }
                 });
         }
+
+        private ProgressBar CreateExportingProgressBar(
+            SourceTableRowItem sourceTableRowItem)
+        {
+            return new ProgressBar(
+                TimeSpan.FromSeconds(10),
+                () =>
+                {
+                    var iteration = RowItemGateway.InMemoryCache
+                    .SourceTableMap[sourceTableRowItem.SourceTable]
+                    .IterationMap[sourceTableRowItem.IterationId];
+                    var iterationItem = iteration
+                    .RowItem;
+
+                    if (iterationItem.State == SourceTableState.Planning)
+                    {
+                        return new ProgressReport(ProgessStatus.Nothing, string.Empty);
+                    }
+                    else if (iterationItem.State == SourceTableState.Planned)
+                    {
+                        var blockMap = iteration
+                        .BlockMap;
+                        var exportedCount = blockMap.Values
+                        .Where(b => b.RowItem.State == SourceBlockState.Exported)
+                        .Count();
+
+                        return new ProgressReport(
+                            ProgessStatus.Progress,
+                            $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
+                            $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
+                    }
+                    else
+                    {
+                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
+                    }
+                });
+        }
+        #endregion
 
         private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
         {
