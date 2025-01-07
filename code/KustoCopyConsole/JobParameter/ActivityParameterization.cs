@@ -6,8 +6,7 @@ namespace KustoCopyConsole.JobParameter
     {
         public TableParameterization Source { get; set; } = new();
 
-        public IImmutableList<TableParameterization> Destinations { get; set; } =
-            ImmutableArray<TableParameterization>.Empty;
+        public TableParameterization Destination { get; set; } = new();
 
         public string Query { get; set; } = string.Empty;
 
@@ -16,18 +15,11 @@ namespace KustoCopyConsole.JobParameter
         internal void Validate()
         {
             Source.Validate();
-            if (string.IsNullOrWhiteSpace(Source.DatabaseName))
-            {
-                throw new CopyException("Source database name is required", false);
-            }
             if (string.IsNullOrWhiteSpace(Source.TableName))
             {
-                throw new CopyException("Source table name is required", false);
+                throw new CopyException($"{Source.TableName} is required", false);
             }
-            foreach (var d in Destinations)
-            {
-                d.Validate();
-            }
+            Destination.Validate();
             TableOption.Validate();
         }
     }

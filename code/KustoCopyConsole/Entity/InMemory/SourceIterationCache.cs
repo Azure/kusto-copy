@@ -8,39 +8,35 @@ namespace KustoCopyConsole.Entity.InMemory
         public SourceIterationCache(
             SourceTableRowItem item,
             IImmutableDictionary<long, SourceBlockCache> blockMap,
-            IImmutableDictionary<TableIdentity, DestinationIterationCache> destinationMap)
+            DestinationIterationCache? destination)
             : base(item)
         {
             BlockMap = blockMap;
-            DestinationMap = destinationMap;
+            Destination = destination;
         }
 
         public SourceIterationCache(SourceTableRowItem item)
             : this(
                   item,
                   ImmutableDictionary<long, SourceBlockCache>.Empty,
-                  ImmutableDictionary<TableIdentity, DestinationIterationCache>.Empty)
+                  null)
         {
         }
 
         public IImmutableDictionary<long, SourceBlockCache> BlockMap { get; }
 
-        public IImmutableDictionary<TableIdentity, DestinationIterationCache> DestinationMap { get; }
+        public DestinationIterationCache? Destination { get; }
 
         public SourceIterationCache AppendBlock(SourceBlockCache block)
         {
             var newBlockMap = BlockMap.SetItem(block.RowItem.BlockId, block);
 
-            return new SourceIterationCache(RowItem, newBlockMap, DestinationMap);
+            return new SourceIterationCache(RowItem, newBlockMap, Destination);
         }
 
-        public SourceIterationCache AppendDestination(
-            DestinationIterationCache destination)
+        public SourceIterationCache AppendDestination(DestinationIterationCache destination)
         {
-            var newDestinationMap =
-                DestinationMap.SetItem(destination.RowItem.DestinationTable, destination);
-
-            return new SourceIterationCache(RowItem, BlockMap, newDestinationMap);
+            return new SourceIterationCache(RowItem, BlockMap, destination);
         }
     }
 }

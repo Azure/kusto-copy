@@ -36,8 +36,7 @@ namespace KustoCopyConsole.Kusto
                 .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
-                .SelectMany(a => a.Destinations)
-                .Select(d => NormalizedUri.NormalizeUri(d.ClusterUri))
+                .Select(a => NormalizedUri.NormalizeUri(a.Destination.ClusterUri))
                 .Distinct();
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)

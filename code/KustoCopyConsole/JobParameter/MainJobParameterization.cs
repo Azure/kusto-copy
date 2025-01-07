@@ -73,11 +73,11 @@ namespace KustoCopyConsole.JobParameter
                                 DatabaseName = sourceDb,
                                 TableName = sourceTable
                             },
-                            Destinations = ImmutableList.Create(new TableParameterization
+                            Destination = new TableParameterization
                             {
                                 ClusterUri = destinationBuilder.ToString(),
                                 DatabaseName = destinationDb
-                            }),
+                            },
                             Query = options.Query,
                             TableOption = new TableOption()
                         })

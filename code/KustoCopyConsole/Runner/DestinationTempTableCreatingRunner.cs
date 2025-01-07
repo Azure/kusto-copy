@@ -66,12 +66,11 @@ namespace KustoCopyConsole.Runner
             TableIdentity destinationTable,
             CancellationToken ct)
         {
-            var destinationMap = RowItemGateway.InMemoryCache
+            var sourceIteration = RowItemGateway.InMemoryCache
                 .SourceTableMap[sourceTableRowItem.SourceTable]
-                .IterationMap[sourceTableRowItem.IterationId]
-                .DestinationMap;
+                .IterationMap[sourceTableRowItem.IterationId];
 
-            if (!destinationMap.ContainsKey(destinationTable))
+            if (sourceIteration.Destination == null)
             {
                 var tempTableName =
                     $"kc-{destinationTable.TableName}-{Guid.NewGuid().ToString("N")}";
@@ -93,9 +92,7 @@ namespace KustoCopyConsole.Runner
             }
             else
             {
-                var destinationIteration = destinationMap[destinationTable].RowItem;
-
-                return destinationIteration;
+                return sourceIteration.Destination.RowItem;
             }
         }
     }

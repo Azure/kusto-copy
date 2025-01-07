@@ -82,11 +82,11 @@ namespace KustoCopyConsole.Runner
                     .Select(i => new
                     {
                         SourceTableRowItem = i,
-                        TempTableMap = CreateTempTableMap(i, ct)
+                        TempTableTask = CreateTempTableAsync(i, ct)
                     })
                     .Select(o => _sourceTablePlanningRunner.RunAsync(
                         o.SourceTableRowItem,
-                        o.TempTableMap,
+                        o.TempTableTask,
                         ct))
                     .ToImmutableArray();
 
@@ -127,7 +127,7 @@ namespace KustoCopyConsole.Runner
             return newIterationItem;
         }
 
-        private IImmutableDictionary<TableIdentity, Task> CreateTempTableMap(
+        private Task CreateTempTableAsync(
             SourceTableRowItem sourceTableRowItem,
             CancellationToken ct)
         {
@@ -135,27 +135,23 @@ namespace KustoCopyConsole.Runner
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);
-            var destinationTables = Parameterization.Activities
+            var destinationTable = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTableRowItem.SourceTable)
-                .Select(a => a.Destinations)
-                .First();
-            var map = destinationTables
-                .Select(d => d.GetTableIdentity())
-                .Select(i => string.IsNullOrWhiteSpace(i.TableName)
-                ? new TableIdentity(
-                    i.ClusterUri,
-                    i.DatabaseName,
-                    sourceTableRowItem.SourceTable.TableName)
-                : i)
-                .Select(d => new
-                {
-                    DestinationTable = d,
-                    Task = tempTableCreatingRunner.RunAsync(sourceTableRowItem, d, ct)
-                })
-                .ToImmutableArray()
-                .ToImmutableDictionary(o => o.DestinationTable, o => o.Task);
+                .Select(a => a.Destination)
+                .First()
+                .GetTableIdentity();
+            var effectiveDestinationTable = !string.IsNullOrWhiteSpace(destinationTable.TableName)
+                ? destinationTable
+                : new TableIdentity(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName,
+                    sourceTableRowItem.SourceTable.TableName);
+            var createTempTableTask = tempTableCreatingRunner.RunAsync(
+                sourceTableRowItem,
+                effectiveDestinationTable,
+                ct);
 
-            return map;
+            return createTempTableTask;
         }
     }
 }

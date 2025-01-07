@@ -24,11 +24,8 @@ namespace KustoCopyConsole.Runner
             IBlobPathProvider blobPathProvider,
             SourceBlockRowItem sourceBlockItem,
             TableIdentity destinationTable,
-            Task tempTableCreationTask,
             CancellationToken ct)
         {
-            await tempTableCreationTask;
-
             var blockItem = await EnsureBlockCreatedAsync(
                 sourceBlockItem,
                 destinationTable,
@@ -60,7 +57,7 @@ namespace KustoCopyConsole.Runner
             var tempTableName = RowItemGateway.InMemoryCache
                 .SourceTableMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId]
-                .DestinationMap[blockItem.DestinationTable]
+                .Destination!
                 .RowItem
                 .TempTableName;
             var ingestClient = DbClientFactory.GetIngestClient(
@@ -97,13 +94,12 @@ namespace KustoCopyConsole.Runner
             TableIdentity destinationTable,
             CancellationToken ct)
         {
-            var blockMap = RowItemGateway.InMemoryCache
+            var destination = RowItemGateway.InMemoryCache
                 .SourceTableMap[sourceBlockItem.SourceTable]
                 .IterationMap[sourceBlockItem.IterationId]
-                .DestinationMap[destinationTable]
-                .BlockMap;
+                .Destination;
 
-            if (!blockMap.ContainsKey(sourceBlockItem.BlockId))
+            if (destination == null)
             {
                 var newBlockItem = new DestinationBlockRowItem
                 {
@@ -120,7 +116,7 @@ namespace KustoCopyConsole.Runner
             }
             else
             {
-                return blockMap[sourceBlockItem.BlockId].RowItem;
+                return destination.BlockMap[sourceBlockItem.BlockId].RowItem;
             }
         }
     }

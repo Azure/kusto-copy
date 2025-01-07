@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Runner
                 .SourceTableMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId];
             var tempTableName = iterationCache
-                .DestinationMap[blockItem.DestinationTable]
+                .Destination!
                 .RowItem
                 .TempTableName;
             var targetRowCount = iterationCache.BlockMap[blockItem.BlockId].UrlMap.Values

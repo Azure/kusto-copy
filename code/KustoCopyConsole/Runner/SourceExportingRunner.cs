@@ -21,7 +21,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(
             IBlobPathProvider blobPathProvider,
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
+            Task tempTableTask,
             SourceTableRowItem sourceTableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
@@ -43,6 +43,7 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
 
+            await tempTableTask;
             if (blockItem.State == SourceBlockState.Exporting)
             {   //  The block is already exporting, so we track its progress
                 exportClient.RegisterExistingOperation(blockItem.OperationId);
@@ -60,22 +61,17 @@ namespace KustoCopyConsole.Runner
                 blockItem = await AwaitExportBlockAsync(exportClient, blockItem, ct);
             }
             if (blockItem.State == SourceBlockState.Exported)
-            {   //  Ingest in all destinations
-                var ingestionTasks = tempTableMap
-                    .Select(pair => new
-                    {
-                        DestinationTable = pair.Key,
-                        Task = pair.Value
-                    })
-                    .Select(o => queueIngestRunner.RunAsync(
-                        blobPathProvider,
-                        blockItem,
-                        o.DestinationTable,
-                        o.Task,
-                        ct))
-                    .ToImmutableArray();
+            {   //  Ingest into destination
+                var destinationTable = Parameterization.Activities
+                    .Where(a => a.Source.GetTableIdentity() == sourceTableRowItem.SourceTable)
+                    .Select(a => a.Destination.GetTableIdentity())
+                    .First();
 
-                await Task.WhenAll(ingestionTasks);
+                await queueIngestRunner.RunAsync(
+                    blobPathProvider,
+                    blockItem,
+                    destinationTable,
+                    ct);
             }
         }
 

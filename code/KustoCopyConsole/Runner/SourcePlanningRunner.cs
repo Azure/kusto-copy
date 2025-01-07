@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(
             SourceTableRowItem sourceTableRowItem,
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
+            Task tempTableTask,
             CancellationToken ct)
         {
             await using (var planningProgress = CreatePlanningProgressBar(sourceTableRowItem))
@@ -58,7 +58,7 @@ namespace KustoCopyConsole.Runner
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
                             blobPathProvider,
-                            tempTableMap,
+                            tempTableTask,
                             sourceTableRowItem,
                             b.RowItem.BlockId,
                             b.RowItem.IngestionTimeStart,
@@ -73,7 +73,7 @@ namespace KustoCopyConsole.Runner
                             ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
                             : null;
                         var newTasks = await PlanNewBlocksAsync(
-                            tempTableMap,
+                            tempTableTask,
                             exportingRunner,
                             blobPathProvider,
                             sourceTableRowItem,
@@ -169,24 +169,19 @@ namespace KustoCopyConsole.Runner
             {
                 throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
             }
-            else if (activity.Destinations.Count == 1)
+            else
             {
-                var destinationTable = activity.Destinations.First().GetTableIdentity();
+                var destinationTable = activity.Destination.GetTableIdentity();
                 var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName));
 
                 return tempUriProvider;
             }
-            else
-            {
-                throw new NotImplementedException(
-                    "Only single destination without storage account is supported");
-            }
         }
 
         private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
+            Task tempTableTask,
             SourceExportingRunner exportingRunner,
             IBlobPathProvider blobPathProvider,
             SourceTableRowItem sourceTableItem,
@@ -213,7 +208,7 @@ namespace KustoCopyConsole.Runner
                     ct);
                 var newExportingTasks = PlanBlockBatch(
                     blobPathProvider,
-                    tempTableMap,
+                    tempTableTask,
                     exportingRunner,
                     sourceTableItem,
                     ref nextBlockId,
@@ -234,7 +229,7 @@ namespace KustoCopyConsole.Runner
 
         private IEnumerable<Task> PlanBlockBatch(
             IBlobPathProvider blobPathProvider,
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
+            Task tempTableTask,
             SourceExportingRunner exportingRunner,
             SourceTableRowItem sourceTableItem,
             ref long nextBlockId,
@@ -261,7 +256,7 @@ namespace KustoCopyConsole.Runner
                     {
                         exportingTasks.Add(exportingRunner.RunAsync(
                             blobPathProvider,
-                            tempTableMap,
+                            tempTableTask,
                             sourceTableItem,
                             nextBlockId++,
                             cummulativeDistributions.Min(d => d.IngestionTime),
@@ -284,7 +279,7 @@ namespace KustoCopyConsole.Runner
                 {
                     exportingTasks.Add(exportingRunner.RunAsync(
                         blobPathProvider,
-                        tempTableMap,
+                        tempTableTask,
                         sourceTableItem,
                         nextBlockId++,
                         cummulativeDistributions.Min(d => d.IngestionTime),
