@@ -169,7 +169,7 @@ namespace KustoCopyConsole.Runner
             {
                 throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
             }
-            else if (activity.Destinations.Count == 1 && !Parameterization.StorageUrls.Any())
+            else if (activity.Destinations.Count == 1)
             {
                 var destinationTable = activity.Destinations.First().GetTableIdentity();
                 var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
