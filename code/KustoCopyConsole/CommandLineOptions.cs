@@ -21,18 +21,11 @@ namespace KustoCopyConsole
             'd',
             "destination",
             Required = false,
-            HelpText = "Set the destination database in the format uri cluster uri/database, e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
+            HelpText = "Set the destination in the format uri cluster uri/database/table (table is optional), e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
         public string Destination { get; set; } = string.Empty;
 
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;
-
-        [Option(
-            'l',
-            "storage",
-            Required = false,
-            HelpText = "Set ADLS gen 2 storage account URLs (at least one), separated by commas")]
-        public string StorageUrls { get; set; } = string.Empty;
 
         [Option(
             "continuous",
@@ -43,13 +36,7 @@ namespace KustoCopyConsole
         [Option('q', "query", Required = false, HelpText = "Set query.")]
         public string Query { get; set; } = string.Empty;
 
-        [Option("job-name", Required = false, HelpText = "Set job name.")]
-        public string JobName { get; set; } = "default";
-
-        [Option("job-path", Required = false, HelpText = "Set job file local path.")]
-        public string JobFilePath { get; set; } = string.Empty;
-
-        [Option("log-path", Required = false, HelpText = "Set log file local path.")]
+        [Option("log-path", Required = false, HelpText = "Set log file path.")]
         public string LogFilePath { get; set; } = string.Empty;
     }
 }
