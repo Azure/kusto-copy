@@ -41,7 +41,14 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             await using (var planningProgress = CreatePlanningProgressBar(tableRowItem))
-            await using (var exportingProgress = CreateExportingProgressBar(tableRowItem))
+            await using (var exportingProgress =
+                CreateBlockStateProgressBar(tableRowItem, BlockState.Exporting))
+            await using (var queuingProgress =
+                CreateBlockStateProgressBar(tableRowItem, BlockState.Queued))
+            await using (var ingestingProgress =
+                CreateBlockStateProgressBar(tableRowItem, BlockState.Ingested))
+            await using (var movingProgress =
+                CreateBlockStateProgressBar(tableRowItem, BlockState.ExtentMoved))
             {
                 if (tableRowItem.State != TableState.Completed)
                 {
@@ -90,15 +97,15 @@ namespace KustoCopyConsole.Runner
         }
 
         #region Progress bars
-        private ProgressBar CreatePlanningProgressBar(TableRowItem sourceTableRowItem)
+        private ProgressBar CreatePlanningProgressBar(TableRowItem tableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(5),
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[sourceTableRowItem.SourceTable]
-                    .IterationMap[sourceTableRowItem.IterationId];
+                    .SourceTableMap[tableRowItem.SourceTable]
+                    .IterationMap[tableRowItem.IterationId];
                     var iterationItem = iteration
                     .RowItem;
                     var blockMap = iteration
@@ -108,21 +115,22 @@ namespace KustoCopyConsole.Runner
                         iterationItem.State == TableState.Planning
                         ? ProgessStatus.Progress
                         : ProgessStatus.Completed,
-                        $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}"
-                        + $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
+                        $"Planned:  {tableRowItem.SourceTable.ToStringCompact()}"
+                        + $"({tableRowItem.IterationId}) {blockMap.Count}");
                 });
         }
 
-        private ProgressBar CreateExportingProgressBar(
-            TableRowItem sourceTableRowItem)
+        private ProgressBar CreateBlockStateProgressBar(
+            TableRowItem tableRowItem,
+            BlockState state)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(10),
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[sourceTableRowItem.SourceTable]
-                    .IterationMap[sourceTableRowItem.IterationId];
+                    .SourceTableMap[tableRowItem.SourceTable]
+                    .IterationMap[tableRowItem.IterationId];
                     var iterationItem = iteration
                     .RowItem;
 
@@ -132,18 +140,17 @@ namespace KustoCopyConsole.Runner
                     }
                     else
                     {
-                        var blockMap = iteration
-                        .BlockMap;
+                        var blockMap = iteration.BlockMap;
                         var exportedCount = blockMap.Values
-                        .Where(b => b.RowItem.State > BlockState.Exporting)
+                        .Where(b => b.RowItem.State > state)
                         .Count();
 
                         return new ProgressReport(
                             exportedCount != blockMap.Count
                             ? ProgessStatus.Progress
                             : ProgessStatus.Completed,
-                            $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
-                            $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
+                            $"{state}:  {tableRowItem.SourceTable.ToStringCompact()}" +
+                            $"({tableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
                     }
                 });
         }
