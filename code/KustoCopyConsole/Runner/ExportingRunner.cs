@@ -60,7 +60,7 @@ namespace KustoCopyConsole.Runner
             }
             if (blockItem.State == BlockState.Exported)
             {   //  Ingest into destination
-                await queueIngestRunner.RunAsync(
+                blockItem = await queueIngestRunner.RunAsync(
                     blobPathProvider,
                     blockItem,
                     ct);

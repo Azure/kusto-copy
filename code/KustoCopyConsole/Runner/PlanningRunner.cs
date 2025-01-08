@@ -141,16 +141,16 @@ namespace KustoCopyConsole.Runner
                     else
                     {
                         var blockMap = iteration.BlockMap;
-                        var exportedCount = blockMap.Values
-                        .Where(b => b.RowItem.State > state)
+                        var stateReachedCount = blockMap.Values
+                        .Where(b => b.RowItem.State >= state)
                         .Count();
 
                         return new ProgressReport(
-                            exportedCount != blockMap.Count
+                            stateReachedCount != blockMap.Count
                             ? ProgessStatus.Progress
                             : ProgessStatus.Completed,
                             $"{state}:  {tableRowItem.SourceTable.ToStringCompact()}" +
-                            $"({tableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
+                            $"({tableRowItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
                     }
                 });
         }

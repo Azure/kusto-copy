@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(
+        public async Task<BlockRowItem> RunAsync(
             IBlobPathProvider blobPathProvider,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -33,6 +33,8 @@ namespace KustoCopyConsole.Runner
                 blockItem = await QueueIngestBlockAsync(blobPathProvider, blockItem, ct);
             }
             blockItem = await awaitIngestRunner.RunAsync(blockItem, ct);
+
+            return blockItem;
         }
 
         private async Task<BlockRowItem> QueueIngestBlockAsync(
