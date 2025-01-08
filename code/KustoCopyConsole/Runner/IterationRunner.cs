@@ -72,6 +72,7 @@ namespace KustoCopyConsole.Runner
                     : string.Empty;
                 var newItem = await StartIterationAsync(
                     sourceTableIdentity,
+                    destinationTableIdentity,
                     newIterationId,
                     cursorStart,
                     ct);
@@ -102,17 +103,18 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<TableRowItem> StartIterationAsync(
-            TableIdentity tableIdentity,
+            TableIdentity sourceTableIdentity,
+            TableIdentity destinationTableIdentity,
             long newIterationId,
             string cursorStart,
             CancellationToken ct)
         {
             var queryClient = DbClientFactory.GetDbQueryClient(
-                tableIdentity.ClusterUri,
-                tableIdentity.DatabaseName);
+                sourceTableIdentity.ClusterUri,
+                sourceTableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
             var hasNewData = await queryClient.HasNewDataAsync(
-                tableIdentity.TableName,
+                sourceTableIdentity.TableName,
                 newIterationId,
                 cursorStart,
                 cursorEnd,
@@ -120,7 +122,8 @@ namespace KustoCopyConsole.Runner
             var newIterationItem = new TableRowItem
             {
                 State = hasNewData ? TableState.Planning : TableState.Completed,
-                SourceTable = tableIdentity,
+                SourceTable = sourceTableIdentity,
+                DestinationTable = destinationTableIdentity,
                 IterationId = newIterationId,
                 CursorStart = cursorStart,
                 CursorEnd = cursorEnd
