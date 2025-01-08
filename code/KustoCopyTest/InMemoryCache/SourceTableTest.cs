@@ -12,9 +12,9 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var state = SourceTableState.Planning;
+            var state = TableState.Planning;
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = state,
                 IterationId = iterationId,
@@ -37,10 +37,10 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var state1 = SourceTableState.Planning;
-            var state2 = SourceTableState.Planned;
+            var state1 = TableState.Planning;
+            var state2 = TableState.Planned;
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = state1,
                 IterationId = iterationId,
@@ -52,7 +52,7 @@ namespace KustoCopyTest.InMemoryCache
                 cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
 
             //  Update
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = state2,
                 IterationId = iterationId,
@@ -69,19 +69,19 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var iterationState1 = SourceTableState.Planning;
-            var iterationState2 = SourceTableState.Planned;
+            var iterationState1 = TableState.Planning;
+            var iterationState2 = TableState.Planned;
             var blockId = 1;
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = iterationState1,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
-            cache.AppendItem(new SourceBlockRowItem
+            cache.AppendItem(new BlockRowItem
             {
-                State = SourceBlockState.Planned,
+                State = BlockState.Planned,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 BlockId = blockId
@@ -93,7 +93,7 @@ namespace KustoCopyTest.InMemoryCache
             Assert.Single(cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
 
             //  Update
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = iterationState2,
                 IterationId = iterationId,

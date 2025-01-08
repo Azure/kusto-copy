@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.Entity;
 
 namespace KustoCopyConsole.Runner
 {
@@ -88,16 +89,16 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tableIterationRunner =
-                new TableIterationRunner(Parameterization, RowItemGateway, DbClientFactory);
-            var sourceTableIdentities = Parameterization.Activities
-                .Select(a => a.Source.GetTableIdentity())
-                .ToImmutableArray();
-
+            var iterationRunner =
+                new IterationRunner(Parameterization, RowItemGateway, DbClientFactory);
+            
             while (true)
             {
-                var runTasks = sourceTableIdentities
-                    .Select(i => tableIterationRunner.RunAsync(i, ct))
+                var runTasks = Parameterization.Activities
+                    .Select(a => iterationRunner.RunAsync(
+                        a.Source.GetTableIdentity(),
+                        a.GetEffectiveDestinationTableIdentity(),
+                        ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(runTasks);

@@ -3,9 +3,9 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class SourceUrlCache : CacheBase<SourceUrlRowItem>
+    internal class UrlCache : CacheBase<UrlRowItem>
     {
-        public SourceUrlCache(SourceUrlRowItem item)
+        public UrlCache(UrlRowItem item)
             : base(item)
         {
         }

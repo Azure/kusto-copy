@@ -13,7 +13,14 @@ namespace KustoCopyConsole.JobParameter
 
         public void Validate()
         {
-            throw new NotImplementedException();
+            if (string.IsNullOrWhiteSpace(ClusterUri))
+            {
+                throw new CopyException($"{nameof(ClusterUri)} is required", false);
+            }
+            if (string.IsNullOrWhiteSpace(DatabaseName))
+            {
+                throw new CopyException($"{nameof(DatabaseName)} is required", false);
+            }
         }
 
         public TableIdentity GetTableIdentity()

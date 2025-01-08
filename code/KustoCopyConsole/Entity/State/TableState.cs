@@ -1,10 +1,11 @@
 ﻿namespace KustoCopyConsole.Entity.State
 {
-    public enum SourceTableState
+    public enum TableState
     {
         Planning,
         Planned,
-        Exported,
+        TempTableCreating,
+        TempTableCreated,
         Completed
     }
 }

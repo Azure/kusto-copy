@@ -18,16 +18,14 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task<DestinationBlockRowItem> RunAsync(
-            DestinationBlockRowItem blockItem,
-            CancellationToken ct)
+        public async Task<BlockRowItem> RunAsync(BlockRowItem blockItem, CancellationToken ct)
         {
-            if (blockItem.State == DestinationBlockState.Queuing)
+            if (blockItem.State < BlockState.Queued)
             {
                 throw new InvalidOperationException(
                     $"We shouldn't be in state '{blockItem.State}' at this point");
             }
-            if (blockItem.State == DestinationBlockState.Queued)
+            if (blockItem.State == BlockState.Queued)
             {
                 blockItem = await AwaitIngestionAsync(blockItem, ct);
             }
@@ -35,17 +33,14 @@ namespace KustoCopyConsole.Runner
             return blockItem;
         }
 
-        private async Task<DestinationBlockRowItem> AwaitIngestionAsync(
-            DestinationBlockRowItem blockItem,
+        private async Task<BlockRowItem> AwaitIngestionAsync(
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
             var iterationCache = RowItemGateway.InMemoryCache
                 .SourceTableMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId];
-            var tempTableName = iterationCache
-                .DestinationMap[blockItem.DestinationTable]
-                .RowItem
-                .TempTableName;
+            var tempTableName = iterationCache.RowItem.TempTableName;
             var targetRowCount = iterationCache.BlockMap[blockItem.BlockId].UrlMap.Values
                 .Sum(u => u.RowItem.RowCount);
             var commandClient = DbClientFactory.GetDbCommandClient(
@@ -69,7 +64,7 @@ namespace KustoCopyConsole.Runner
                 }
                 if (rowCount == targetRowCount)
                 {
-                    blockItem = blockItem.ChangeState(DestinationBlockState.Ingested);
+                    blockItem = blockItem.ChangeState(BlockState.Ingested);
                     await RowItemGateway.AppendAsync(blockItem, ct);
 
                     return blockItem;

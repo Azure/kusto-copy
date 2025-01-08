@@ -10,15 +10,6 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        /// <summary>
-        /// Propagates the storage URLs.  This property isn't serialized not to appear
-        /// in the serialized format nor does it make sense to take it as input from
-        /// a YAML file since it should be located on the primary storage URL.
-        /// </summary>
-        [YamlIgnore]
-        public IImmutableList<string> StorageUrls { get; set; } =
-            ImmutableArray<string>.Empty;
-
         public bool IsContinuousRun { get; set; } = false;
 
         public IImmutableList<ActivityParameterization> Activities { get; set; } =
@@ -82,11 +73,11 @@ namespace KustoCopyConsole.JobParameter
                                 DatabaseName = sourceDb,
                                 TableName = sourceTable
                             },
-                            Destinations = ImmutableList.Create(new TableParameterization
+                            Destination = new TableParameterization
                             {
                                 ClusterUri = destinationBuilder.ToString(),
                                 DatabaseName = destinationDb
-                            }),
+                            },
                             Query = options.Query,
                             TableOption = new TableOption()
                         })

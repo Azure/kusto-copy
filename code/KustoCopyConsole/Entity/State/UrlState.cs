@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyConsole.Entity.State
 {
-    public enum SourceUrlState
+    public enum UrlState
     {
         Exported,
         Deleted

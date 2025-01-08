@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class SourcePlanningRunner : RunnerBase
+    internal class PlanningRunner : RunnerBase
     {
         #region Inner Types
         private record RecordDistributionInExtent(
@@ -27,7 +27,7 @@ namespace KustoCopyConsole.Runner
         private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
-        public SourcePlanningRunner(
+        public PlanningRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -36,30 +36,29 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task RunAsync(
-            SourceTableRowItem sourceTableRowItem,
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
+            TableRowItem tableRowItem,
+            Task tempTableTask,
             CancellationToken ct)
         {
-            await using (var planningProgress = CreatePlanningProgressBar(sourceTableRowItem))
-            await using (var exportingProgress = CreateExportingProgressBar(sourceTableRowItem))
+            await using (var planningProgress = CreatePlanningProgressBar(tableRowItem))
+            await using (var exportingProgress = CreateExportingProgressBar(tableRowItem))
             {
-                if (sourceTableRowItem.State == SourceTableState.Planning
-                    || sourceTableRowItem.State == SourceTableState.Planned)
+                if (tableRowItem.State != TableState.Completed)
                 {
-                    var exportingRunner = new SourceExportingRunner(
+                    var exportingRunner = new ExportingRunner(
                         Parameterization,
                         RowItemGateway,
                         DbClientFactory);
                     var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[sourceTableRowItem.SourceTable]
-                        .IterationMap[sourceTableRowItem.IterationId]
+                        .SourceTableMap[tableRowItem.SourceTable]
+                        .IterationMap[tableRowItem.IterationId]
                         .BlockMap;
-                    var blobPathProvider = GetBlobPathFactory(sourceTableRowItem.SourceTable);
+                    var blobPathProvider = GetBlobPathFactory(tableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
                             blobPathProvider,
-                            tempTableMap,
-                            sourceTableRowItem,
+                            tempTableTask,
+                            tableRowItem,
                             b.RowItem.BlockId,
                             b.RowItem.IngestionTimeStart,
                             b.RowItem.IngestionTimeEnd,
@@ -67,33 +66,31 @@ namespace KustoCopyConsole.Runner
                         .ToImmutableArray();
 
                     //  Complete planning
-                    if (sourceTableRowItem.State == SourceTableState.Planning)
+                    if (tableRowItem.State == TableState.Planning)
                     {
                         var lastBlockItem = blockMap.Any()
                             ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
                             : null;
                         var newTasks = await PlanNewBlocksAsync(
-                            tempTableMap,
+                            tempTableTask,
                             exportingRunner,
                             blobPathProvider,
-                            sourceTableRowItem,
+                            tableRowItem,
                             (lastBlockItem?.BlockId ?? 0) + 1,
                             lastBlockItem?.IngestionTimeEnd,
                             ct);
 
                         exportingTasks = exportingTasks.AddRange(newTasks);
-                        sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
-                        await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                        tableRowItem = tableRowItem.ChangeState(TableState.Planned);
+                        await RowItemGateway.AppendAsync(tableRowItem, ct);
                     }
                     await Task.WhenAll(exportingTasks);
-                    sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Exported);
-                    await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                 }
             }
         }
 
         #region Progress bars
-        private ProgressBar CreatePlanningProgressBar(SourceTableRowItem sourceTableRowItem)
+        private ProgressBar CreatePlanningProgressBar(TableRowItem sourceTableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(5),
@@ -107,22 +104,17 @@ namespace KustoCopyConsole.Runner
                     var blockMap = iteration
                     .BlockMap;
 
-                    if (iterationItem.State == SourceTableState.Planning)
-                    {
-                        return new ProgressReport(
-                            ProgessStatus.Progress,
-                            $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
-                            $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
-                    }
-                    else
-                    {
-                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
-                    }
+                    return new ProgressReport(
+                        iterationItem.State == TableState.Planning
+                        ? ProgessStatus.Progress
+                        : ProgessStatus.Completed,
+                        $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}"
+                        + $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
                 });
         }
 
         private ProgressBar CreateExportingProgressBar(
-            SourceTableRowItem sourceTableRowItem)
+            TableRowItem sourceTableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(10),
@@ -134,26 +126,24 @@ namespace KustoCopyConsole.Runner
                     var iterationItem = iteration
                     .RowItem;
 
-                    if (iterationItem.State == SourceTableState.Planning)
+                    if (iterationItem.State == TableState.Planning)
                     {
                         return new ProgressReport(ProgessStatus.Nothing, string.Empty);
                     }
-                    else if (iterationItem.State == SourceTableState.Planned)
+                    else
                     {
                         var blockMap = iteration
                         .BlockMap;
                         var exportedCount = blockMap.Values
-                        .Where(b => b.RowItem.State == SourceBlockState.Exported)
+                        .Where(b => b.RowItem.State > BlockState.Exporting)
                         .Count();
 
                         return new ProgressReport(
-                            ProgessStatus.Progress,
+                            exportedCount != blockMap.Count
+                            ? ProgessStatus.Progress
+                            : ProgessStatus.Completed,
                             $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
                             $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
-                    }
-                    else
-                    {
-                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
                     }
                 });
         }
@@ -169,27 +159,22 @@ namespace KustoCopyConsole.Runner
             {
                 throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
             }
-            else if (activity.Destinations.Count == 1 && !Parameterization.StorageUrls.Any())
+            else
             {
-                var destinationTable = activity.Destinations.First().GetTableIdentity();
+                var destinationTable = activity.Destination.GetTableIdentity();
                 var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName));
 
                 return tempUriProvider;
             }
-            else
-            {
-                throw new NotImplementedException(
-                    "Only single destination without storage account is supported");
-            }
         }
 
         private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
-            SourceExportingRunner exportingRunner,
+            Task tempTableTask,
+            ExportingRunner exportingRunner,
             IBlobPathProvider blobPathProvider,
-            SourceTableRowItem sourceTableItem,
+            TableRowItem sourceTableItem,
             long nextBlockId,
             DateTime? nextIngestionTimeStart,
             CancellationToken ct)
@@ -213,7 +198,7 @@ namespace KustoCopyConsole.Runner
                     ct);
                 var newExportingTasks = PlanBlockBatch(
                     blobPathProvider,
-                    tempTableMap,
+                    tempTableTask,
                     exportingRunner,
                     sourceTableItem,
                     ref nextBlockId,
@@ -234,9 +219,9 @@ namespace KustoCopyConsole.Runner
 
         private IEnumerable<Task> PlanBlockBatch(
             IBlobPathProvider blobPathProvider,
-            IImmutableDictionary<TableIdentity, Task> tempTableMap,
-            SourceExportingRunner exportingRunner,
-            SourceTableRowItem sourceTableItem,
+            Task tempTableTask,
+            ExportingRunner exportingRunner,
+            TableRowItem sourceTableItem,
             ref long nextBlockId,
             ref DateTime? nextIngestionTimeStart,
             IImmutableList<RecordDistributionInExtent> distributionInExtents,
@@ -261,7 +246,7 @@ namespace KustoCopyConsole.Runner
                     {
                         exportingTasks.Add(exportingRunner.RunAsync(
                             blobPathProvider,
-                            tempTableMap,
+                            tempTableTask,
                             sourceTableItem,
                             nextBlockId++,
                             cummulativeDistributions.Min(d => d.IngestionTime),
@@ -284,7 +269,7 @@ namespace KustoCopyConsole.Runner
                 {
                     exportingTasks.Add(exportingRunner.RunAsync(
                         blobPathProvider,
-                        tempTableMap,
+                        tempTableTask,
                         sourceTableItem,
                         nextBlockId++,
                         cummulativeDistributions.Min(d => d.IngestionTime),
@@ -299,7 +284,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
-            SourceTableRowItem sourceTableItem,
+            TableRowItem sourceTableItem,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,

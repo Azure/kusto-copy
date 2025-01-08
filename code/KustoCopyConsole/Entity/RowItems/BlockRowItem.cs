@@ -7,11 +7,13 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class SourceBlockRowItem : RowItemBase
+    internal class BlockRowItem : RowItemBase
     {
-        public SourceBlockState State { get; set; }
+        public BlockState State { get; set; }
 
         public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
+
+        public TableIdentity DestinationTable { get; set; } = TableIdentity.Empty;
 
         public long IterationId { get; set; }
 
@@ -23,9 +25,12 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public string OperationId { get; set; } = string.Empty;
 
+        public string BlockTag { get; set; } = string.Empty;
+
         public override void Validate()
         {
             SourceTable.Validate();
+            DestinationTable.Validate();
             if (IterationId < 1)
             {
                 throw new InvalidDataException(
@@ -46,20 +51,28 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeEnd)} hasn't been populated");
             }
-            if (State != SourceBlockState.Planned && string.IsNullOrWhiteSpace(OperationId))
+            if (State != BlockState.Planned && string.IsNullOrWhiteSpace(OperationId))
             {
                 throw new InvalidDataException($"{nameof(OperationId)} hasn't been populated");
             }
-            if (State == SourceBlockState.Planned && !string.IsNullOrWhiteSpace(OperationId))
+            if (State == BlockState.Planned && !string.IsNullOrWhiteSpace(OperationId))
             {
                 throw new InvalidDataException(
                     $"{nameof(OperationId)} should be empty but is '{OperationId}'");
             }
+            if (State < BlockState.Queued && !string.IsNullOrWhiteSpace(BlockTag))
+            {
+                throw new InvalidDataException($"{nameof(BlockTag)} should be empty");
+            }
+            if (State >= BlockState.Queued && string.IsNullOrWhiteSpace(BlockTag))
+            {
+                throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
+            }
         }
 
-        public SourceBlockRowItem ChangeState(SourceBlockState newState)
+        public BlockRowItem ChangeState(BlockState newState)
         {
-            var clone = (SourceBlockRowItem)Clone();
+            var clone = (BlockRowItem)Clone();
 
             clone.State = newState;
 

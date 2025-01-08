@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class DestinationBlockRowItem : RowItemBase
+    internal class UrlRowItem : RowItemBase
     {
-        public DestinationBlockState State { get; set; }
+        public UrlState State { get; set; }
 
         public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
 
@@ -19,7 +19,9 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long BlockId { get; set; }
 
-        public string BlockTag { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+
+        public long RowCount { get; set; }
 
         public override void Validate()
         {
@@ -35,21 +37,15 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(BlockId)} should be positive but is {BlockId}");
             }
-            if (State == DestinationBlockState.Queuing
-                && !string.IsNullOrWhiteSpace(BlockTag))
+            if (!Uri.TryCreate(Url, UriKind.Absolute, out _))
             {
-                throw new InvalidDataException($"{nameof(BlockTag)} should be empty");
-            }
-            if (State != DestinationBlockState.Queuing
-                && string.IsNullOrWhiteSpace(BlockTag))
-            {
-                throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
+                throw new InvalidDataException($"{nameof(Url)} is invalid:  {Url}");
             }
         }
 
-        public DestinationBlockRowItem ChangeState(DestinationBlockState newState)
+        public UrlRowItem ChangeState(UrlState newState)
         {
-            var clone = (DestinationBlockRowItem)Clone();
+            var clone = (UrlRowItem)Clone();
 
             clone.State = newState;
 

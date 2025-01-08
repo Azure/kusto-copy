@@ -12,10 +12,10 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var urlState1 = SourceUrlState.Exported;
-            var urlState2 = SourceUrlState.Deleted;
+            var urlState1 = UrlState.Exported;
+            var urlState2 = UrlState.Deleted;
             var blockId = 1;
-            var urlItem1 = new SourceUrlRowItem
+            var urlItem1 = new UrlRowItem
             {
                 State = urlState1,
                 SourceTable = SOURCE_TABLE_IDENTITY,
@@ -24,7 +24,7 @@ namespace KustoCopyTest.InMemoryCache
                 Url = "https://mystorage.com/myblob.parquet",
                 RowCount = 12
             };
-            var urlItem2 = new SourceUrlRowItem
+            var urlItem2 = new UrlRowItem
             {
                 State = urlState1,
                 SourceTable = SOURCE_TABLE_IDENTITY,
@@ -34,15 +34,15 @@ namespace KustoCopyTest.InMemoryCache
                 RowCount = 125
             };
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
-                State = SourceTableState.Planning,
+                State = TableState.Planning,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
-            cache.AppendItem(new SourceBlockRowItem
+            cache.AppendItem(new BlockRowItem
             {
-                State = SourceBlockState.Exporting,
+                State = BlockState.Exporting,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 BlockId = blockId,

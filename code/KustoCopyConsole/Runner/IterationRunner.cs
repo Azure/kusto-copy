@@ -17,39 +17,41 @@ namespace KustoCopyConsole.Runner
     /// <summary>
     /// Responsible to start and complete iteration.
     /// </summary>
-    internal class TableIterationRunner : RunnerBase
+    internal class IterationRunner : RunnerBase
     {
-        private readonly SourcePlanningRunner _sourceTablePlanningRunner;
-
-        public TableIterationRunner(
+        public IterationRunner(
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory)
             : base(parameterization, rowItemGateway, dbClientFactory)
         {
-            _sourceTablePlanningRunner = new(parameterization, rowItemGateway, dbClientFactory);
         }
 
         /// <summary>
-        /// Complete a new or existing iteration on <paramref name="sourceTableIdentity"/>.
+        /// Complete a new or existing iteration on <paramref name="sourceTableIdentity"/> and
+        /// <paramref name="destinationTableIdentity"/>.
         /// </summary>
         /// <param name="sourceTableIdentity"></param>
+        /// <param name="destinationTableIdentity"></param>
         /// <param name="ct"></param>
         /// <returns>
         /// <code>true</code> iif there could be more iterations given configuration.
         /// </returns>
-        public async Task<bool> RunAsync(TableIdentity sourceTableIdentity, CancellationToken ct)
+        public async Task<bool> RunAsync(
+            TableIdentity sourceTableIdentity,
+            TableIdentity destinationTableIdentity,
+            CancellationToken ct)
         {
             var cache = RowItemGateway.InMemoryCache;
             var cachedIterations = cache.SourceTableMap.ContainsKey(sourceTableIdentity)
                 ? cache.SourceTableMap[sourceTableIdentity].IterationMap.Values
-                : Array.Empty<SourceIterationCache>();
-            var completedItems = cachedIterations
+                : Array.Empty<IterationCache>();
+            var completedIterations = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State == SourceTableState.Exported);
-            var activeItems = cachedIterations
+                .Where(i => i.State == TableState.Completed);
+            var activeIterations = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State != SourceTableState.Exported);
+                .Where(i => i.State != TableState.Completed);
             var activityParameterization = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTableIdentity)
                 .First();
@@ -57,7 +59,7 @@ namespace KustoCopyConsole.Runner
                 activityParameterization.TableOption.ExportMode == ExportMode.BackfillOnly;
 
             //  Start new iteration if need to
-            if (!cachedIterations.Any() || (!isBackfillOnly && !activeItems.Any()))
+            if (!cachedIterations.Any() || (!isBackfillOnly && !activeIterations.Any()))
             {
                 var lastIteration = cachedIterations.Any()
                     ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
@@ -70,23 +72,26 @@ namespace KustoCopyConsole.Runner
                     : string.Empty;
                 var newItem = await StartIterationAsync(
                     sourceTableIdentity,
+                    destinationTableIdentity,
                     newIterationId,
                     cursorStart,
                     ct);
 
-                activeItems = activeItems.Append(newItem);
+                activeIterations = activeIterations.Append(newItem);
             }
-            if (activeItems.Any())
+            if (activeIterations.Any())
             {
-                var planningTasks = activeItems
+                var planningRunner =
+                    new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var planningTasks = activeIterations
                     .Select(i => new
                     {
-                        SourceTableRowItem = i,
-                        TempTableMap = CreateTempTableMap(i, ct)
+                        TableRowItem = i,
+                        TempTableTask = CreateTempTableAsync(i, ct)
                     })
-                    .Select(o => _sourceTablePlanningRunner.RunAsync(
-                        o.SourceTableRowItem,
-                        o.TempTableMap,
+                    .Select(o => planningRunner.RunAsync(
+                        o.TableRowItem,
+                        o.TempTableTask,
                         ct))
                     .ToImmutableArray();
 
@@ -97,26 +102,28 @@ namespace KustoCopyConsole.Runner
             return isBackfillOnly;
         }
 
-        private async Task<SourceTableRowItem> StartIterationAsync(
-            TableIdentity tableIdentity,
+        private async Task<TableRowItem> StartIterationAsync(
+            TableIdentity sourceTableIdentity,
+            TableIdentity destinationTableIdentity,
             long newIterationId,
             string cursorStart,
             CancellationToken ct)
         {
             var queryClient = DbClientFactory.GetDbQueryClient(
-                tableIdentity.ClusterUri,
-                tableIdentity.DatabaseName);
+                sourceTableIdentity.ClusterUri,
+                sourceTableIdentity.DatabaseName);
             var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
             var hasNewData = await queryClient.HasNewDataAsync(
-                tableIdentity.TableName,
+                sourceTableIdentity.TableName,
                 newIterationId,
                 cursorStart,
                 cursorEnd,
                 ct);
-            var newIterationItem = new SourceTableRowItem
+            var newIterationItem = new TableRowItem
             {
-                State = hasNewData ? SourceTableState.Planning : SourceTableState.Completed,
-                SourceTable = tableIdentity,
+                State = hasNewData ? TableState.Planning : TableState.Completed,
+                SourceTable = sourceTableIdentity,
+                DestinationTable = destinationTableIdentity,
                 IterationId = newIterationId,
                 CursorStart = cursorStart,
                 CursorEnd = cursorEnd
@@ -127,35 +134,19 @@ namespace KustoCopyConsole.Runner
             return newIterationItem;
         }
 
-        private IImmutableDictionary<TableIdentity, Task> CreateTempTableMap(
-            SourceTableRowItem sourceTableRowItem,
+        private Task CreateTempTableAsync(
+            TableRowItem sourceTableRowItem,
             CancellationToken ct)
         {
-            var tempTableCreatingRunner = new DestinationTempTableCreatingRunner(
+            var tempTableCreatingRunner = new TempTableCreatingRunner(
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);
-            var destinationTables = Parameterization.Activities
-                .Where(a => a.Source.GetTableIdentity() == sourceTableRowItem.SourceTable)
-                .Select(a => a.Destinations)
-                .First();
-            var map = destinationTables
-                .Select(d => d.GetTableIdentity())
-                .Select(i => string.IsNullOrWhiteSpace(i.TableName)
-                ? new TableIdentity(
-                    i.ClusterUri,
-                    i.DatabaseName,
-                    sourceTableRowItem.SourceTable.TableName)
-                : i)
-                .Select(d => new
-                {
-                    DestinationTable = d,
-                    Task = tempTableCreatingRunner.RunAsync(sourceTableRowItem, d, ct)
-                })
-                .ToImmutableArray()
-                .ToImmutableDictionary(o => o.DestinationTable, o => o.Task);
+            var createTempTableTask = tempTableCreatingRunner.RunAsync(
+                sourceTableRowItem,
+                ct);
 
-            return map;
+            return createTempTableTask;
         }
     }
 }
