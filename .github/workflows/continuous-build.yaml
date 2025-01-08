@@ -25,3 +25,7 @@ jobs:
     # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-build
     - name: Build
       run: dotnet build code --configuration Release --no-restore
+    - name: Unit Tests
+      run: |
+        dotnet test code/KustoCopyTest --configuration Release \
+          --no-build --verbosity normal
