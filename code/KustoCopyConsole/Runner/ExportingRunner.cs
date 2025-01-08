@@ -147,15 +147,15 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> EnsureBlockCreatedAsync(
-            TableRowItem sourceTableRowItem,
+            TableRowItem tableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
             var blockMap = RowItemGateway.InMemoryCache
-                .SourceTableMap[sourceTableRowItem.SourceTable]
-                .IterationMap[sourceTableRowItem.IterationId]
+                .SourceTableMap[tableRowItem.SourceTable]
+                .IterationMap[tableRowItem.IterationId]
                 .BlockMap;
 
             if (!blockMap.ContainsKey(blockId))
@@ -163,8 +163,9 @@ namespace KustoCopyConsole.Runner
                 var newBlockItem = new BlockRowItem
                 {
                     State = BlockState.Planned,
-                    SourceTable = sourceTableRowItem.SourceTable,
-                    IterationId = sourceTableRowItem.IterationId,
+                    SourceTable = tableRowItem.SourceTable,
+                    DestinationTable = tableRowItem.DestinationTable,
+                    IterationId = tableRowItem.IterationId,
                     BlockId = blockId,
                     IngestionTimeStart = ingestionTimeStart,
                     IngestionTimeEnd = ingestionTimeEnd
