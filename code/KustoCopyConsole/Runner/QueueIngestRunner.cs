@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var awaitIngestRunner = new DestinationAwaitIngestRunner(
+            var awaitIngestRunner = new AwaitIngestRunner(
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);

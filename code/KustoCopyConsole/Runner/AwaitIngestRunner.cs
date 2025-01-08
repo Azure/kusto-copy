@@ -6,11 +6,11 @@ using KustoCopyConsole.Storage;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class DestinationAwaitIngestRunner : RunnerBase
+    internal class AwaitIngestRunner : RunnerBase
     {
         private static readonly TimeSpan REFRESH_PERIOD = TimeSpan.FromSeconds(5);
 
-        public DestinationAwaitIngestRunner(
+        public AwaitIngestRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -29,6 +29,7 @@ namespace KustoCopyConsole.Runner
             {
                 blockItem = await AwaitIngestionAsync(blockItem, ct);
             }
+
 
             return blockItem;
         }
