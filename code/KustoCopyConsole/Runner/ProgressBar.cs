@@ -11,7 +11,6 @@ namespace KustoCopyConsole.Runner
     {
         private readonly TaskCompletionSource _timerCompletionSource = new();
         private readonly Task _timerTask;
-        private bool _isCompleted = false;
 
         public ProgressBar(TimeSpan refreshRate, Func<ProgressReport> progressFunc)
         {
@@ -26,6 +25,8 @@ namespace KustoCopyConsole.Runner
 
         private async Task MonitorAsync(TimeSpan refreshRate, Func<ProgressReport> progressFunc)
         {
+            var isCancel = true;
+
             while (!_timerCompletionSource.Task.IsCompleted)
             {
                 await Task.WhenAny(
@@ -34,31 +35,37 @@ namespace KustoCopyConsole.Runner
 
                 if (!_timerCompletionSource.Task.IsCompleted)
                 {
-                    var report = progressFunc();
-
-                    switch (report.ProgessStatus)
+                    if (!ProcessReport(progressFunc))
                     {
-                        case ProgessStatus.Nothing:
-                            break;
-                        case ProgessStatus.Progress:
-                            Console.WriteLine($"{report.Text} (progress)");
-                            break;
-                        case ProgessStatus.Completed:
-                            _isCompleted = true;
-                            _timerCompletionSource.TrySetResult();
-                            break;
-
-                        default:
-                            throw new NotSupportedException(
-                                $"{nameof(ProgessStatus)} with {report.ProgessStatus}");
+                        _timerCompletionSource.TrySetResult();
+                        isCancel = false;
                     }
                 }
             }
-            if (_isCompleted)
+            if (isCancel)
             {
-                var report = progressFunc();
+                ProcessReport(progressFunc);
+            }
+        }
 
-                Console.WriteLine($"{report.Text} (completed)");
+        private bool ProcessReport(Func<ProgressReport> progressFunc)
+        {
+            var report = progressFunc();
+
+            switch (report.ProgessStatus)
+            {
+                case ProgessStatus.Nothing:
+                    return true;
+                case ProgessStatus.Progress:
+                    Console.WriteLine($"{report.Text} (progress)");
+                    return true;
+                case ProgessStatus.Completed:
+                    Console.WriteLine($"{report.Text} (completed)");
+                    return false;
+
+                default:
+                    throw new NotSupportedException(
+                        $"{nameof(ProgessStatus)} with {report.ProgessStatus}");
             }
         }
     }

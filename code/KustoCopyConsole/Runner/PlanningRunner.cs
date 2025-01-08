@@ -104,17 +104,12 @@ namespace KustoCopyConsole.Runner
                     var blockMap = iteration
                     .BlockMap;
 
-                    if (iterationItem.State == TableState.Planning)
-                    {
-                        return new ProgressReport(
-                            ProgessStatus.Progress,
-                            $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
-                            $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
-                    }
-                    else
-                    {
-                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
-                    }
+                    return new ProgressReport(
+                        iterationItem.State == TableState.Planning
+                        ? ProgessStatus.Progress
+                        : ProgessStatus.Completed,
+                        $"Planned:  {sourceTableRowItem.SourceTable.ToStringCompact()}"
+                        + $"({sourceTableRowItem.IterationId}) {blockMap.Count}");
                 });
         }
 
@@ -135,22 +130,20 @@ namespace KustoCopyConsole.Runner
                     {
                         return new ProgressReport(ProgessStatus.Nothing, string.Empty);
                     }
-                    else if (iterationItem.State == TableState.Planned)
+                    else
                     {
                         var blockMap = iteration
                         .BlockMap;
                         var exportedCount = blockMap.Values
-                        .Where(b => b.RowItem.State == BlockState.Exported)
+                        .Where(b => b.RowItem.State > BlockState.Exporting)
                         .Count();
 
                         return new ProgressReport(
-                            ProgessStatus.Progress,
+                            exportedCount != blockMap.Count
+                            ? ProgessStatus.Progress
+                            : ProgessStatus.Completed,
                             $"Exported:  {sourceTableRowItem.SourceTable.ToStringCompact()}" +
                             $"({sourceTableRowItem.IterationId}) {exportedCount}/{blockMap.Count}");
-                    }
-                    else
-                    {
-                        return new ProgressReport(ProgessStatus.Completed, string.Empty);
                     }
                 });
         }
