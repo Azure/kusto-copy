@@ -56,9 +56,9 @@ namespace KustoCopyConsole.Runner
             }
             if (_isCompleted)
             {
-                var text = progressFunc();
+                var report = progressFunc();
 
-                Console.WriteLine($"{text} (completed)");
+                Console.WriteLine($"{report.Text} (completed)");
             }
         }
     }

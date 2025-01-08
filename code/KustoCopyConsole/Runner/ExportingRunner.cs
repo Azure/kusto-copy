@@ -82,6 +82,7 @@ namespace KustoCopyConsole.Runner
                 {
                     State = UrlState.Exported,
                     SourceTable = blockItem.SourceTable,
+                    DestinationTable = blockItem.DestinationTable,
                     IterationId = blockItem.IterationId,
                     BlockId = blockItem.BlockId,
                     Url = e.BlobUri.ToString(),

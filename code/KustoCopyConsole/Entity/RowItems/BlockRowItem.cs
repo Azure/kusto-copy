@@ -60,11 +60,11 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(OperationId)} should be empty but is '{OperationId}'");
             }
-            if (State == BlockState.Queued && !string.IsNullOrWhiteSpace(BlockTag))
+            if (State < BlockState.Queued && !string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should be empty");
             }
-            if (State < BlockState.Queued && string.IsNullOrWhiteSpace(BlockTag))
+            if (State >= BlockState.Queued && string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
             }
