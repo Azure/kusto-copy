@@ -12,10 +12,10 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var sourceState = SourceTableState.Planning;
+            var sourceState = TableState.Planning;
             var destinationState = DestinationTableState.TempTableCreating;
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
                 State = sourceState,
                 IterationId = iterationId,
@@ -63,15 +63,15 @@ namespace KustoCopyTest.InMemoryCache
                 TempTableName = "MyTemp"
             };
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
-                State = SourceTableState.Planned,
+                State = TableState.Planned,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
-            cache.AppendItem(new SourceBlockRowItem
+            cache.AppendItem(new BlockRowItem
             {
-                State = SourceBlockState.Planned,
+                State = BlockState.Planned,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 BlockId = blockId

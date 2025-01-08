@@ -1,6 +1,4 @@
-﻿using Azure;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -9,9 +7,9 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class SourceExportingRunner : RunnerBase
+    internal class ExportingRunner : RunnerBase
     {
-        public SourceExportingRunner(
+        public ExportingRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -22,13 +20,13 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(
             IBlobPathProvider blobPathProvider,
             Task tempTableTask,
-            SourceTableRowItem sourceTableRowItem,
+            TableRowItem sourceTableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
-            var queueIngestRunner = new DestinationQueueIngestRunner(
+            var queueIngestRunner = new QueueIngestRunner(
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);
@@ -44,40 +42,34 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.TableName);
 
             await tempTableTask;
-            if (blockItem.State == SourceBlockState.Exporting)
+            if (blockItem.State == BlockState.Exporting)
             {   //  The block is already exporting, so we track its progress
                 exportClient.RegisterExistingOperation(blockItem.OperationId);
             }
-            if (blockItem.State != SourceBlockState.Exported)
+            if (blockItem.State != BlockState.Exported)
             {
                 await CleanUrlsAsync(blockItem, ct);
             }
-            if (blockItem.State == SourceBlockState.Planned)
+            if (blockItem.State == BlockState.Planned)
             {
                 blockItem = await ExportBlockAsync(blobPathProvider, exportClient, blockItem, ct);
             }
-            if (blockItem.State == SourceBlockState.Exporting)
+            if (blockItem.State == BlockState.Exporting)
             {
                 blockItem = await AwaitExportBlockAsync(exportClient, blockItem, ct);
             }
-            if (blockItem.State == SourceBlockState.Exported)
+            if (blockItem.State == BlockState.Exported)
             {   //  Ingest into destination
-                var destinationTable = Parameterization.Activities
-                    .Where(a => a.Source.GetTableIdentity() == sourceTableRowItem.SourceTable)
-                    .Select(a => a.Destination.GetTableIdentity())
-                    .First();
-
                 await queueIngestRunner.RunAsync(
                     blobPathProvider,
                     blockItem,
-                    destinationTable,
                     ct);
             }
         }
 
-        private async Task<SourceBlockRowItem> AwaitExportBlockAsync(
+        private async Task<BlockRowItem> AwaitExportBlockAsync(
             ExportClient exportClient,
-            SourceBlockRowItem blockItem,
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
             var exportDetails = await exportClient.AwaitExportAsync(
@@ -86,9 +78,9 @@ namespace KustoCopyConsole.Runner
                 blockItem.OperationId,
                 ct);
             var urlItems = exportDetails
-                .Select(e => new SourceUrlRowItem
+                .Select(e => new UrlRowItem
                 {
-                    State = SourceUrlState.Exported,
+                    State = UrlState.Exported,
                     SourceTable = blockItem.SourceTable,
                     IterationId = blockItem.IterationId,
                     BlockId = blockItem.BlockId,
@@ -104,16 +96,16 @@ namespace KustoCopyConsole.Runner
             {
                 await RowItemGateway.AppendAsync(urlItem, ct);
             }
-            blockItem = blockItem.ChangeState(SourceBlockState.Exported);
+            blockItem = blockItem.ChangeState(BlockState.Exported);
             await RowItemGateway.AppendAsync(blockItem, ct);
 
             return blockItem;
         }
 
-        private async Task<SourceBlockRowItem> ExportBlockAsync(
+        private async Task<BlockRowItem> ExportBlockAsync(
             IBlobPathProvider blobPathProvider,
             ExportClient exportClient,
-            SourceBlockRowItem blockItem,
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
             var iteration = RowItemGateway.InMemoryCache
@@ -130,14 +122,14 @@ namespace KustoCopyConsole.Runner
                 blockItem.IngestionTimeEnd,
                 ct);
 
-            blockItem = blockItem.ChangeState(SourceBlockState.Exporting);
+            blockItem = blockItem.ChangeState(BlockState.Exporting);
             blockItem.OperationId = operationId;
             await RowItemGateway.AppendAsync(blockItem, ct);
 
             return blockItem;
         }
 
-        private async Task CleanUrlsAsync(SourceBlockRowItem blockItem, CancellationToken ct)
+        private async Task CleanUrlsAsync(BlockRowItem blockItem, CancellationToken ct)
         {
             var existingUrls = RowItemGateway.InMemoryCache
                 .SourceTableMap[blockItem.SourceTable]
@@ -149,13 +141,13 @@ namespace KustoCopyConsole.Runner
             foreach (var url in existingUrls)
             {
                 await RowItemGateway.AppendAsync(
-                    url.RowItem.ChangeState(SourceUrlState.Deleted),
+                    url.RowItem.ChangeState(UrlState.Deleted),
                     ct);
             }
         }
 
-        private async Task<SourceBlockRowItem> EnsureBlockCreatedAsync(
-            SourceTableRowItem sourceTableRowItem,
+        private async Task<BlockRowItem> EnsureBlockCreatedAsync(
+            TableRowItem sourceTableRowItem,
             long blockId,
             DateTime ingestionTimeStart,
             DateTime ingestionTimeEnd,
@@ -168,9 +160,9 @@ namespace KustoCopyConsole.Runner
 
             if (!blockMap.ContainsKey(blockId))
             {
-                var newBlockItem = new SourceBlockRowItem
+                var newBlockItem = new BlockRowItem
                 {
-                    State = SourceBlockState.Planned,
+                    State = BlockState.Planned,
                     SourceTable = sourceTableRowItem.SourceTable,
                     IterationId = sourceTableRowItem.IterationId,
                     BlockId = blockId,

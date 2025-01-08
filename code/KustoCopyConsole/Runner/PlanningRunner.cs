@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class SourcePlanningRunner : RunnerBase
+    internal class PlanningRunner : RunnerBase
     {
         #region Inner Types
         private record RecordDistributionInExtent(
@@ -27,7 +27,7 @@ namespace KustoCopyConsole.Runner
         private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
-        public SourcePlanningRunner(
+        public PlanningRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -36,30 +36,29 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task RunAsync(
-            SourceTableRowItem sourceTableRowItem,
+            TableRowItem tableRowItem,
             Task tempTableTask,
             CancellationToken ct)
         {
-            await using (var planningProgress = CreatePlanningProgressBar(sourceTableRowItem))
-            await using (var exportingProgress = CreateExportingProgressBar(sourceTableRowItem))
+            await using (var planningProgress = CreatePlanningProgressBar(tableRowItem))
+            await using (var exportingProgress = CreateExportingProgressBar(tableRowItem))
             {
-                if (sourceTableRowItem.State == SourceTableState.Planning
-                    || sourceTableRowItem.State == SourceTableState.Planned)
+                if (tableRowItem.State != TableState.Completed)
                 {
-                    var exportingRunner = new SourceExportingRunner(
+                    var exportingRunner = new ExportingRunner(
                         Parameterization,
                         RowItemGateway,
                         DbClientFactory);
                     var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[sourceTableRowItem.SourceTable]
-                        .IterationMap[sourceTableRowItem.IterationId]
+                        .SourceTableMap[tableRowItem.SourceTable]
+                        .IterationMap[tableRowItem.IterationId]
                         .BlockMap;
-                    var blobPathProvider = GetBlobPathFactory(sourceTableRowItem.SourceTable);
+                    var blobPathProvider = GetBlobPathFactory(tableRowItem.SourceTable);
                     var exportingTasks = blockMap.Values
                         .Select(b => exportingRunner.RunAsync(
                             blobPathProvider,
                             tempTableTask,
-                            sourceTableRowItem,
+                            tableRowItem,
                             b.RowItem.BlockId,
                             b.RowItem.IngestionTimeStart,
                             b.RowItem.IngestionTimeEnd,
@@ -67,7 +66,7 @@ namespace KustoCopyConsole.Runner
                         .ToImmutableArray();
 
                     //  Complete planning
-                    if (sourceTableRowItem.State == SourceTableState.Planning)
+                    if (tableRowItem.State == TableState.Planning)
                     {
                         var lastBlockItem = blockMap.Any()
                             ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
@@ -76,24 +75,22 @@ namespace KustoCopyConsole.Runner
                             tempTableTask,
                             exportingRunner,
                             blobPathProvider,
-                            sourceTableRowItem,
+                            tableRowItem,
                             (lastBlockItem?.BlockId ?? 0) + 1,
                             lastBlockItem?.IngestionTimeEnd,
                             ct);
 
                         exportingTasks = exportingTasks.AddRange(newTasks);
-                        sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Planned);
-                        await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
+                        tableRowItem = tableRowItem.ChangeState(TableState.Planned);
+                        await RowItemGateway.AppendAsync(tableRowItem, ct);
                     }
                     await Task.WhenAll(exportingTasks);
-                    sourceTableRowItem = sourceTableRowItem.ChangeState(SourceTableState.Exported);
-                    await RowItemGateway.AppendAsync(sourceTableRowItem, ct);
                 }
             }
         }
 
         #region Progress bars
-        private ProgressBar CreatePlanningProgressBar(SourceTableRowItem sourceTableRowItem)
+        private ProgressBar CreatePlanningProgressBar(TableRowItem sourceTableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(5),
@@ -107,7 +104,7 @@ namespace KustoCopyConsole.Runner
                     var blockMap = iteration
                     .BlockMap;
 
-                    if (iterationItem.State == SourceTableState.Planning)
+                    if (iterationItem.State == TableState.Planning)
                     {
                         return new ProgressReport(
                             ProgessStatus.Progress,
@@ -122,7 +119,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private ProgressBar CreateExportingProgressBar(
-            SourceTableRowItem sourceTableRowItem)
+            TableRowItem sourceTableRowItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(10),
@@ -134,16 +131,16 @@ namespace KustoCopyConsole.Runner
                     var iterationItem = iteration
                     .RowItem;
 
-                    if (iterationItem.State == SourceTableState.Planning)
+                    if (iterationItem.State == TableState.Planning)
                     {
                         return new ProgressReport(ProgessStatus.Nothing, string.Empty);
                     }
-                    else if (iterationItem.State == SourceTableState.Planned)
+                    else if (iterationItem.State == TableState.Planned)
                     {
                         var blockMap = iteration
                         .BlockMap;
                         var exportedCount = blockMap.Values
-                        .Where(b => b.RowItem.State == SourceBlockState.Exported)
+                        .Where(b => b.RowItem.State == BlockState.Exported)
                         .Count();
 
                         return new ProgressReport(
@@ -182,9 +179,9 @@ namespace KustoCopyConsole.Runner
 
         private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
             Task tempTableTask,
-            SourceExportingRunner exportingRunner,
+            ExportingRunner exportingRunner,
             IBlobPathProvider blobPathProvider,
-            SourceTableRowItem sourceTableItem,
+            TableRowItem sourceTableItem,
             long nextBlockId,
             DateTime? nextIngestionTimeStart,
             CancellationToken ct)
@@ -230,8 +227,8 @@ namespace KustoCopyConsole.Runner
         private IEnumerable<Task> PlanBlockBatch(
             IBlobPathProvider blobPathProvider,
             Task tempTableTask,
-            SourceExportingRunner exportingRunner,
-            SourceTableRowItem sourceTableItem,
+            ExportingRunner exportingRunner,
+            TableRowItem sourceTableItem,
             ref long nextBlockId,
             ref DateTime? nextIngestionTimeStart,
             IImmutableList<RecordDistributionInExtent> distributionInExtents,
@@ -294,7 +291,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
-            SourceTableRowItem sourceTableItem,
+            TableRowItem sourceTableItem,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,

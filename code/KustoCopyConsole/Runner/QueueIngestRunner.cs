@@ -1,18 +1,16 @@
-﻿using Kusto.Cloud.Platform.Utils;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class DestinationQueueIngestRunner : RunnerBase
+    internal class QueueIngestRunner : RunnerBase
     {
-        public DestinationQueueIngestRunner(
+        public QueueIngestRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
@@ -22,44 +20,35 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(
             IBlobPathProvider blobPathProvider,
-            SourceBlockRowItem sourceBlockItem,
-            TableIdentity destinationTable,
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var blockItem = await EnsureBlockCreatedAsync(
-                sourceBlockItem,
-                destinationTable,
-                ct);
             var awaitIngestRunner = new DestinationAwaitIngestRunner(
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);
 
-            if (blockItem.State == DestinationBlockState.Queuing)
+            if (blockItem.State == BlockState.Exported)
             {
                 blockItem = await QueueIngestBlockAsync(blobPathProvider, blockItem, ct);
             }
             blockItem = await awaitIngestRunner.RunAsync(blockItem, ct);
         }
 
-        private async Task<DestinationBlockRowItem> QueueIngestBlockAsync(
+        private async Task<BlockRowItem> QueueIngestBlockAsync(
             IBlobPathProvider blobPathProvider,
-            DestinationBlockRowItem blockItem,
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var urlItems = RowItemGateway.InMemoryCache
+            var iterationItem = RowItemGateway.InMemoryCache
                 .SourceTableMap[blockItem.SourceTable]
-                .IterationMap[blockItem.IterationId]
+                .IterationMap[blockItem.IterationId];
+            var urlItems = iterationItem
                 .BlockMap[blockItem.BlockId]
                 .UrlMap
                 .Values
                 .Select(u => u.RowItem);
-            var tempTableName = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
-                .IterationMap[blockItem.IterationId]
-                .Destination!
-                .RowItem
-                .TempTableName;
+            var tempTableName = iterationItem.RowItem.TempTableName;
             var ingestClient = DbClientFactory.GetIngestClient(
                 blockItem.DestinationTable.ClusterUri,
                 blockItem.DestinationTable.DatabaseName,
@@ -82,42 +71,11 @@ namespace KustoCopyConsole.Runner
 
             await Task.WhenAll(queueTasks);
 
-            blockItem = blockItem.ChangeState(DestinationBlockState.Queued);
+            blockItem = blockItem.ChangeState(BlockState.Queued);
             blockItem.BlockTag = blockTag;
             await RowItemGateway.AppendAsync(blockItem, ct);
 
             return blockItem;
-        }
-
-        private async Task<DestinationBlockRowItem> EnsureBlockCreatedAsync(
-            SourceBlockRowItem sourceBlockItem,
-            TableIdentity destinationTable,
-            CancellationToken ct)
-        {
-            var destination = RowItemGateway.InMemoryCache
-                .SourceTableMap[sourceBlockItem.SourceTable]
-                .IterationMap[sourceBlockItem.IterationId]
-                .Destination;
-
-            if (destination == null)
-            {
-                var newBlockItem = new DestinationBlockRowItem
-                {
-                    State = DestinationBlockState.Queuing,
-                    SourceTable = sourceBlockItem.SourceTable,
-                    DestinationTable = destinationTable,
-                    IterationId = sourceBlockItem.IterationId,
-                    BlockId = sourceBlockItem.BlockId
-                };
-
-                await RowItemGateway.AppendAsync(newBlockItem, ct);
-
-                return newBlockItem;
-            }
-            else
-            {
-                return destination.BlockMap[sourceBlockItem.BlockId].RowItem;
-            }
         }
     }
 }

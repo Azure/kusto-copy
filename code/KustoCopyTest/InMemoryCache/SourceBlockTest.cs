@@ -12,10 +12,10 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var state1 = SourceBlockState.Planned;
-            var state2 = SourceBlockState.Exporting;
+            var state1 = BlockState.Planned;
+            var state2 = BlockState.Exporting;
             var blockId = 1;
-            var blockItem = new SourceBlockRowItem
+            var blockItem = new BlockRowItem
             {
                 State = state1,
                 IterationId = iterationId,
@@ -23,9 +23,9 @@ namespace KustoCopyTest.InMemoryCache
                 BlockId = blockId
             };
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
-                State = SourceTableState.Planning,
+                State = TableState.Planning,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
@@ -48,10 +48,10 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var state1 = SourceBlockState.Exporting;
-            var state2 = SourceBlockState.Exported;
+            var state1 = BlockState.Exporting;
+            var state2 = BlockState.Exported;
             var blockId = 1;
-            var blockItem = new SourceBlockRowItem
+            var blockItem = new BlockRowItem
             {
                 State = state1,
                 IterationId = iterationId,
@@ -60,16 +60,16 @@ namespace KustoCopyTest.InMemoryCache
                 OperationId = "abc"
             };
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
-                State = SourceTableState.Planning,
+                State = TableState.Planning,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
             cache.AppendItem(blockItem);
-            cache.AppendItem(new SourceUrlRowItem
+            cache.AppendItem(new UrlRowItem
             {
-                State = SourceUrlState.Exported,
+                State = UrlState.Exported,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 IterationId = iterationId,
                 BlockId = blockId,

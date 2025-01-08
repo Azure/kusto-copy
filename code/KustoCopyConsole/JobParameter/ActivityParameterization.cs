@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using KustoCopyConsole.Entity;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.JobParameter
 {
@@ -12,7 +13,7 @@ namespace KustoCopyConsole.JobParameter
 
         public TableOption TableOption { get; set; } = new();
 
-        internal void Validate()
+        public void Validate()
         {
             Source.Validate();
             if (string.IsNullOrWhiteSpace(Source.TableName))
@@ -21,6 +22,18 @@ namespace KustoCopyConsole.JobParameter
             }
             Destination.Validate();
             TableOption.Validate();
+        }
+
+        public TableIdentity GetEffectiveDestinationTableIdentity()
+        {
+            var destinationTableIdentity = Destination.GetTableIdentity();
+
+            return !string.IsNullOrWhiteSpace(Destination.TableName)
+                ? destinationTableIdentity
+                : new TableIdentity(
+                    destinationTableIdentity.ClusterUri,
+                    destinationTableIdentity.DatabaseName,
+                    Source.GetTableIdentity().TableName);
         }
     }
 }

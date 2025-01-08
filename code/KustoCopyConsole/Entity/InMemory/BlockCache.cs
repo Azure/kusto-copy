@@ -4,30 +4,28 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class SourceBlockCache : CacheBase<SourceBlockRowItem>
+    internal class BlockCache : CacheBase<BlockRowItem>
     {
-        public SourceBlockCache(
-            SourceBlockRowItem item,
-            IImmutableDictionary<string, SourceUrlCache> urlMap)
+        public BlockCache(BlockRowItem item, IImmutableDictionary<string, UrlCache> urlMap)
             : base(item)
         {
             UrlMap = urlMap;
         }
 
-        public SourceBlockCache(SourceBlockRowItem item)
-            : this(item, ImmutableDictionary<string, SourceUrlCache>.Empty)
+        public BlockCache(BlockRowItem item)
+            : this(item, ImmutableDictionary<string, UrlCache>.Empty)
         {
         }
 
-        public IImmutableDictionary<string, SourceUrlCache> UrlMap { get; }
+        public IImmutableDictionary<string, UrlCache> UrlMap { get; }
 
-        public SourceBlockCache AppendUrl(SourceUrlCache url)
+        public BlockCache AppendUrl(UrlCache url)
         {
-            if (url.RowItem.State == SourceUrlState.Deleted)
+            if (url.RowItem.State == UrlState.Deleted)
             {
                 if (UrlMap.ContainsKey(url.RowItem.Url))
                 {
-                    return new SourceBlockCache(
+                    return new BlockCache(
                         RowItem,
                         UrlMap.Remove(url.RowItem.Url));
                 }
@@ -38,7 +36,7 @@ namespace KustoCopyConsole.Entity.InMemory
             }
             else
             {
-                return new SourceBlockCache(
+                return new BlockCache(
                     RowItem,
                     UrlMap.SetItem(url.RowItem.Url, url));
             }

@@ -16,9 +16,9 @@ namespace KustoCopyTest.InMemoryCache
             var state1 = DestinationBlockState.Queuing;
             var state2 = DestinationBlockState.Queued;
             var blockId = 1;
-            var sourceBlockItem = new SourceBlockRowItem
+            var sourceBlockItem = new BlockRowItem
             {
-                State = SourceBlockState.Exported,
+                State = BlockState.Exported,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 BlockId = blockId
@@ -32,9 +32,9 @@ namespace KustoCopyTest.InMemoryCache
                 BlockId = blockId
             };
 
-            cache.AppendItem(new SourceTableRowItem
+            cache.AppendItem(new TableRowItem
             {
-                State = SourceTableState.Planning,
+                State = TableState.Planning,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
