@@ -28,10 +28,6 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
 
-            if (blockItem.State == BlockState.Exporting)
-            {   //  The block is already exporting, so we track its progress
-                exportClient.RegisterExistingOperation(blockItem.OperationId);
-            }
             if (blockItem.State != BlockState.Exported)
             {
                 await CleanUrlsAsync(blockItem, ct);
@@ -39,6 +35,10 @@ namespace KustoCopyConsole.Runner
             if (blockItem.State == BlockState.Planned)
             {
                 blockItem = await ExportBlockAsync(blobPathProvider, exportClient, blockItem, ct);
+            }
+            if (blockItem.State == BlockState.Exporting)
+            {
+                blockItem = await AwaitExportBlockAsync(exportClient, blockItem, ct);
             }
 
             return blockItem;

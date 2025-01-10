@@ -49,11 +49,6 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public void RegisterExistingOperation(string operationId)
-        {
-            _exportCoreClient.RegisterExistingOperation(operationId);
-        }
-
         public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
             long iterationId,
             string tableName,

@@ -1,5 +1,4 @@
-﻿using Azure;
-using KustoCopyConsole.Concurrency;
+﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Generic;
@@ -7,7 +6,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Kusto
 {
@@ -81,25 +79,6 @@ namespace KustoCopyConsole.Kusto
             return operationId;
         }
 
-        public void RegisterExistingOperation(string operationId)
-        {
-            var exportCompletedSource = new TaskCompletionSource();
-            var slotReleasedTask = _queue.RequestRunAsync(
-                KustoPriority.HighestPriority,
-                async () =>
-                {
-                    //  We want to keep the export slot locked until the export is completed
-                    await exportCompletedSource.Task;
-                });
-
-            lock (_monitoringLock)
-            {
-                _taskMap.Add(
-                    operationId,
-                    new DoubleTask(exportCompletedSource, slotReleasedTask));
-            }
-        }
-
         public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
             long iterationId,
             string tableName,
@@ -111,13 +90,14 @@ namespace KustoCopyConsole.Kusto
 
             lock (_monitoringLock)
             {
+                EnsureExistingOperation(operationId);
                 if (!_isMonitoring)
                 {
                     _isMonitoring = true;
                     oldMonitoringTask = _monitoringTask;
                     _monitoringTask = MonitorAsync(ct);
                 }
-                if(_taskMap.ContainsKey(operationId))
+                if (_taskMap.ContainsKey(operationId))
                 {
                     exportCompletedTask = _taskMap[operationId].ExportCompletedSource.Task;
                 }
@@ -138,6 +118,28 @@ namespace KustoCopyConsole.Kusto
                 tableName,
                 operationId,
                 ct);
+        }
+
+        private void EnsureExistingOperation(string operationId)
+        {   //  Catch "orphan" operation IDs that were created in another process
+            if (!GetOperationIds().Contains(operationId))
+            {
+                var exportCompletedSource = new TaskCompletionSource();
+                var slotReleasedTask = _queue.RequestRunAsync(
+                    KustoPriority.HighestPriority,
+                    async () =>
+                    {
+                        //  We want to keep the export slot locked until the export is completed
+                        await exportCompletedSource.Task;
+                    });
+
+                lock (_monitoringLock)
+                {
+                    _taskMap.Add(
+                        operationId,
+                        new DoubleTask(exportCompletedSource, slotReleasedTask));
+                }
+            }
         }
 
         private async Task MonitorAsync(CancellationToken ct)
@@ -207,7 +209,7 @@ namespace KustoCopyConsole.Kusto
                     lock (_monitoringLock)
                     {
                         foreach (var exportCompletedSource in
-                            _taskMap.Values.Select(o=>o.ExportCompletedSource))
+                            _taskMap.Values.Select(o => o.ExportCompletedSource))
                         {
                             exportCompletedSource.SetException(ex);
                         }
