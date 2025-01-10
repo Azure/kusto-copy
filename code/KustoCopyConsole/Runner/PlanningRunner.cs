@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Azure.Storage.Blobs.Models;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -50,49 +51,16 @@ namespace KustoCopyConsole.Runner
             await using (var movingProgress =
                 CreateBlockStateProgressBar(tableRowItem, BlockState.ExtentMoved))
             {
-                if (tableRowItem.State != TableState.Completed)
+                var tempTableCreatingRunner = new TempTableCreatingRunner(
+                    Parameterization,
+                    RowItemGateway,
+                    DbClientFactory);
+
+                if (tableRowItem.State == TableState.Planning)
                 {
-                    var exportingRunner = new ExportingRunner(
-                        Parameterization,
-                        RowItemGateway,
-                        DbClientFactory);
-                    var blockMap = RowItemGateway.InMemoryCache
-                        .SourceTableMap[tableRowItem.SourceTable]
-                        .IterationMap[tableRowItem.IterationId]
-                        .BlockMap;
-                    var blobPathProvider = GetBlobPathFactory(tableRowItem.SourceTable);
-                    var exportingTasks = blockMap.Values
-                        .Select(b => exportingRunner.RunAsync(
-                            blobPathProvider,
-                            tempTableTask,
-                            tableRowItem,
-                            b.RowItem.BlockId,
-                            b.RowItem.IngestionTimeStart,
-                            b.RowItem.IngestionTimeEnd,
-                            ct))
-                        .ToImmutableArray();
-
-                    //  Complete planning
-                    if (tableRowItem.State == TableState.Planning)
-                    {
-                        var lastBlockItem = blockMap.Any()
-                            ? blockMap.Values.Select(i => i.RowItem).ArgMax(b => b.BlockId)
-                            : null;
-                        var newTasks = await PlanNewBlocksAsync(
-                            tempTableTask,
-                            exportingRunner,
-                            blobPathProvider,
-                            tableRowItem,
-                            (lastBlockItem?.BlockId ?? 0) + 1,
-                            lastBlockItem?.IngestionTimeEnd,
-                            ct);
-
-                        exportingTasks = exportingTasks.AddRange(newTasks);
-                        tableRowItem = tableRowItem.ChangeState(TableState.Planned);
-                        await RowItemGateway.AppendAsync(tableRowItem, ct);
-                    }
-                    await Task.WhenAll(exportingTasks);
+                    tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
                 }
+                await tempTableCreatingRunner.RunAsync(tableRowItem, ct);
             }
         }
 
@@ -156,140 +124,103 @@ namespace KustoCopyConsole.Runner
         }
         #endregion
 
-        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
-        {
-            var activity = Parameterization.Activities
-                .Where(a => a.Source.GetTableIdentity() == sourceTable)
-                .FirstOrDefault();
-
-            if (activity == null)
-            {
-                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
-            }
-            else
-            {
-                var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
-                    destinationTable.ClusterUri,
-                    destinationTable.DatabaseName));
-
-                return tempUriProvider;
-            }
-        }
-
-        private async Task<IEnumerable<Task>> PlanNewBlocksAsync(
-            Task tempTableTask,
-            ExportingRunner exportingRunner,
-            IBlobPathProvider blobPathProvider,
-            TableRowItem sourceTableItem,
-            long nextBlockId,
-            DateTime? nextIngestionTimeStart,
+        private async Task<TableRowItem> PlanBlocksAsync(
+            TableRowItem tableItem,
             CancellationToken ct)
         {
-            var exportingTasks = ImmutableArray<Task>.Empty.ToBuilder();
             var queryClient = DbClientFactory.GetDbQueryClient(
-                sourceTableItem.SourceTable.ClusterUri,
-                sourceTableItem.SourceTable.DatabaseName);
+                tableItem.SourceTable.ClusterUri,
+                tableItem.SourceTable.DatabaseName);
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                sourceTableItem.SourceTable.ClusterUri,
-                sourceTableItem.SourceTable.DatabaseName);
+                tableItem.SourceTable.ClusterUri,
+                tableItem.SourceTable.DatabaseName);
 
-            //  Loop on block batch
-            while (true)
+            //  Loop on block batches
+            while (tableItem.State == TableState.Planning)
             {
+                var blockMap = RowItemGateway.InMemoryCache
+                    .SourceTableMap[tableItem.SourceTable]
+                    .IterationMap[tableItem.IterationId]
+                    .BlockMap;
+                var lastBlock = blockMap.Any()
+                    ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
+                    : null;
                 var distributionInExtents = await GetRecordDistributionInExtents(
-                    sourceTableItem,
-                    nextIngestionTimeStart,
+                    tableItem,
+                    lastBlock?.IngestionTimeEnd,
                     queryClient,
                     dbCommandClient,
                     ct);
-                var newExportingTasks = PlanBlockBatch(
-                    blobPathProvider,
-                    tempTableTask,
-                    exportingRunner,
-                    sourceTableItem,
-                    ref nextBlockId,
-                    ref nextIngestionTimeStart,
-                    distributionInExtents,
-                    ct);
 
-                if (newExportingTasks.Any())
+                if (distributionInExtents.Any())
                 {
-                    exportingTasks.AddRange(newExportingTasks);
+                    var orderedDistributionInExtents = distributionInExtents
+                        .OrderBy(d => d.IngestionTime)
+                        .ThenBy(d => d.MinCreatedOn)
+                        .ToImmutableArray();
+
+                    while (orderedDistributionInExtents.Any())
+                    {
+                        (var newBlockItem, var remainingDistributionInExtents) = PlanSingleBlock(
+                            tableItem,
+                            lastBlock,
+                            distributionInExtents);
+
+                        orderedDistributionInExtents = remainingDistributionInExtents
+                            .ToImmutableArray();
+                        await RowItemGateway.AppendAsync(newBlockItem, ct);
+                        lastBlock = newBlockItem;
+                    }
                 }
                 else
                 {
-                    return exportingTasks.ToImmutableArray();
+                    tableItem = tableItem.ChangeState(TableState.Planned);
+                    await RowItemGateway.AppendAsync(tableItem, ct);
                 }
             }
+
+            return tableItem;
         }
 
-        private IEnumerable<Task> PlanBlockBatch(
-            IBlobPathProvider blobPathProvider,
-            Task tempTableTask,
-            ExportingRunner exportingRunner,
-            TableRowItem sourceTableItem,
-            ref long nextBlockId,
-            ref DateTime? nextIngestionTimeStart,
-            IImmutableList<RecordDistributionInExtent> distributionInExtents,
-            CancellationToken ct)
+        private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(
+            TableRowItem tableItem,
+            BlockRowItem? lastBlock,
+            IImmutableList<RecordDistributionInExtent> distributionInExtents)
         {
-            var exportingTasks = new List<Task>();
+            var nextBlockId = (lastBlock?.BlockId ?? 0) + 1;
+            var nextIngestionTimeStart = lastBlock?.IngestionTimeEnd;
+            long cummulativeRowCount = 0;
 
-            if (distributionInExtents.Any())
+            for (var i = 0; i != distributionInExtents.Count; ++i)
             {
-                var orderedDistributionInExtents = distributionInExtents
-                    .OrderBy(d => d.IngestionTime)
-                    .ThenBy(d => d.MinCreatedOn);
-                long cummulativeRowCount = 0;
-                var cummulativeDistributions = new List<RecordDistributionInExtent>();
-                var currentMinCreatedOn = distributionInExtents.First().MinCreatedOn;
+                var distribution = distributionInExtents[i];
 
-                foreach (var distribution in orderedDistributionInExtents)
+                cummulativeRowCount += distribution.RowCount;
+                if (i + 1 == distributionInExtents.Count
+                    || cummulativeRowCount + distributionInExtents[i + 1].RowCount > RECORDS_PER_BLOCK
+                    || distribution.MinCreatedOn != distributionInExtents[i + 1].MinCreatedOn)
                 {
-                    if (cummulativeDistributions.Any()
-                        && (cummulativeRowCount + distribution.RowCount > RECORDS_PER_BLOCK
-                        || distribution.MinCreatedOn != currentMinCreatedOn))
+                    var cummulativeDistributions = distributionInExtents.Take(i + 1);
+                    var remainingDistributions = distributionInExtents.Skip(i + 1);
+                    var blockItem = new BlockRowItem
                     {
-                        exportingTasks.Add(exportingRunner.RunAsync(
-                            blobPathProvider,
-                            tempTableTask,
-                            sourceTableItem,
-                            nextBlockId++,
-                            cummulativeDistributions.Min(d => d.IngestionTime),
-                            cummulativeDistributions.Max(d => d.IngestionTime),
-                            ct));
-                        nextIngestionTimeStart =
-                            cummulativeDistributions.Max(d => d.IngestionTime);
-                        cummulativeDistributions.Clear();
-                        currentMinCreatedOn = distribution.MinCreatedOn;
-                        cummulativeRowCount = distribution.RowCount;
-                    }
-                    else
-                    {
-                        cummulativeRowCount += distribution.RowCount;
-                    }
-                    cummulativeDistributions.Add(distribution);
-                }
-                if (distributionInExtents.Count() < MAX_STATS_COUNT
-                    && cummulativeDistributions.Any())
-                {
-                    exportingTasks.Add(exportingRunner.RunAsync(
-                        blobPathProvider,
-                        tempTableTask,
-                        sourceTableItem,
-                        nextBlockId++,
-                        cummulativeDistributions.Min(d => d.IngestionTime),
-                        cummulativeDistributions.Max(d => d.IngestionTime),
-                        ct));
-                    nextIngestionTimeStart =
-                        cummulativeDistributions.Max(d => d.IngestionTime);
+                        State = BlockState.Planned,
+                        SourceTable = tableItem.SourceTable,
+                        DestinationTable = tableItem.DestinationTable,
+                        IterationId = tableItem.IterationId,
+                        BlockId = nextBlockId++,
+                        IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
+                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)
+                    };
+
+                    return (blockItem, remainingDistributions);
                 }
             }
 
-            return exportingTasks;
+            throw new InvalidOperationException("We should never reach this code");
         }
 
+        //  Merge results from query + show extents command
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
             TableRowItem sourceTableItem,
             DateTime? ingestionTimeStart,

@@ -35,6 +35,8 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
+            await Task.CompletedTask;
+
             throw new NotImplementedException();
         }
     }

@@ -4,6 +4,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
@@ -27,34 +28,88 @@ namespace KustoCopyConsole.Runner
         {
             if (tableRowItem.State == TableState.Planned)
             {
-                tableRowItem = await SetTempTableAsync(tableRowItem, ct);
+                tableRowItem = await PrepareTempTableAsync(tableRowItem, ct);
             }
             if (tableRowItem.State == TableState.TempTableCreating)
             {
-                var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                    tableRowItem.DestinationTable.ClusterUri,
-                    tableRowItem.DestinationTable.DatabaseName);
+                tableRowItem = await CreateTempTableAsync(tableRowItem, ct);
+            }
+            await ExportBlockAsync(tableRowItem, ct);
+        }
 
-                await dbCommandClient.DropTableIfExistsAsync(
-                    tableRowItem.IterationId,
-                    tableRowItem.TempTableName,
-                    ct);
-                await dbCommandClient.CreateTempTableAsync(
-                    tableRowItem.IterationId,
-                    tableRowItem.DestinationTable.TableName,
-                    tableRowItem.TempTableName,
-                    ct);
+        private async Task ExportBlockAsync(TableRowItem tableRowItem, CancellationToken ct)
+        {
+            var exportingRunner = new ExportingRunner(
+                Parameterization,
+                RowItemGateway,
+                DbClientFactory);
+            var blobPathProvider = GetBlobPathFactory(tableRowItem.SourceTable);
+            var blockItems = RowItemGateway.InMemoryCache
+                .SourceTableMap[tableRowItem.SourceTable]
+                .IterationMap[tableRowItem.IterationId]
+                .BlockMap
+                .Values
+                .Select(b => b.RowItem);
+            var exportBlockTasks = blockItems
+                .Select(b => exportingRunner.RunAsync(
+                    blobPathProvider,
+                    tableRowItem,
+                    b,
+                    ct))
+                .ToImmutableArray();
 
-                tableRowItem = tableRowItem.ChangeState(TableState.TempTableCreated);
+            await Task.WhenAll(exportBlockTasks);
+        }
 
-                var rowItemAppend = await RowItemGateway.AppendAsync(tableRowItem, ct);
+        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
+        {
+            var activity = Parameterization.Activities
+                .Where(a => a.Source.GetTableIdentity() == sourceTable)
+                .FirstOrDefault();
 
-                //  We want to make sure this is recorded before we start ingesting data into it
-                await rowItemAppend.ItemAppendTask;
+            if (activity == null)
+            {
+                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
+            }
+            else
+            {
+                var destinationTable = activity.Destination.GetTableIdentity();
+                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName));
+
+                return tempUriProvider;
             }
         }
 
-        private async Task<TableRowItem> SetTempTableAsync(
+        private async Task<TableRowItem> CreateTempTableAsync(
+            TableRowItem tableRowItem,
+            CancellationToken ct)
+        {
+            var dbCommandClient = DbClientFactory.GetDbCommandClient(
+                tableRowItem.DestinationTable.ClusterUri,
+                tableRowItem.DestinationTable.DatabaseName);
+
+            await dbCommandClient.DropTableIfExistsAsync(
+                tableRowItem.IterationId,
+                tableRowItem.TempTableName,
+                ct);
+            await dbCommandClient.CreateTempTableAsync(
+                tableRowItem.IterationId,
+                tableRowItem.DestinationTable.TableName,
+                tableRowItem.TempTableName,
+                ct);
+
+            tableRowItem = tableRowItem.ChangeState(TableState.TempTableCreated);
+
+            var rowItemAppend = await RowItemGateway.AppendAsync(tableRowItem, ct);
+
+            //  We want to make sure this is recorded before we start ingesting data into it
+            await rowItemAppend.ItemAppendTask;
+            return tableRowItem;
+        }
+
+        private async Task<TableRowItem> PrepareTempTableAsync(
             TableRowItem tableRowItem,
             CancellationToken ct)
         {

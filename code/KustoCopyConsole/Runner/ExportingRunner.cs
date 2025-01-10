@@ -19,29 +19,19 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(
             IBlobPathProvider blobPathProvider,
-            Task tempTableTask,
-            TableRowItem sourceTableRowItem,
-            long blockId,
-            DateTime ingestionTimeStart,
-            DateTime ingestionTimeEnd,
+            TableRowItem tableRowItem,
+            BlockRowItem blockItem,
             CancellationToken ct)
         {
             var queueIngestRunner = new QueueIngestRunner(
                 Parameterization,
                 RowItemGateway,
                 DbClientFactory);
-            var blockItem = await EnsureBlockCreatedAsync(
-                sourceTableRowItem,
-                blockId,
-                ingestionTimeStart,
-                ingestionTimeEnd,
-                ct);
             var exportClient = DbClientFactory.GetExportClient(
                 blockItem.SourceTable.ClusterUri,
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
 
-            await tempTableTask;
             if (blockItem.State == BlockState.Exporting)
             {   //  The block is already exporting, so we track its progress
                 exportClient.RegisterExistingOperation(blockItem.OperationId);
@@ -144,41 +134,6 @@ namespace KustoCopyConsole.Runner
                 await RowItemGateway.AppendAsync(
                     url.RowItem.ChangeState(UrlState.Deleted),
                     ct);
-            }
-        }
-
-        private async Task<BlockRowItem> EnsureBlockCreatedAsync(
-            TableRowItem tableRowItem,
-            long blockId,
-            DateTime ingestionTimeStart,
-            DateTime ingestionTimeEnd,
-            CancellationToken ct)
-        {
-            var blockMap = RowItemGateway.InMemoryCache
-                .SourceTableMap[tableRowItem.SourceTable]
-                .IterationMap[tableRowItem.IterationId]
-                .BlockMap;
-
-            if (!blockMap.ContainsKey(blockId))
-            {
-                var newBlockItem = new BlockRowItem
-                {
-                    State = BlockState.Planned,
-                    SourceTable = tableRowItem.SourceTable,
-                    DestinationTable = tableRowItem.DestinationTable,
-                    IterationId = tableRowItem.IterationId,
-                    BlockId = blockId,
-                    IngestionTimeStart = ingestionTimeStart,
-                    IngestionTimeEnd = ingestionTimeEnd
-                };
-
-                await RowItemGateway.AppendAsync(newBlockItem, ct);
-
-                return newBlockItem;
-            }
-            else
-            {
-                return blockMap[blockId].RowItem;
             }
         }
     }
