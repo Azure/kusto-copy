@@ -111,22 +111,10 @@ namespace KustoCopyConsole.Runner
             TableRowItem iterationItem,
             CancellationToken ct)
         {
-            if (iterationItem.State == TableState.Starting)
-            {
-                iterationItem = await StartIterationAsync(iterationItem, ct);
-            }
-            if (iterationItem.State == TableState.Planning)
-            {
-                iterationItem = await PlanIterationAsync(iterationItem, ct);
-            }
-            if (iterationItem.State == TableState.Planned)
-            {
-                iterationItem = await CreateTempTableAsync(iterationItem, ct);
-            }
-            if (iterationItem.State == TableState.TempTableCreated)
-            {
-                await ProcessAllBlocksAsync(iterationItem, ct);
-            }
+            iterationItem = await StartIterationAsync(iterationItem, ct);
+            iterationItem = await PlanIterationAsync(iterationItem, ct);
+            iterationItem = await CreateTempTableAsync(iterationItem, ct);
+            await ProcessAllBlocksAsync(iterationItem, ct);
 
             return iterationItem;
         }
@@ -136,14 +124,17 @@ namespace KustoCopyConsole.Runner
             TableRowItem iterationItem,
             CancellationToken ct)
         {
-            var queryClient = DbClientFactory.GetDbQueryClient(
-                iterationItem.SourceTable.ClusterUri,
-                iterationItem.SourceTable.DatabaseName);
-            var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
+            if (iterationItem.State == TableState.Starting)
+            {
+                var queryClient = DbClientFactory.GetDbQueryClient(
+                        iterationItem.SourceTable.ClusterUri,
+                        iterationItem.SourceTable.DatabaseName);
+                var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
 
-            iterationItem = iterationItem.ChangeState(TableState.Planning);
-            iterationItem.CursorEnd = cursorEnd;
-            await RowItemGateway.AppendAsync(iterationItem, ct);
+                iterationItem = iterationItem.ChangeState(TableState.Planning);
+                iterationItem.CursorEnd = cursorEnd;
+                await RowItemGateway.AppendAsync(iterationItem, ct);
+            }
 
             return iterationItem;
         }

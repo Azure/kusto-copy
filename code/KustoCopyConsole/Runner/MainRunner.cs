@@ -146,6 +146,7 @@ namespace KustoCopyConsole.Runner
                 };
 
                 await RowItemGateway.AppendAsync(newIterationItem, ct);
+                await Task.Delay(TimeSpan.FromSeconds(6));
                 await iterationRunner.RunAsync(newIterationItem, ct);
             }
             else

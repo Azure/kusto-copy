@@ -1,6 +1,7 @@
 ﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -11,24 +12,15 @@ namespace KustoCopyConsole.Kusto
 {
     internal class ExportCoreClient
     {
-        #region Inner types
-        private record DoubleTask(
-            TaskCompletionSource ExportCompletedSource,
-            Task SlotReleaseTask);
-        #endregion
-
-        private static readonly TimeSpan REFRESH_PERIOD = TimeSpan.FromSeconds(5);
-
+        private readonly OperationAwaiter _operationAwaiter;
         private readonly DbCommandClient _operationCommandClient;
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
-        private readonly object _monitoringLock = new object();
-        private IDictionary<string, DoubleTask> _taskMap =
-            new Dictionary<string, DoubleTask>();
-        private bool _isMonitoring = false;
-        private Task? _monitoringTask;
+        private readonly IDictionary<string, Task> _slotReleaseTaskMap =
+            new Dictionary<string, Task>();
 
         public ExportCoreClient(DbCommandClient operationCommandClient, int exportCapacity)
         {
+            _operationAwaiter = new OperationAwaiter(operationCommandClient);
             _operationCommandClient = operationCommandClient;
             _queue = new(exportCapacity);
         }
@@ -45,8 +37,8 @@ namespace KustoCopyConsole.Kusto
             DateTime ingestionTimeEnd,
             CancellationToken ct)
         {
+            //  Used to pass the operation ID through
             var exportStartSource = new TaskCompletionSource<string>();
-            var exportCompletedSource = new TaskCompletionSource();
             var slotReleasedTask = _queue.RequestRunAsync(
                 new KustoPriority(
                     exportCommandClient.DatabaseName,
@@ -65,15 +57,13 @@ namespace KustoCopyConsole.Kusto
 
                     exportStartSource.SetResult(operationId);
                     //  We want to keep the export slot locked until the export is completed
-                    await exportCompletedSource.Task;
+                    await _operationAwaiter.AwaitOperationAsync(operationId, ct);
                 });
             var operationId = await exportStartSource.Task;
 
-            lock (_monitoringLock)
+            lock (_slotReleaseTaskMap)
             {
-                _taskMap.Add(
-                    operationId,
-                    new DoubleTask(exportCompletedSource, slotReleasedTask));
+                _slotReleaseTaskMap.Add(operationId, slotReleasedTask);
             }
 
             return operationId;
@@ -85,34 +75,15 @@ namespace KustoCopyConsole.Kusto
             string operationId,
             CancellationToken ct)
         {
-            Task? oldMonitoringTask = null;
-            Task? exportCompletedTask = null;
+            var slotReleaseTask = EnsureExistingOperation(operationId);
 
-            lock (_monitoringLock)
+            await _operationAwaiter.AwaitOperationAsync(operationId, ct);
+            await slotReleaseTask;
+            lock (_slotReleaseTaskMap)
             {
-                EnsureExistingOperation(operationId);
-                if (!_isMonitoring)
-                {
-                    _isMonitoring = true;
-                    oldMonitoringTask = _monitoringTask;
-                    _monitoringTask = MonitorAsync(ct);
-                }
-                if (_taskMap.ContainsKey(operationId))
-                {
-                    exportCompletedTask = _taskMap[operationId].ExportCompletedSource.Task;
-                }
-                else
-                {
-                    throw new CopyException($"Operation ID lost:  '{operationId}'", false);
-                }
+                _slotReleaseTaskMap.Remove(operationId);
             }
-            if (oldMonitoringTask != null)
-            {
-                await oldMonitoringTask;
-            }
-
-            await exportCompletedTask;
-
+            
             return await _operationCommandClient.ShowExportDetailsAsync(
                 iterationId,
                 tableName,
@@ -120,113 +91,29 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        private void EnsureExistingOperation(string operationId)
+        private Task EnsureExistingOperation(string operationId)
         {   //  Catch "orphan" operation IDs that were created in another process
-            if (!GetOperationIds().Contains(operationId))
+            lock (_slotReleaseTaskMap)
             {
-                var exportCompletedSource = new TaskCompletionSource();
-                var slotReleasedTask = _queue.RequestRunAsync(
-                    KustoPriority.HighestPriority,
-                    async () =>
-                    {
-                        //  We want to keep the export slot locked until the export is completed
-                        await exportCompletedSource.Task;
-                    });
-
-                lock (_monitoringLock)
+                if (!_slotReleaseTaskMap.Keys.Contains(operationId))
                 {
-                    _taskMap.Add(
-                        operationId,
-                        new DoubleTask(exportCompletedSource, slotReleasedTask));
+                    var exportCompletedSource = new TaskCompletionSource();
+                    var slotReleasedTask = _queue.RequestRunAsync(
+                        KustoPriority.HighestPriority,
+                        async () =>
+                        {
+                            //  We want to keep the export slot locked until the export is completed
+                            await exportCompletedSource.Task;
+                        });
+
+                    _slotReleaseTaskMap.Add(operationId, slotReleasedTask);
+
+                    return slotReleasedTask;
                 }
-            }
-        }
-
-        private async Task MonitorAsync(CancellationToken ct)
-        {
-            while (true)
-            {
-                await Task.Delay(REFRESH_PERIOD, ct);
-
-                try
+                else
                 {
-                    var operationIds = GetOperationIds();
-                    var operationStatus =
-                        await _operationCommandClient.ShowOperationsAsync(operationIds, ct);
-                    var notPendingOperations = operationStatus
-                        .Where(s => s.State != "InProgress" && s.State != "Scheduled");
-                    var lostOperationIds = operationIds
-                        .Where(id => !operationStatus.Select(o => o.OperationId).Contains(id));
-
-                    foreach (var op in notPendingOperations)
-                    {
-                        var exportCompletedSource =
-                            _taskMap[op.OperationId].ExportCompletedSource;
-
-                        if (op.State == "Throttled")
-                        {
-                            exportCompletedSource.SetException(
-                                new CopyException($"Throttled:  '{op.Status}'", true));
-                        }
-                        else if (op.State == "Failed"
-                            || op.State == "PartiallySucceeded"
-                            || op.State == "Abandoned"
-                            || op.State == "BadInput"
-                            || op.State == "Canceled"
-                            || op.State == "Skipped")
-                        {
-                            exportCompletedSource.SetException(
-                                new CopyException($"Failed:  '{op.Status}'", true));
-                        }
-                        else
-                        {
-                            exportCompletedSource.SetResult();
-                        }
-                    }
-                    foreach (var id in lostOperationIds)
-                    {
-                        var exportCompletedSource = _taskMap[id].ExportCompletedSource;
-
-                        exportCompletedSource.SetException(
-                            new CopyException($"Operation ID lost:  '{id}'", false));
-                    }
-                    lock (_monitoringLock)
-                    {
-                        foreach (var notPending in notPendingOperations)
-                        {
-                            _taskMap.Remove(notPending.OperationId);
-                        }
-                        if (!_taskMap.Any())
-                        {
-                            _isMonitoring = false;
-
-                            return;
-                        }
-                    }
+                    return _slotReleaseTaskMap[operationId];
                 }
-                catch (Exception ex)
-                {
-                    lock (_monitoringLock)
-                    {
-                        foreach (var exportCompletedSource in
-                            _taskMap.Values.Select(o => o.ExportCompletedSource))
-                        {
-                            exportCompletedSource.SetException(ex);
-                        }
-                        _taskMap.Clear();
-                        _isMonitoring = false;
-
-                        return;
-                    }
-                }
-            }
-        }
-
-        private IImmutableList<string> GetOperationIds()
-        {
-            lock (_monitoringLock)
-            {
-                return _taskMap.Keys.ToImmutableArray();
             }
         }
     }
