@@ -23,16 +23,10 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var awaitIngestRunner = new AwaitIngestRunner(
-                Parameterization,
-                RowItemGateway,
-                DbClientFactory);
-
             if (blockItem.State == BlockState.Exported)
             {
                 blockItem = await QueueIngestBlockAsync(blobPathProvider, blockItem, ct);
             }
-            blockItem = await awaitIngestRunner.RunAsync(blockItem, ct);
 
             return blockItem;
         }

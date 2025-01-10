@@ -32,7 +32,7 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IterationId)} should be positive but is {IterationId}");
             }
-            if (string.IsNullOrWhiteSpace(CursorEnd))
+            if (State != TableState.Starting && string.IsNullOrWhiteSpace(CursorEnd))
             {
                 throw new InvalidDataException($"{nameof(CursorEnd)} should have a value");
             }

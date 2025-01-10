@@ -47,50 +47,6 @@ namespace KustoCopyConsole.Kusto
                 });
         }
 
-        public async Task<bool> HasNewDataAsync(
-            string tableName,
-            long iterationId,
-            string cursorStart,
-            string cursorEnd,
-            CancellationToken ct)
-        {
-            return await _queue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
-                async () =>
-                {
-                    const string CURSOR_START_PARAM = "CursorStart";
-                    const string CURSOR_END_PARAM = "CursorEnd";
-
-                    var query = @$"
-declare query_parameters(
-    {CURSOR_START_PARAM}:string,
-    {CURSOR_END_PARAM}:string);
-let BaseData = ['{tableName}']
-    | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
-    | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}));
-BaseData
-| take 1
-| count
-";
-                    var properties = new ClientRequestProperties();
-
-                    properties.SetParameter(CURSOR_START_PARAM, cursorStart);
-                    properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
-
-                    var reader = await _provider.ExecuteQueryAsync(
-                        _databaseName,
-                        query,
-                        properties,
-                        ct);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => (long)(r[0]) > 0)
-                        .FirstOrDefault();
-
-                    return result == true;
-                });
-        }
-
         public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
             long iterationId,
             string tableName,

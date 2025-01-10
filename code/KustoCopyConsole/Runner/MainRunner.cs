@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.RowItems;
 
 namespace KustoCopyConsole.Runner
 {
@@ -86,22 +87,71 @@ namespace KustoCopyConsole.Runner
             ((IDisposable)DbClientFactory).Dispose();
         }
 
-
         public async Task RunAsync(CancellationToken ct)
         {
+            var runTasks = Parameterization.Activities
+                .Select(a => RunActivityAsync(a, ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(runTasks);
+        }
+
+        private async Task RunActivityAsync(
+            ActivityParameterization activity,
+            CancellationToken ct)
+        {
+            if (activity.TableOption.ExportMode != ExportMode.BackfillOnly)
+            {
+                throw new NotSupportedException(
+                    $"'{activity.TableOption.ExportMode}' isn't supported yet");
+            }
+
+            var sourceTableIdentity = activity.Source.GetTableIdentity();
+            var destinationTableIdentity = activity.GetEffectiveDestinationTableIdentity();
+            var cache = RowItemGateway.InMemoryCache;
+            var cachedIterations = cache.SourceTableMap.ContainsKey(sourceTableIdentity)
+                ? cache.SourceTableMap[sourceTableIdentity].IterationMap.Values
+                : Array.Empty<IterationCache>();
+            var completedIterations = cachedIterations
+                .Select(c => c.RowItem)
+                .Where(i => i.State == TableState.Completed);
+            var activeIterations = cachedIterations
+                .Select(c => c.RowItem)
+                .Where(i => i.State != TableState.Completed);
+            var isBackfillOnly =
+                activity.TableOption.ExportMode == ExportMode.BackfillOnly;
             var iterationRunner =
                 new IterationRunner(Parameterization, RowItemGateway, DbClientFactory);
-            
-            while (true)
-            {
-                var runTasks = Parameterization.Activities
-                    .Select(a => iterationRunner.RunAsync(
-                        a.Source.GetTableIdentity(),
-                        a.GetEffectiveDestinationTableIdentity(),
-                        ct))
-                    .ToImmutableArray();
 
-                await Task.WhenAll(runTasks);
+            //  Start new iteration if need to
+            if (!cachedIterations.Any())
+            {
+                var lastIteration = cachedIterations.Any()
+                    ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
+                    : null;
+                var newIterationId = lastIteration != null
+                    ? lastIteration.IterationId + 1
+                    : 1;
+                var cursorStart = lastIteration != null
+                    ? lastIteration.CursorEnd
+                    : string.Empty;
+                var newIterationItem = new TableRowItem
+                {
+                    State = TableState.Starting,
+                    SourceTable = sourceTableIdentity,
+                    DestinationTable = destinationTableIdentity,
+                    IterationId = newIterationId,
+                    CursorStart = cursorStart,
+                    CursorEnd = string.Empty
+                };
+
+                await RowItemGateway.AppendAsync(newIterationItem, ct);
+                await iterationRunner.RunAsync(newIterationItem, ct);
+            }
+            else
+            {
+                await Task.WhenAll(activeIterations
+                    .Select(i => iterationRunner.RunAsync(i, ct)));
             }
         }
     }

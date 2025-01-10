@@ -2,6 +2,7 @@
 {
     public enum TableState
     {
+        Starting,
         Planning,
         Planned,
         TempTableCreating,

@@ -17,16 +17,12 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(
+        public async Task<BlockRowItem> RunAsync(
             IBlobPathProvider blobPathProvider,
             TableRowItem tableRowItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var queueIngestRunner = new QueueIngestRunner(
-                Parameterization,
-                RowItemGateway,
-                DbClientFactory);
             var exportClient = DbClientFactory.GetExportClient(
                 blockItem.SourceTable.ClusterUri,
                 blockItem.SourceTable.DatabaseName,
@@ -44,17 +40,8 @@ namespace KustoCopyConsole.Runner
             {
                 blockItem = await ExportBlockAsync(blobPathProvider, exportClient, blockItem, ct);
             }
-            if (blockItem.State == BlockState.Exporting)
-            {
-                blockItem = await AwaitExportBlockAsync(exportClient, blockItem, ct);
-            }
-            if (blockItem.State == BlockState.Exported)
-            {   //  Ingest into destination
-                blockItem = await queueIngestRunner.RunAsync(
-                    blobPathProvider,
-                    blockItem,
-                    ct);
-            }
+
+            return blockItem;
         }
 
         private async Task<BlockRowItem> AwaitExportBlockAsync(

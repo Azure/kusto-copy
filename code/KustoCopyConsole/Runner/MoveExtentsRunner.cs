@@ -18,11 +18,6 @@ namespace KustoCopyConsole.Runner
 
         public async Task<BlockRowItem> RunAsync(BlockRowItem blockItem, CancellationToken ct)
         {
-            if (blockItem.State < BlockState.Ingested)
-            {
-                throw new InvalidOperationException(
-                    $"We shouldn't be in state '{blockItem.State}' at this point");
-            }
             if (blockItem.State == BlockState.Ingested)
             {
                 blockItem = await MoveExtentsAsync(blockItem, ct);

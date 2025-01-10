@@ -24,7 +24,7 @@ namespace KustoCopyConsole.Runner
         /// <param name="tableRowItem"></param>
         /// <param name="ct"></param>
         /// <returns></returns>
-        public async Task RunAsync(TableRowItem tableRowItem, CancellationToken ct)
+        public async Task<TableRowItem> RunAsync(TableRowItem tableRowItem, CancellationToken ct)
         {
             if (tableRowItem.State == TableState.Planned)
             {
@@ -34,52 +34,8 @@ namespace KustoCopyConsole.Runner
             {
                 tableRowItem = await CreateTempTableAsync(tableRowItem, ct);
             }
-            await ExportBlockAsync(tableRowItem, ct);
-        }
 
-        private async Task ExportBlockAsync(TableRowItem tableRowItem, CancellationToken ct)
-        {
-            var exportingRunner = new ExportingRunner(
-                Parameterization,
-                RowItemGateway,
-                DbClientFactory);
-            var blobPathProvider = GetBlobPathFactory(tableRowItem.SourceTable);
-            var blockItems = RowItemGateway.InMemoryCache
-                .SourceTableMap[tableRowItem.SourceTable]
-                .IterationMap[tableRowItem.IterationId]
-                .BlockMap
-                .Values
-                .Select(b => b.RowItem);
-            var exportBlockTasks = blockItems
-                .Select(b => exportingRunner.RunAsync(
-                    blobPathProvider,
-                    tableRowItem,
-                    b,
-                    ct))
-                .ToImmutableArray();
-
-            await Task.WhenAll(exportBlockTasks);
-        }
-
-        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
-        {
-            var activity = Parameterization.Activities
-                .Where(a => a.Source.GetTableIdentity() == sourceTable)
-                .FirstOrDefault();
-
-            if (activity == null)
-            {
-                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
-            }
-            else
-            {
-                var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
-                    destinationTable.ClusterUri,
-                    destinationTable.DatabaseName));
-
-                return tempUriProvider;
-            }
+            return tableRowItem;
         }
 
         private async Task<TableRowItem> CreateTempTableAsync(

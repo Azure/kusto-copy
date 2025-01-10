@@ -36,93 +36,17 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(
+        public async Task<TableRowItem> RunAsync(
             TableRowItem tableRowItem,
-            Task tempTableTask,
             CancellationToken ct)
         {
-            await using (var planningProgress = CreatePlanningProgressBar(tableRowItem))
-            await using (var exportingProgress =
-                CreateBlockStateProgressBar(tableRowItem, BlockState.Exporting))
-            await using (var queuingProgress =
-                CreateBlockStateProgressBar(tableRowItem, BlockState.Queued))
-            await using (var ingestingProgress =
-                CreateBlockStateProgressBar(tableRowItem, BlockState.Ingested))
-            await using (var movingProgress =
-                CreateBlockStateProgressBar(tableRowItem, BlockState.ExtentMoved))
+            if (tableRowItem.State == TableState.Planning)
             {
-                var tempTableCreatingRunner = new TempTableCreatingRunner(
-                    Parameterization,
-                    RowItemGateway,
-                    DbClientFactory);
-
-                if (tableRowItem.State == TableState.Planning)
-                {
-                    tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
-                }
-                await tempTableCreatingRunner.RunAsync(tableRowItem, ct);
+                tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
             }
+
+            return tableRowItem;
         }
-
-        #region Progress bars
-        private ProgressBar CreatePlanningProgressBar(TableRowItem tableRowItem)
-        {
-            return new ProgressBar(
-                TimeSpan.FromSeconds(5),
-                () =>
-                {
-                    var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[tableRowItem.SourceTable]
-                    .IterationMap[tableRowItem.IterationId];
-                    var iterationItem = iteration
-                    .RowItem;
-                    var blockMap = iteration
-                    .BlockMap;
-
-                    return new ProgressReport(
-                        iterationItem.State == TableState.Planning
-                        ? ProgessStatus.Progress
-                        : ProgessStatus.Completed,
-                        $"Planned:  {tableRowItem.SourceTable.ToStringCompact()}"
-                        + $"({tableRowItem.IterationId}) {blockMap.Count}");
-                });
-        }
-
-        private ProgressBar CreateBlockStateProgressBar(
-            TableRowItem tableRowItem,
-            BlockState state)
-        {
-            return new ProgressBar(
-                TimeSpan.FromSeconds(10),
-                () =>
-                {
-                    var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[tableRowItem.SourceTable]
-                    .IterationMap[tableRowItem.IterationId];
-                    var iterationItem = iteration
-                    .RowItem;
-
-                    if (iterationItem.State == TableState.Planning)
-                    {
-                        return new ProgressReport(ProgessStatus.Nothing, string.Empty);
-                    }
-                    else
-                    {
-                        var blockMap = iteration.BlockMap;
-                        var stateReachedCount = blockMap.Values
-                        .Where(b => b.RowItem.State >= state)
-                        .Count();
-
-                        return new ProgressReport(
-                            stateReachedCount != blockMap.Count
-                            ? ProgessStatus.Progress
-                            : ProgessStatus.Completed,
-                            $"{state}:  {tableRowItem.SourceTable.ToStringCompact()}" +
-                            $"({tableRowItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
-                    }
-                });
-        }
-        #endregion
 
         private async Task<TableRowItem> PlanBlocksAsync(
             TableRowItem tableItem,

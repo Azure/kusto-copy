@@ -20,21 +20,10 @@ namespace KustoCopyConsole.Runner
 
         public async Task<BlockRowItem> RunAsync(BlockRowItem blockItem, CancellationToken ct)
         {
-            var moveExtentsRunner = new MoveExtentsRunner(
-                Parameterization,
-                RowItemGateway,
-                DbClientFactory);
-
-            if (blockItem.State < BlockState.Queued)
-            {
-                throw new InvalidOperationException(
-                    $"We shouldn't be in state '{blockItem.State}' at this point");
-            }
             if (blockItem.State == BlockState.Queued)
             {
                 blockItem = await AwaitIngestionAsync(blockItem, ct);
             }
-            blockItem = await moveExtentsRunner.RunAsync(blockItem, ct);
 
             return blockItem;
         }
