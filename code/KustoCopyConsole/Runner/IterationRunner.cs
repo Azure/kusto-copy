@@ -32,6 +32,8 @@ namespace KustoCopyConsole.Runner
             await using (var planningProgress = CreatePlanningProgressBar(iterationItem))
             await using (var exportingProgress =
                 CreateBlockStateProgressBar(iterationItem, BlockState.Exporting))
+            await using (var exportedProgress =
+                CreateBlockStateProgressBar(iterationItem, BlockState.Exported))
             await using (var queuingProgress =
                 CreateBlockStateProgressBar(iterationItem, BlockState.Queued))
             await using (var ingestingProgress =
