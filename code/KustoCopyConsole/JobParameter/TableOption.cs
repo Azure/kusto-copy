@@ -2,7 +2,7 @@
 {
     public class TableOption
     {
-        public ExportMode ExportMode { get; set; } = ExportMode.BackfillAndNew;
+        public ExportMode ExportMode { get; set; } = ExportMode.BackfillOnly;
 
         public TimeSpan IterationWait { get; set; } = TimeSpan.FromMinutes(5);
 
