@@ -88,7 +88,7 @@ namespace KustoCopyConsole.Runner
                         (var newBlockItem, var remainingDistributionInExtents) = PlanSingleBlock(
                             tableItem,
                             lastBlock,
-                            distributionInExtents);
+                            orderedDistributionInExtents);
 
                         orderedDistributionInExtents = remainingDistributionInExtents
                             .ToImmutableArray();
