@@ -144,7 +144,11 @@ namespace KustoCopyConsole.Kusto
         {
             lock (_monitoringLock)
             {
-                return _completionMap[operationId];
+                var source = _completionMap[operationId];
+
+                _completionMap.Remove(operationId);
+
+                return source;
             }
         }
 
