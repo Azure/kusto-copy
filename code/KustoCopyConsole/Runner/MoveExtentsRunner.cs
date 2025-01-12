@@ -30,9 +30,32 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            await Task.CompletedTask;
+            if (blockItem.State == BlockState.Ingested)
+            {
+                var tableItem = RowItemGateway.InMemoryCache
+                    .SourceTableMap[blockItem.SourceTable]
+                    .IterationMap[blockItem.IterationId]
+                    .RowItem;
+                var commandClient = DbClientFactory.GetDbCommandClient(
+                    blockItem.DestinationTable.ClusterUri,
+                    blockItem.DestinationTable.DatabaseName);
+                var extentCount = await commandClient.MoveExtentsAsync(
+                    blockItem.IterationId,
+                    tableItem.TempTableName,
+                    blockItem.DestinationTable.TableName,
+                    blockItem.BlockTag,
+                    ct);
+                var cleanCount = await commandClient.CleanExtentTagsAsync(
+                    blockItem.IterationId,
+                    blockItem.DestinationTable.TableName,
+                    blockItem.BlockTag,
+                    ct);
 
-            throw new NotImplementedException();
+                blockItem = blockItem.ChangeState(BlockState.ExtentMoved);
+                await RowItemGateway.AppendAsync(blockItem, ct);
+            }
+
+            return blockItem;
         }
     }
 }

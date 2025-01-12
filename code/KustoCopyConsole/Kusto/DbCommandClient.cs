@@ -294,5 +294,91 @@ BlockData
                    return result;
                });
         }
+
+        public async Task<int> MoveExtentsAsync(
+            long iterationId,
+            string tempTableName,
+            string tableName,
+            string blockTag,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+               new KustoDbPriority(iterationId, tableName),
+               async () =>
+               {
+                   var commandText = @$"
+.move extents to table {tableName} <|
+    .show table ['{tempTableName}'] extents where tags contains '{blockTag}'
+";
+                   var properties = new ClientRequestProperties();
+                   var reader = await _provider.ExecuteControlCommandAsync(
+                       DatabaseName,
+                       commandText,
+                       properties);
+                   var results = reader.ToDataSet().Tables[0].Rows
+                       .Cast<DataRow>()
+                       .Select(r => new
+                       {
+                           OriginalExtentId = (string)(r[0]),
+                           ResultExtentId = (string)(r[1]),
+                           Details = r[2].ToString()
+                       })
+                       .ToImmutableArray();
+                   var singleDetail = results
+                   .Where(r => !string.IsNullOrWhiteSpace(r.Details))
+                   .Select(r => r.Details)
+                   .FirstOrDefault();
+
+                   if (singleDetail != null)
+                   {
+                       throw new CopyException($"Move extent failure:  '{singleDetail}'", true);
+                   }
+
+                   return results.Count();
+               });
+        }
+
+        public async Task<int> CleanExtentTagsAsync(
+            long iterationId,
+            string tableName,
+            string blockTag,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+               new KustoDbPriority(iterationId, tableName),
+               async () =>
+               {
+                   var commandText = @$"
+.drop table {tableName} extent tags <|
+    .show table ['{tableName}'] extents where tags contains '{blockTag}'
+";
+                   var properties = new ClientRequestProperties();
+                   var reader = await _provider.ExecuteControlCommandAsync(
+                       DatabaseName,
+                       commandText,
+                       properties);
+                   var results = reader.ToDataSet().Tables[0].Rows
+                       .Cast<DataRow>()
+                       .Select(r => new
+                       {
+                           OriginalExtentId = (string)(r[0]),
+                           ResultExtentId = (string)(r[1]),
+                           ResultExtentTags = (string)(r[2]),
+                           Details = r[3].ToString()
+                       })
+                       .ToImmutableArray();
+                   var singleDetail = results
+                   .Where(r => !string.IsNullOrWhiteSpace(r.Details))
+                   .Select(r => r.Details)
+                   .FirstOrDefault();
+
+                   if (singleDetail != null)
+                   {
+                       throw new CopyException($"Clean extent failure:  '{singleDetail}'", true);
+                   }
+
+                   return results.Count();
+               });
+        }
     }
 }

@@ -3,6 +3,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System;
 using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
@@ -28,9 +29,9 @@ namespace KustoCopyConsole.Runner
                 blockItem.SourceTable.DatabaseName,
                 blockItem.SourceTable.TableName);
 
-            if (blockItem.State != BlockState.Exported)
+            if (blockItem.State == BlockState.CompletingExport)
             {
-                await CleanUrlsAsync(blockItem, ct);
+                blockItem = await CleanUrlsAsync(blockItem, ct);
             }
             if (blockItem.State == BlockState.Planned)
             {
@@ -70,6 +71,8 @@ namespace KustoCopyConsole.Runner
             {
                 throw new InvalidDataException("No URL exported");
             }
+            blockItem = blockItem.ChangeState(BlockState.CompletingExport);
+            await RowItemGateway.AppendAsync(blockItem, ct);
             foreach (var urlItem in urlItems)
             {
                 await RowItemGateway.AppendAsync(urlItem, ct);
@@ -107,7 +110,9 @@ namespace KustoCopyConsole.Runner
             return blockItem;
         }
 
-        private async Task CleanUrlsAsync(BlockRowItem blockItem, CancellationToken ct)
+        private async Task<BlockRowItem> CleanUrlsAsync(
+            BlockRowItem blockItem,
+            CancellationToken ct)
         {
             var existingUrls = RowItemGateway.InMemoryCache
                 .SourceTableMap[blockItem.SourceTable]
@@ -122,6 +127,10 @@ namespace KustoCopyConsole.Runner
                     url.RowItem.ChangeState(UrlState.Deleted),
                     ct);
             }
+            blockItem = blockItem.ChangeState(BlockState.Exporting);
+            await RowItemGateway.AppendAsync(blockItem, ct);
+
+            return blockItem;
         }
     }
 }
