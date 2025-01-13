@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Storage;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -7,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class TempUriProvider : IBlobPathProvider
+    internal class TempUriProvider : IStagingBlobUriProvider
     {
         #region Inner Types
         private record InnerCache(DateTime CacheTime, IImmutableList<Uri> TempUris);
@@ -24,7 +25,7 @@ namespace KustoCopyConsole.Kusto
             _dmCommandClient = dmCommandClient;
         }
 
-        async Task<Uri> IBlobPathProvider.FetchUriAsync(CancellationToken ct)
+        async Task<Uri> IStagingBlobUriProvider.FetchUriAsync(CancellationToken ct)
         {
             var innerCache = await GetOrFetchCacheAsync(ct);
             var tempUris = innerCache.TempUris;
@@ -32,7 +33,7 @@ namespace KustoCopyConsole.Kusto
             return tempUris[_random.Next(tempUris.Count)];
         }
 
-        async Task<Uri> IBlobPathProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
+        async Task<Uri> IStagingBlobUriProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
         {
             var innerCache = await GetOrFetchCacheAsync(ct);
             var queryString = innerCache.TempUris

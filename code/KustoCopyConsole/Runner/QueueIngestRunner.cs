@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task<BlockRowItem> RunAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -32,7 +32,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> QueueIngestBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             BlockRowItem blockItem,
             CancellationToken ct)
         {

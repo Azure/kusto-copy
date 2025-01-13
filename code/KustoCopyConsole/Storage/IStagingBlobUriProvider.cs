@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Kusto
+namespace KustoCopyConsole.Storage
 {
-    public interface IBlobPathProvider
+    public interface IStagingBlobUriProvider
     {
         Task<Uri> FetchUriAsync(CancellationToken ct);
 

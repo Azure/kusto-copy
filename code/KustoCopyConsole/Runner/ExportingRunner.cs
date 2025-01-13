@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task<BlockRowItem> RunAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem tableRowItem,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -84,7 +84,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> ExportBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             ExportClient exportClient,
             BlockRowItem blockItem,
             CancellationToken ct)

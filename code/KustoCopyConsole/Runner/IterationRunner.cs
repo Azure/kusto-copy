@@ -187,7 +187,7 @@ namespace KustoCopyConsole.Runner
             await Task.WhenAll(processBlockTasks);
         }
 
-        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
+        private IStagingBlobUriProvider GetBlobPathFactory(TableIdentity sourceTable)
         {
             var activity = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTable)
@@ -209,7 +209,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task ProcessSingleBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -222,7 +222,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> ExportBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -242,7 +242,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> QueueBlockForIngestionAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)

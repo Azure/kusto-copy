@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -26,7 +27,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             DbCommandClient exportCommandClient,
             string tableName,
             long iterationId,
