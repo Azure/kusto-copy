@@ -35,28 +35,31 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 var sasBuilder = new BlobSasBuilder
                 {
                     BlobContainerName = _client.Name,
-                    BlobName = path,
                     Resource = "c", // "b" for blob, "c" for container
                     ExpiresOn = DateTimeOffset.UtcNow.Add(WRITE_TIME_OUT)
                 };
 
                 // Add permissions (e.g., read and write)
-                sasBuilder.SetPermissions(BlobSasPermissions.Write);
+                sasBuilder.SetPermissions(BlobSasPermissions.Write | BlobSasPermissions.Read | BlobSasPermissions.List);
 
                 // Generate SAS token
                 var sasToken = sasBuilder.ToSasQueryParameters(
                     userDelegationKey,
                     _client.AccountName).ToString();
-                var uri = new Uri($"{ContainerUri}/{path}?{sasToken}");
+                var uriBuilder = new UriBuilder(ContainerUri.ToString())
+                {
+                    Path = $"{_client.Name}/{path}",
+                    Query = sasToken
+                };
+                var uri = uriBuilder.Uri;
 
                 return uri;
             }
 
             private async Task<(TimeSpan, UserDelegationKey)> FetchUserDelegationKey()
             {
-                //DateTimeOffset.UtcNow.Add(READ_TIME_OUT));
-                var refreshPeriod = TimeSpan.FromSeconds(20);
-                var tolerance = TimeSpan.FromSeconds(10);
+                var refreshPeriod = READ_TIME_OUT;
+                var tolerance = TimeSpan.FromSeconds(30);
                 var key = await _client.GetParentBlobServiceClient().GetUserDelegationKeyAsync(
                     DateTimeOffset.UtcNow,
                     DateTimeOffset.UtcNow.Add(refreshPeriod));
@@ -80,7 +83,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 .ToImmutableDictionary(p => p.ContainerUri.ToString(), p => p);
         }
 
-        async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableRootUrisAsync(string path, CancellationToken ct)
+        async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(string path, CancellationToken ct)
         {
             var tasks = _containerMap.Values
                 .Select(c => c.GetWritableRootUrisAsync(path, ct))
@@ -89,7 +92,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             await Task.WhenAll(tasks);
 
             var uris = tasks
-                .Select(t=>t.Result)
+                .Select(t => t.Result)
                 .ToImmutableArray();
 
             return uris;

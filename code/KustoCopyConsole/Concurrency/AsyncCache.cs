@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Concurrency
             {
                 var cacheNode = _cacheNode;
 
-                if (cacheNode.IsItemAvailable && cacheNode.ExpirationTime < DateTime.Now)
+                if (cacheNode.IsItemAvailable && cacheNode.ExpirationTime > DateTime.Now)
                 {
                     return cacheNode.Item!;
                 }
