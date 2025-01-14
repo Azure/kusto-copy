@@ -9,8 +9,8 @@ namespace KustoCopyConsole.Storage
 {
     public interface IStagingBlobUriProvider
     {
-        IEnumerable<Uri> GetWritableRootUris(string path);
+        Task<IEnumerable<Uri>> GetWritableRootUrisAsync(string path, CancellationToken ct);
 
-        Uri AuthorizeUri(Uri uri);
+        Task<Uri> AuthorizeUriAsync(Uri uri, CancellationToken ct);
     }
 }

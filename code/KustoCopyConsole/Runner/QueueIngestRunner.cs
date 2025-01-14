@@ -50,10 +50,14 @@ namespace KustoCopyConsole.Runner
                 blockItem.DestinationTable.DatabaseName,
                 tempTableName);
             var blockTag = $"kusto-copy:{Guid.NewGuid()}";
-            var queueTasks = urlItems
-                .Select(u => new Uri(u.Url))
-                .Select(blobPathProvider.AuthorizeUri)
-                .Select(url => ingestClient.QueueBlobAsync(url, blockTag, ct))
+            var uriTasks = urlItems
+                .Select(u => blobPathProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(uriTasks);
+
+            var queueTasks = uriTasks
+                .Select(t => ingestClient.QueueBlobAsync(t.Result, blockTag, ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(queueTasks);
