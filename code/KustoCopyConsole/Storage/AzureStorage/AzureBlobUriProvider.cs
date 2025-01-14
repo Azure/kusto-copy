@@ -21,7 +21,6 @@ namespace KustoCopyConsole.Storage.AzureStorage
             IImmutableList<Uri> stagingStorageContainers,
             TokenCredential credential)
         {
-            new BlobServiceClient()
             _containerClient = stagingStorageContainers
                 .Select(u => new DataLakeFileSystemClient(u, credential))
                 .ToImmutableArray();
