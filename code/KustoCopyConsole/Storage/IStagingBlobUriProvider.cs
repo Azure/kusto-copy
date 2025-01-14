@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,8 +9,8 @@ namespace KustoCopyConsole.Storage
 {
     public interface IStagingBlobUriProvider
     {
-        Task<Uri> FetchUriAsync(CancellationToken ct);
+        IEnumerable<Uri> GetWritableRootUris(string path);
 
-        Task<Uri> AuthorizeUriAsync(Uri uri, CancellationToken ct);
+        Uri AuthorizeUri(Uri uri);
     }
 }

@@ -5,6 +5,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using KustoCopyConsole.Storage.AzureStorage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -200,9 +201,9 @@ namespace KustoCopyConsole.Runner
             else
             {
                 var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
-                    destinationTable.ClusterUri,
-                    destinationTable.DatabaseName));
+                var tempUriProvider = new AzureBlobUriProvider(
+                    Parameterization.StagingStorageContainers,
+                    Parameterization.GetCredentials());
 
                 return tempUriProvider;
             }

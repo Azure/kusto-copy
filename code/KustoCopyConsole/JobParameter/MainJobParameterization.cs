@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Azure.Core;
+using Azure.Identity;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,13 +12,15 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        public bool IsContinuousRun { get; set; } = false;
-
         public IImmutableList<ActivityParameterization> Activities { get; set; } =
             ImmutableArray<ActivityParameterization>.Empty;
 
+        public bool IsContinuousRun { get; set; } = false;
+
         public IImmutableList<Uri> StagingStorageContainers { get; set; } =
             ImmutableArray<Uri>.Empty;
+
+        public string Authentication { get; set; } = string.Empty;
 
         #region Constructors
         public static MainJobParameterization FromOptions(CommandLineOptions options)
@@ -85,6 +89,7 @@ namespace KustoCopyConsole.JobParameter
                             Query = options.Query,
                             TableOption = new TableOption()
                         }),
+                    Authentication = options.Authentication,
                     StagingStorageContainers = options.StagingStorage
                     .Select(s => new Uri(s))
                     .ToImmutableArray()
@@ -107,9 +112,22 @@ namespace KustoCopyConsole.JobParameter
             {
                 a.Validate();
             }
-            foreach(var uri in StagingStorageContainers)
+            foreach (var uri in StagingStorageContainers)
             {
                 ValidateStagingUri(uri);
+            }
+        }
+
+        internal TokenCredential GetCredentials()
+        {
+            if (string.IsNullOrWhiteSpace(Authentication))
+            {
+                //return new DefaultAzureCredential();
+                return new AzureCliCredential();
+            }
+            else
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -123,7 +141,7 @@ namespace KustoCopyConsole.JobParameter
 
         private void ValidateStagingUri(Uri uri)
         {
-            if(!string.IsNullOrWhiteSpace(uri.Query))
+            if (!string.IsNullOrWhiteSpace(uri.Query))
             {
                 throw new CopyException(
                     $"{nameof(StagingStorageContainers)} can't contain query string:  '{uri}'",

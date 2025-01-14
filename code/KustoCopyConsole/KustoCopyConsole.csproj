@@ -44,10 +44,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Storage\AzureStorage\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Include="Orchestration\DestinationTableLifeCycleOrchestration.cs" />
     <None Include="Orchestration\MainOrchestration.cs" />
     <None Include="Orchestration\SourceTableExportingOrchestration.cs" />

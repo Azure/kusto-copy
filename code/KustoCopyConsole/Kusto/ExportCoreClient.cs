@@ -46,9 +46,9 @@ namespace KustoCopyConsole.Kusto
                     new KustoDbPriority(iterationId, tableName, blockId)),
                 async () =>
                 {
-                    var tempUri = await blobPathProvider.FetchUriAsync(ct);
+                    var rootUris = blobPathProvider.GetWritableRootUris("abc");
                     var operationId = await exportCommandClient.ExportBlockAsync(
-                        tempUri,
+                        rootUris,
                         tableName,
                         cursorStart,
                         cursorEnd,
