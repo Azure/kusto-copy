@@ -7,6 +7,7 @@ using KustoCopyConsole.Concurrency;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -29,7 +30,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
 
             public Uri ContainerUri => _client.Uri;
 
-            public async Task<Uri> GetWritableRootUrisAsync(string path, CancellationToken ct)
+            public async Task<Uri> GetWritableFolderUrisAsync(string path, CancellationToken ct)
             {
                 var userDelegationKey = await _keyCache.GetCacheItemAsync(ct);
                 var sasBuilder = new BlobSasBuilder
@@ -40,7 +41,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 };
 
                 // Add permissions (e.g., read and write)
-                sasBuilder.SetPermissions(BlobSasPermissions.Write | BlobSasPermissions.Read | BlobSasPermissions.List);
+                sasBuilder.SetPermissions(BlobSasPermissions.Write);
 
                 // Generate SAS token
                 var sasToken = sasBuilder.ToSasQueryParameters(
@@ -49,6 +50,33 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 var uriBuilder = new UriBuilder(ContainerUri.ToString())
                 {
                     Path = $"{_client.Name}/{path}",
+                    Query = sasToken
+                };
+                var uri = uriBuilder.Uri;
+
+                return uri;
+            }
+
+            public async Task<Uri> AuthorizeUriAsync(string blobPath, CancellationToken ct)
+            {
+                var userDelegationKey = await _keyCache.GetCacheItemAsync(ct);
+                var sasBuilder = new BlobSasBuilder
+                {
+                    BlobContainerName = _client.Name,
+                    Resource = "b", // "b" for blob, "c" for container
+                    ExpiresOn = DateTimeOffset.UtcNow.Add(READ_TIME_OUT)
+                };
+
+                // Add permissions (e.g., read and write)
+                sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+                // Generate SAS token
+                var sasToken = sasBuilder.ToSasQueryParameters(
+                    userDelegationKey,
+                    _client.AccountName).ToString();
+                var uriBuilder = new UriBuilder(ContainerUri.ToString())
+                {
+                    Path = $"{_client.Name}/{blobPath}",
                     Query = sasToken
                 };
                 var uri = uriBuilder.Uri;
@@ -83,10 +111,12 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 .ToImmutableDictionary(p => p.ContainerUri.ToString(), p => p);
         }
 
-        async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(string path, CancellationToken ct)
+        async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(
+            string path,
+            CancellationToken ct)
         {
             var tasks = _containerMap.Values
-                .Select(c => c.GetWritableRootUrisAsync(path, ct))
+                .Select(c => c.GetWritableFolderUrisAsync(path, ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(tasks);
@@ -98,9 +128,23 @@ namespace KustoCopyConsole.Storage.AzureStorage
             return uris;
         }
 
-        Task<Uri> IStagingBlobUriProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
+        async Task<Uri> IStagingBlobUriProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var builder = new UriBuilder(uri);
+
+            builder.Path = string.Join('/', builder.Path.Split('/').Take(2));
+            builder.Path += '/';
+
+            var containerUri = builder.Uri.ToString();
+            
+            if(_containerMap.TryGetValue(containerUri, out var provider))
+            {
+                return await provider.AuthorizeUriAsync(uri.LocalPath, ct);
+            }
+            else
+            {
+                throw new CopyException($"Uri isn't from staging containers:  '{uri}'", false);
+            }
         }
     }
 }
