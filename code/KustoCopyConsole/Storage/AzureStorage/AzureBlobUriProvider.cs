@@ -139,7 +139,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             
             if(_containerMap.TryGetValue(containerUri, out var provider))
             {
-                return await provider.AuthorizeUriAsync(uri.LocalPath, ct);
+                return await provider.AuthorizeUriAsync(uri.LocalPath.TrimStart('/'), ct);
             }
             else
             {
