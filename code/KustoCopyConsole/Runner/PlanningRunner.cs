@@ -63,7 +63,7 @@ namespace KustoCopyConsole.Runner
             while (tableItem.State == TableState.Planning)
             {
                 var blockMap = RowItemGateway.InMemoryCache
-                    .SourceTableMap[tableItem.SourceTable]
+                    .ActivityMap[tableItem.SourceTable]
                     .IterationMap[tableItem.IterationId]
                     .BlockMap;
                 var lastBlock = blockMap.Any()

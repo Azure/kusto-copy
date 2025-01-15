@@ -96,8 +96,8 @@ namespace KustoCopyConsole.Runner
             var sourceTableIdentity = activity.Source.GetTableIdentity();
             var destinationTableIdentity = activity.GetEffectiveDestinationTableIdentity();
             var cache = RowItemGateway.InMemoryCache;
-            var cachedIterations = cache.SourceTableMap.ContainsKey(sourceTableIdentity)
-                ? cache.SourceTableMap[sourceTableIdentity].IterationMap.Values
+            var cachedIterations = cache.ActivityMap.ContainsKey(sourceTableIdentity)
+                ? cache.ActivityMap[sourceTableIdentity].IterationMap.Values
                 : Array.Empty<IterationCache>();
             var completedIterations = cachedIterations
                 .Select(c => c.RowItem)

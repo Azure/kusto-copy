@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Runner
             if (blockItem.State == BlockState.Ingested)
             {
                 var tableItem = RowItemGateway.InMemoryCache
-                    .SourceTableMap[blockItem.SourceTable]
+                    .ActivityMap[blockItem.SourceTable]
                     .IterationMap[blockItem.IterationId]
                     .RowItem;
                 var commandClient = DbClientFactory.GetDbCommandClient(

@@ -3,15 +3,15 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class TableCache
+    internal class ActivityCache
     {
-        public TableCache(
+        public ActivityCache(
             IImmutableDictionary<long, IterationCache> iterationMap)
         {
             IterationMap = iterationMap;
         }
 
-        public TableCache(IterationRowItem iterationItem)
+        public ActivityCache(IterationRowItem iterationItem)
         {
             var iterationId = iterationItem.IterationId;
 
@@ -22,11 +22,11 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IImmutableDictionary<long, IterationCache> IterationMap { get; }
 
-        public TableCache AppendIteration(IterationCache iteration)
+        public ActivityCache AppendIteration(IterationCache iteration)
         {
             var iterationId = iteration.RowItem.IterationId;
 
-            return new TableCache(IterationMap.SetItem(iterationId, iteration));
+            return new ActivityCache(IterationMap.SetItem(iterationId, iteration));
         }
     }
 }

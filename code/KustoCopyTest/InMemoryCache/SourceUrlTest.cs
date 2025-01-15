@@ -53,16 +53,16 @@ namespace KustoCopyTest.InMemoryCache
 
             Assert.Equal(
                 2,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap.Count);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap.Count);
 
             //  Remove item1
             cache.AppendItem(urlItem1.ChangeState(urlState2));
 
             Assert.Single(
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap);
             Assert.Equal(
                 urlItem2.RowCount,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap.Values.First().RowItem.RowCount);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap[blockId].UrlMap.Values.First().RowItem.RowCount);
         }
     }
 }

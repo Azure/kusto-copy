@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Runner
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.SourceTable]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -80,7 +80,7 @@ namespace KustoCopyConsole.Runner
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.SourceTable]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -171,7 +171,7 @@ namespace KustoCopyConsole.Runner
         {
             var blobPathProvider = GetBlobPathFactory(iterationItem.SourceTable);
             var blockItems = RowItemGateway.InMemoryCache
-                .SourceTableMap[iterationItem.SourceTable]
+                .ActivityMap[iterationItem.SourceTable]
                 .IterationMap[iterationItem.IterationId]
                 .BlockMap
                 .Values

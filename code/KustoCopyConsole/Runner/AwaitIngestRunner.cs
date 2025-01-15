@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iterationCache = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId];
             var tempTableName = iterationCache.RowItem.TempTableName;
             var targetRowCount = iterationCache.BlockMap[blockItem.BlockId].UrlMap.Values

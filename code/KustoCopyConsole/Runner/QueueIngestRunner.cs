@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iterationItem = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId];
             var urlItems = iterationItem
                 .BlockMap[blockItem.BlockId]

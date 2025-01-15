@@ -90,7 +90,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iteration = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId]
                 .RowItem;
             var operationId = await exportClient.NewExportAsync(
@@ -115,7 +115,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var existingUrls = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.SourceTable]
                 .IterationMap[blockItem.IterationId]
                 .BlockMap[blockItem.BlockId]
                 .UrlMap
