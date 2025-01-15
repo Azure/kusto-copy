@@ -11,12 +11,12 @@ namespace KustoCopyConsole.Kusto
     internal class DmCommandClient
     {
         private readonly ICslAdminProvider _provider;
-        private readonly PriorityExecutionQueue<KustoDbPriority> _queue;
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly string _databaseName;
 
         public DmCommandClient(
             ICslAdminProvider provider,
-            PriorityExecutionQueue<KustoDbPriority> queue,
+            PriorityExecutionQueue<KustoPriority> queue,
             string databaseName)
         {
             _provider = provider;
@@ -27,7 +27,7 @@ namespace KustoCopyConsole.Kusto
         public async Task<IImmutableList<Uri>> GetTempStorageUrisAsync(CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
-                KustoDbPriority.HighestPriority,
+                KustoPriority.HighestPriority,
                 async () =>
                 {
                     var commandText = ".get ingestion resources";

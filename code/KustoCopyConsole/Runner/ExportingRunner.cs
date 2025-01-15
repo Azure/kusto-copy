@@ -20,14 +20,18 @@ namespace KustoCopyConsole.Runner
 
         public async Task<BlockRowItem> RunAsync(
             IStagingBlobUriProvider blobPathProvider,
-            TableRowItem tableRowItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
+            var activityItem = RowItemGateway.InMemoryCache
+                .ActivityMap[blockItem.ActivityName]
+                .RowItem;
+            var activityParam = Parameterization.Activities[blockItem.ActivityName];
             var exportClient = DbClientFactory.GetExportClient(
-                blockItem.SourceTable.ClusterUri,
-                blockItem.SourceTable.DatabaseName,
-                blockItem.SourceTable.TableName);
+                activityItem.SourceTable.ClusterUri,
+                activityItem.SourceTable.DatabaseName,
+                activityItem.SourceTable.TableName,
+                activityParam.KqlQuery);
 
             if (blockItem.State == BlockState.CompletingExport)
             {
@@ -51,16 +55,15 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var exportDetails = await exportClient.AwaitExportAsync(
-                blockItem.IterationId,
-                blockItem.SourceTable.TableName,
+                new KustoPriority(
+                    blockItem.ActivityName, blockItem.IterationId, blockItem.BlockId),
                 blockItem.OperationId,
                 ct);
             var urlItems = exportDetails
                 .Select(e => new UrlRowItem
                 {
                     State = UrlState.Exported,
-                    SourceTable = blockItem.SourceTable,
-                    DestinationTable = blockItem.DestinationTable,
+                    ActivityName = blockItem.ActivityName,
                     IterationId = blockItem.IterationId,
                     BlockId = blockItem.BlockId,
                     Url = e.BlobUri.ToString(),
@@ -90,10 +93,14 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iteration = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.ActivityName]
                 .IterationMap[blockItem.IterationId]
                 .RowItem;
             var operationId = await exportClient.NewExportAsync(
+                new KustoPriority(
+                    blockItem.ActivityName,
+                    blockItem.IterationId,
+                    blockItem.BlockId),
                 blobPathProvider,
                 blockItem.IterationId,
                 blockItem.BlockId,
@@ -115,7 +122,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var existingUrls = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.ActivityName]
                 .IterationMap[blockItem.IterationId]
                 .BlockMap[blockItem.BlockId]
                 .UrlMap

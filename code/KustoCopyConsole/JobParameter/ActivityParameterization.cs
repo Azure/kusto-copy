@@ -5,16 +5,22 @@ namespace KustoCopyConsole.JobParameter
 {
     public class ActivityParameterization
     {
+        public string ActivityName { get; set; } = string.Empty;
+
         public TableParameterization Source { get; set; } = new();
 
         public TableParameterization Destination { get; set; } = new();
 
-        public string Query { get; set; } = string.Empty;
+        public string KqlQuery { get; set; } = string.Empty;
 
         public TableOption TableOption { get; set; } = new();
 
         public void Validate()
         {
+            if (string.IsNullOrWhiteSpace(ActivityName))
+            {
+                throw new CopyException($"{nameof(ActivityName)} is required", false);
+            }
             Source.Validate();
             if (string.IsNullOrWhiteSpace(Source.TableName))
             {
@@ -22,6 +28,17 @@ namespace KustoCopyConsole.JobParameter
             }
             Destination.Validate();
             TableOption.Validate();
+            if (string.IsNullOrWhiteSpace(KqlQuery))
+            {
+                throw new CopyException($"{nameof(KqlQuery)} is required", false);
+            }
+            if (!KqlQuery.Contains(Source.TableName))
+            {
+                throw new CopyException(
+                    $"{nameof(KqlQuery)} must contain source table name " +
+                    $"('{Source.TableName}'):  {KqlQuery}",
+                    false);
+            }
         }
 
         public TableIdentity GetEffectiveDestinationTableIdentity()

@@ -13,12 +13,12 @@ namespace KustoCopyConsole.Kusto
         private static readonly ClientRequestProperties EMPTY_PROPERTIES =
             new ClientRequestProperties();
         private readonly ICslQueryProvider _provider;
-        private readonly PriorityExecutionQueue<KustoDbPriority> _queue;
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly string _databaseName;
 
         public DbQueryClient(
             ICslQueryProvider provider,
-            PriorityExecutionQueue<KustoDbPriority> queue,
+            PriorityExecutionQueue<KustoPriority> queue,
             string databaseName)
         {
             _provider = provider;
@@ -26,10 +26,12 @@ namespace KustoCopyConsole.Kusto
             _databaseName = databaseName;
         }
 
-        public async Task<string> GetCurrentCursorAsync(CancellationToken ct)
+        public async Task<string> GetCurrentCursorAsync(
+            KustoPriority priority,
+            CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
-                KustoDbPriority.HighestPriority,
+                priority,
                 async () =>
                 {
                     var query = "print cursor_current()";
@@ -48,8 +50,9 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
-            long iterationId,
+            KustoPriority priority,
             string tableName,
+            string kqlQuery,
             string cursorStart,
             string cursorEnd,
             DateTime? ingestionTimeStart,
@@ -57,7 +60,7 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
+                priority,
                 async () =>
                 {
                     const string CURSOR_START_PARAM = "CursorStart";

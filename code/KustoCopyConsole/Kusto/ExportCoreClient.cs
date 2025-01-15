@@ -27,9 +27,10 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
+            KustoPriority priority,
             IStagingBlobUriProvider blobPathProvider,
             DbCommandClient exportCommandClient,
-            string tableName,
+            string kqlQuery,
             long iterationId,
             string folderName,
             long blockId,
@@ -42,16 +43,15 @@ namespace KustoCopyConsole.Kusto
             //  Used to pass the operation ID through
             var exportStartSource = new TaskCompletionSource<string>();
             var slotReleasedTask = _queue.RequestRunAsync(
-                new KustoPriority(
-                    exportCommandClient.DatabaseName,
-                    new KustoDbPriority(iterationId, tableName, blockId)),
+                priority,
                 async () =>
                 {
                     var rootUris =
                     await blobPathProvider.GetWritableFolderUrisAsync(folderName, ct);
                     var operationId = await exportCommandClient.ExportBlockAsync(
+                        priority,
                         rootUris,
-                        tableName,
+                        kqlQuery,
                         cursorStart,
                         cursorEnd,
                         ingestionTimeStart,
@@ -73,8 +73,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
-            long iterationId,
-            string tableName,
+            KustoPriority priority,
             string operationId,
             CancellationToken ct)
         {
@@ -88,8 +87,7 @@ namespace KustoCopyConsole.Kusto
             }
             
             return await _operationCommandClient.ShowExportDetailsAsync(
-                iterationId,
-                tableName,
+                priority,
                 operationId,
                 ct);
         }

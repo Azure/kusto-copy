@@ -14,22 +14,22 @@ namespace KustoCopyTest.InMemoryCache
             var iterationId = 1;
             var state = TableState.Planning;
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = state,
                 IterationId = iterationId,
                 SourceTable = SOURCE_TABLE_IDENTITY
             });
 
-            Assert.Single(cache.SourceTableMap);
-            Assert.Equal(SOURCE_TABLE_IDENTITY, cache.SourceTableMap.Keys.First());
-            Assert.Single(cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap);
+            Assert.Single(cache.ActivityMap);
+            Assert.Equal(SOURCE_TABLE_IDENTITY, cache.ActivityMap.Keys.First());
+            Assert.Single(cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap);
             Assert.Equal(
                 iterationId,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap.Keys.First());
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap.Keys.First());
             Assert.Equal(
                 state,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
         }
 
         [Fact]
@@ -40,7 +40,7 @@ namespace KustoCopyTest.InMemoryCache
             var state1 = TableState.Planning;
             var state2 = TableState.Planned;
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = state1,
                 IterationId = iterationId,
@@ -49,10 +49,10 @@ namespace KustoCopyTest.InMemoryCache
 
             Assert.Equal(
                 state1,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
 
             //  Update
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = state2,
                 IterationId = iterationId,
@@ -61,7 +61,7 @@ namespace KustoCopyTest.InMemoryCache
 
             Assert.Equal(
                 state2,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
         }
 
         [Fact]
@@ -73,7 +73,7 @@ namespace KustoCopyTest.InMemoryCache
             var iterationState2 = TableState.Planned;
             var blockId = 1;
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = iterationState1,
                 IterationId = iterationId,
@@ -89,11 +89,11 @@ namespace KustoCopyTest.InMemoryCache
 
             Assert.Equal(
                 iterationState1,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
-            Assert.Single(cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+            Assert.Single(cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
 
             //  Update
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = iterationState2,
                 IterationId = iterationId,
@@ -102,8 +102,8 @@ namespace KustoCopyTest.InMemoryCache
 
             Assert.Equal(
                 iterationState2,
-                cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
-            Assert.Single(cache.SourceTableMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
+                cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].RowItem.State);
+            Assert.Single(cache.ActivityMap[SOURCE_TABLE_IDENTITY].IterationMap[iterationId].BlockMap);
         }
     }
 }

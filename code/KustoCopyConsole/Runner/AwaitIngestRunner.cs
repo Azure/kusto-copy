@@ -32,21 +32,22 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var iterationCache = RowItemGateway.InMemoryCache
-                .SourceTableMap[blockItem.SourceTable]
-                .IterationMap[blockItem.IterationId];
+            var activityCache = RowItemGateway.InMemoryCache.ActivityMap[blockItem.ActivityName];
+            var iterationCache = activityCache.IterationMap[blockItem.IterationId];
             var tempTableName = iterationCache.RowItem.TempTableName;
             var targetRowCount = iterationCache.BlockMap[blockItem.BlockId].UrlMap.Values
                 .Sum(u => u.RowItem.RowCount);
             var commandClient = DbClientFactory.GetDbCommandClient(
-                blockItem.DestinationTable.ClusterUri,
-                blockItem.DestinationTable.DatabaseName);
+                activityCache.RowItem.DestinationTable.ClusterUri,
+                activityCache.RowItem.DestinationTable.DatabaseName);
 
             while (true)
             {
                 var rowCount = await commandClient.GetExtentRowCountAsync(
-                    blockItem.IterationId,
-                    blockItem.DestinationTable.TableName,
+                    new KustoPriority(
+                        blockItem.ActivityName,
+                        blockItem.IterationId,
+                        blockItem.BlockId),
                     tempTableName,
                     blockItem.BlockTag,
                     ct);

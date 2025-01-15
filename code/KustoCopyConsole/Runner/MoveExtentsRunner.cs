@@ -32,22 +32,25 @@ namespace KustoCopyConsole.Runner
         {
             if (blockItem.State == BlockState.Ingested)
             {
-                var tableItem = RowItemGateway.InMemoryCache
-                    .SourceTableMap[blockItem.SourceTable]
+                var activityCache = RowItemGateway.InMemoryCache
+                    .ActivityMap[blockItem.ActivityName];
+                var iterationItem = activityCache
                     .IterationMap[blockItem.IterationId]
                     .RowItem;
                 var commandClient = DbClientFactory.GetDbCommandClient(
-                    blockItem.DestinationTable.ClusterUri,
-                    blockItem.DestinationTable.DatabaseName);
+                    activityCache.RowItem.DestinationTable.ClusterUri,
+                    activityCache.RowItem.DestinationTable.DatabaseName);
+                var priority = new KustoPriority(
+                    blockItem.ActivityName, blockItem.IterationId, blockItem.BlockId);
                 var extentCount = await commandClient.MoveExtentsAsync(
-                    blockItem.IterationId,
-                    tableItem.TempTableName,
-                    blockItem.DestinationTable.TableName,
+                    priority,
+                    iterationItem.TempTableName,
+                    activityCache.RowItem.DestinationTable.TableName,
                     blockItem.BlockTag,
                     ct);
                 var cleanCount = await commandClient.CleanExtentTagsAsync(
-                    blockItem.IterationId,
-                    blockItem.DestinationTable.TableName,
+                    priority,
+                    activityCache.RowItem.DestinationTable.TableName,
                     blockItem.BlockTag,
                     ct);
 

@@ -1,5 +1,4 @@
-﻿using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Kusto.Data;
+﻿using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections;
@@ -16,18 +15,22 @@ namespace KustoCopyConsole.Kusto
         private readonly ExportCoreClient _exportCoreClient;
         private readonly DbCommandClient _exportCommandClient;
         private readonly string _tableName;
+        private readonly string _kqlQuery;
 
         public ExportClient(
             ExportCoreClient exportCoreClient,
             DbCommandClient exportCommandClient,
-            string tableName)
+            string tableName,
+            string kqlQuery)
         {
             _exportCoreClient = exportCoreClient;
             _exportCommandClient = exportCommandClient;
             _tableName = tableName;
+            _kqlQuery = kqlQuery;
         }
 
         public async Task<string> NewExportAsync(
+            KustoPriority priority,
             IStagingBlobUriProvider blobPathProvider,
             long iterationId,
             long blockId,
@@ -38,9 +41,10 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             return await _exportCoreClient.NewExportAsync(
+                priority,
                 blobPathProvider,
                 _exportCommandClient,
-                _tableName,
+                _kqlQuery,
                 iterationId,
                 $"iterations/{iterationId:D20}/blocks/{blockId:D20}",
                 blockId,
@@ -52,14 +56,12 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<IImmutableList<ExportDetail>> AwaitExportAsync(
-            long iterationId,
-            string tableName,
+            KustoPriority priority,
             string operationId,
             CancellationToken ct)
         {
             return await _exportCoreClient.AwaitExportAsync(
-                iterationId,
-                tableName,
+                priority,
                 operationId,
                 ct);
         }

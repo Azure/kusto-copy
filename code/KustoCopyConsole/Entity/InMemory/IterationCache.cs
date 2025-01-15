@@ -3,17 +3,17 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class IterationCache : CacheBase<TableRowItem>
+    internal class IterationCache : CacheBase<IterationRowItem>
     {
         public IterationCache(
-            TableRowItem item,
+            IterationRowItem item,
             IImmutableDictionary<long, BlockCache> blockMap)
             : base(item)
         {
             BlockMap = blockMap;
         }
 
-        public IterationCache(TableRowItem item)
+        public IterationCache(IterationRowItem item)
             : this(item, ImmutableDictionary<long, BlockCache>.Empty)
         {
         }

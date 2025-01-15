@@ -11,8 +11,8 @@ namespace KustoCopyConsole.Entity.InMemory
     internal class RowItemInMemoryCache
     {
         private readonly object _lock = new object();
-        private volatile IImmutableDictionary<TableIdentity, TableCache> _sourceTableMap =
-            ImmutableDictionary<TableIdentity, TableCache>.Empty;
+        private volatile IImmutableDictionary<string, ActivityCache> _activityMap =
+            ImmutableDictionary<string, ActivityCache>.Empty;
 
         public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
         {
@@ -25,12 +25,12 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        public IImmutableDictionary<TableIdentity, TableCache> SourceTableMap
-            => _sourceTableMap;
+        public IImmutableDictionary<string, ActivityCache> ActivityMap
+            => _activityMap;
 
         public IEnumerable<RowItemBase> GetItems()
         {
-            foreach (var sourceTable in SourceTableMap.Values)
+            foreach (var sourceTable in ActivityMap.Values)
             {
                 foreach (var sourceTableIteration in sourceTable.IterationMap.Values)
                 {
@@ -51,17 +51,19 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             lock (_lock)
             {
-                Interlocked.Exchange(ref _sourceTableMap, AppendItemToCache(item));
+                Interlocked.Exchange(ref _activityMap, AppendItemToCache(item));
             }
         }
 
-        private IImmutableDictionary<TableIdentity, TableCache> AppendItemToCache(
+        private IImmutableDictionary<string, ActivityCache> AppendItemToCache(
             RowItemBase item)
         {
             switch (item)
             {
-                case TableRowItem st:
-                    return AppendSourceTable(st);
+                case ActivityRowItem a:
+                    return AppendActivity(a);
+                case IterationRowItem i:
+                    return AppendIteration(i);
                 case BlockRowItem sb:
                     return AppendSourceBlock(sb);
                 case UrlRowItem url:
@@ -72,45 +74,64 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        private IImmutableDictionary<TableIdentity, TableCache> AppendSourceTable(
-            TableRowItem item)
+        private IImmutableDictionary<string, ActivityCache> AppendActivity(
+            ActivityRowItem item)
         {
-            var tableId = item.SourceTable;
+            var activityName = item.ActivityName;
 
-            if (_sourceTableMap.ContainsKey(tableId))
+            if (_activityMap.ContainsKey(activityName))
             {
-                var table = _sourceTableMap[tableId];
+                var activity = _activityMap[activityName];
+
+                return _activityMap.SetItem(
+                    activityName,
+                    new ActivityCache(item, activity.IterationMap));
+            }
+            else
+            {
+                return _activityMap.Add(activityName, new ActivityCache(item));
+            }
+        }
+
+        private IImmutableDictionary<string, ActivityCache> AppendIteration(
+            IterationRowItem item)
+        {
+            var activityName = item.ActivityName;
+
+            if (_activityMap.ContainsKey(activityName))
+            {
+                var table = _activityMap[activityName];
 
                 if (table.IterationMap.ContainsKey(item.IterationId))
                 {
                     var iteration = table.IterationMap[item.IterationId];
 
-                    return _sourceTableMap.SetItem(
-                        tableId,
+                    return _activityMap.SetItem(
+                        activityName,
                         table.AppendIteration(
                             new IterationCache(item, iteration.BlockMap)));
                 }
                 else
                 {
-                    return _sourceTableMap.SetItem(
-                        tableId,
+                    return _activityMap.SetItem(
+                        activityName,
                         table.AppendIteration(new IterationCache(item)));
                 }
             }
             else
             {
-                return _sourceTableMap.Add(tableId, new TableCache(item));
+                throw new NotSupportedException("Activity should come before block in logs");
             }
         }
 
-        private IImmutableDictionary<TableIdentity, TableCache> AppendSourceBlock(
+        private IImmutableDictionary<string, ActivityCache> AppendSourceBlock(
             BlockRowItem item)
         {
-            var tableId = item.SourceTable;
+            var activityName = item.ActivityName;
 
-            if (_sourceTableMap.ContainsKey(tableId))
+            if (_activityMap.ContainsKey(activityName))
             {
-                var sourceTable = _sourceTableMap[tableId];
+                var sourceTable = _activityMap[activityName];
 
                 if (sourceTable.IterationMap.ContainsKey(item.IterationId))
                 {
@@ -120,16 +141,16 @@ namespace KustoCopyConsole.Entity.InMemory
                     {
                         var sourceBlock = sourceIteration.BlockMap[item.BlockId];
 
-                        return _sourceTableMap.SetItem(
-                            tableId,
+                        return _activityMap.SetItem(
+                            activityName,
                             sourceTable.AppendIteration(
                                 sourceIteration.AppendBlock(
                                     new BlockCache(item, sourceBlock.UrlMap))));
                     }
                     else
                     {
-                        return _sourceTableMap.SetItem(
-                            tableId,
+                        return _activityMap.SetItem(
+                            activityName,
                             sourceTable.AppendIteration(
                                 sourceIteration.AppendBlock(new BlockCache(item))));
                     }
@@ -141,18 +162,17 @@ namespace KustoCopyConsole.Entity.InMemory
             }
             else
             {
-                throw new NotSupportedException("Table should come before block in logs");
+                throw new NotSupportedException("Activity should come before block in logs");
             }
         }
 
-        private IImmutableDictionary<TableIdentity, TableCache> AppendSourceUrl(
-            UrlRowItem item)
+        private IImmutableDictionary<string, ActivityCache> AppendSourceUrl(UrlRowItem item)
         {
-            var tableId = item.SourceTable;
+            var activityName = item.ActivityName;
 
-            if (_sourceTableMap.ContainsKey(tableId))
+            if (_activityMap.ContainsKey(activityName))
             {
-                var sourceTable = _sourceTableMap[tableId];
+                var sourceTable = _activityMap[activityName];
 
                 if (sourceTable.IterationMap.ContainsKey(item.IterationId))
                 {
@@ -162,8 +182,8 @@ namespace KustoCopyConsole.Entity.InMemory
                     {
                         var block = sourceIteration.BlockMap[item.BlockId];
 
-                        return _sourceTableMap.SetItem(
-                            tableId,
+                        return _activityMap.SetItem(
+                            activityName,
                             sourceTable.AppendIteration(
                                 sourceIteration.AppendBlock(
                                     block.AppendUrl(new UrlCache(item)))));
@@ -180,7 +200,7 @@ namespace KustoCopyConsole.Entity.InMemory
             }
             else
             {
-                throw new NotSupportedException("Table should come before block in logs");
+                throw new NotSupportedException("Activity should come before block in logs");
             }
         }
     }

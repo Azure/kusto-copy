@@ -21,7 +21,7 @@ namespace KustoCopyConsole
             'd',
             "destination",
             Required = false,
-            HelpText = "Set the destination in the form cluster uri/database/table (table is optional), e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
+            HelpText = "Set the destination table in the form cluster uri/database/table (table is optional), e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
         public string Destination { get; set; } = string.Empty;
 
         [Option(
@@ -34,14 +34,14 @@ namespace KustoCopyConsole
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;
 
+        [Option('q', "query", Required = true, HelpText = "Set query, e.g. nyc_taxi.")]
+        public string Query { get; set; } = string.Empty;
+
         [Option(
             "continuous",
             Required = false,
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool IsContinuousRun { get; set; } = false;
-
-        [Option('q', "query", Required = false, HelpText = "Set query.")]
-        public string Query { get; set; } = string.Empty;
 
         [Option("log-path", Required = false, HelpText = "Set log file path.")]
         public string LogFilePath { get; set; } = string.Empty;

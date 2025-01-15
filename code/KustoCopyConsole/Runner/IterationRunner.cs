@@ -1,5 +1,4 @@
 ﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -28,7 +27,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task<TableRowItem> RunAsync(TableRowItem iterationItem, CancellationToken ct)
+        public async Task<IterationRowItem> RunAsync(IterationRowItem iterationItem, CancellationToken ct)
         {
             await using (var planningProgress = CreatePlanningProgressBar(iterationItem))
             await using (var exportingProgress =
@@ -49,14 +48,14 @@ namespace KustoCopyConsole.Runner
         }
 
         #region Progress bars
-        private ProgressBar CreatePlanningProgressBar(TableRowItem iterationItem)
+        private ProgressBar CreatePlanningProgressBar(IterationRowItem iterationItem)
         {
             return new ProgressBar(
                 TimeSpan.FromSeconds(5),
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.ActivityName]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -67,13 +66,13 @@ namespace KustoCopyConsole.Runner
                         currentIterationItem.State == TableState.Planning
                         ? (blockMap.Count > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                         : ProgessStatus.Completed,
-                        $"Planned:  {currentIterationItem.SourceTable.ToStringCompact()}"
+                        $"Planned:  {currentIterationItem.ActivityName}"
                         + $"({currentIterationItem.IterationId}) {blockMap.Count}");
                 });
         }
 
         private ProgressBar CreateBlockStateProgressBar(
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockState state)
         {
             return new ProgressBar(
@@ -81,7 +80,7 @@ namespace KustoCopyConsole.Runner
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .SourceTableMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.ActivityName]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -101,15 +100,15 @@ namespace KustoCopyConsole.Runner
                             stateReachedCount != blockMap.Count
                             ? (stateReachedCount > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                             : ProgessStatus.Completed,
-                            $"{state}:  {currentIterationItem.SourceTable.ToStringCompact()}" +
+                            $"{state}:  {currentIterationItem.ActivityName}" +
                             $"({currentIterationItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
                     }
                 });
         }
         #endregion
 
-        private async Task<TableRowItem> ProgressRunAsync(
-            TableRowItem iterationItem,
+        private async Task<IterationRowItem> ProgressRunAsync(
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
             iterationItem = await StartIterationAsync(iterationItem, ct);
@@ -121,16 +120,21 @@ namespace KustoCopyConsole.Runner
         }
 
         #region Iteration Level
-        private async Task<TableRowItem> StartIterationAsync(
-            TableRowItem iterationItem,
+        private async Task<IterationRowItem> StartIterationAsync(
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
             if (iterationItem.State == TableState.Starting)
             {
+                var activity = RowItemGateway.InMemoryCache
+                    .ActivityMap[iterationItem.ActivityName]
+                    .RowItem;
                 var queryClient = DbClientFactory.GetDbQueryClient(
-                        iterationItem.SourceTable.ClusterUri,
-                        iterationItem.SourceTable.DatabaseName);
-                var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
+                        activity.SourceTable.ClusterUri,
+                        activity.SourceTable.DatabaseName);
+                var cursorEnd = await queryClient.GetCurrentCursorAsync(
+                    new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                    ct);
 
                 iterationItem = iterationItem.ChangeState(TableState.Planning);
                 iterationItem.CursorEnd = cursorEnd;
@@ -140,8 +144,8 @@ namespace KustoCopyConsole.Runner
             return iterationItem;
         }
 
-        private async Task<TableRowItem> PlanIterationAsync(
-            TableRowItem iterationItem,
+        private async Task<IterationRowItem> PlanIterationAsync(
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
             var planningRunner =
@@ -152,8 +156,8 @@ namespace KustoCopyConsole.Runner
             return iterationItem;
         }
 
-        private async Task<TableRowItem> CreateTempTableAsync(
-            TableRowItem iterationItem,
+        private async Task<IterationRowItem> CreateTempTableAsync(
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
             var tempTableCreatingRunner = new TempTableCreatingRunner(
@@ -168,11 +172,11 @@ namespace KustoCopyConsole.Runner
         #endregion
 
         #region Block Level
-        private async Task ProcessAllBlocksAsync(TableRowItem iterationItem, CancellationToken ct)
+        private async Task ProcessAllBlocksAsync(IterationRowItem iterationItem, CancellationToken ct)
         {
-            var blobPathProvider = GetBlobPathFactory(iterationItem.SourceTable);
+            var blobPathProvider = GetBlobPathFactory();
             var blockItems = RowItemGateway.InMemoryCache
-                .SourceTableMap[iterationItem.SourceTable]
+                .ActivityMap[iterationItem.ActivityName]
                 .IterationMap[iterationItem.IterationId]
                 .BlockMap
                 .Values
@@ -188,32 +192,20 @@ namespace KustoCopyConsole.Runner
             await Task.WhenAll(processBlockTasks);
         }
 
-        private IStagingBlobUriProvider GetBlobPathFactory(TableIdentity sourceTable)
+        private IStagingBlobUriProvider GetBlobPathFactory()
         {
-            var activity = Parameterization.Activities
-                .Where(a => a.Source.GetTableIdentity() == sourceTable)
-                .FirstOrDefault();
+            var tempUriProvider = new AzureBlobUriProvider(
+                Parameterization.StagingStorageContainers
+                .Select(s => new Uri(s))
+                .ToImmutableArray(),
+                Parameterization.GetCredentials());
 
-            if (activity == null)
-            {
-                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
-            }
-            else
-            {
-                var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new AzureBlobUriProvider(
-                    Parameterization.StagingStorageContainers
-                    .Select(s => new Uri(s))
-                    .ToImmutableArray(),
-                    Parameterization.GetCredentials());
-
-                return tempUriProvider;
-            }
+            return tempUriProvider;
         }
 
         private async Task ProcessSingleBlockAsync(
             IStagingBlobUriProvider blobPathProvider,
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -226,7 +218,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<BlockRowItem> ExportBlockAsync(
             IStagingBlobUriProvider blobPathProvider,
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -237,7 +229,6 @@ namespace KustoCopyConsole.Runner
 
             blockItem = await exportingRunner.RunAsync(
                 blobPathProvider,
-                iterationItem,
                 blockItem,
                 ct);
 
@@ -246,7 +237,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<BlockRowItem> QueueBlockForIngestionAsync(
             IStagingBlobUriProvider blobPathProvider,
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -264,7 +255,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> AwaitIngestAsync(
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -279,7 +270,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> MoveExtentsAsync(
-            TableRowItem iterationItem,
+            IterationRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
