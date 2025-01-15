@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> ExportBlockAsync(
-            Uri storageRootUri,
+            IEnumerable<Uri> storageRootUris,
             string tableName,
             string cursorStart,
             string cursorEnd,
@@ -79,9 +79,10 @@ namespace KustoCopyConsole.Kusto
                     const string INGESTION_TIME_START_PARAM = "IngestionTimeStart";
                     const string INGESTION_TIME_END_PARAM = "IngestionTimeEnd";
 
+                    var rootListText = string.Join(", ", storageRootUris.Select(u => $"h'{u}'"));
                     var commandText = @$"
 .export async compressed to parquet (
-    h'{storageRootUri}'
+    {rootListText}
 )
 with (
     namePrefix=""export"",

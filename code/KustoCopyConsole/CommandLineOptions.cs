@@ -14,15 +14,22 @@ namespace KustoCopyConsole
             's',
             "source",
             Required = false,
-            HelpText = "Set the source in the format cluster uri/database/table, e.g. https://help.kusto.windows.net/Samples/nyc_taxi")]
+            HelpText = "Set the source in the form cluster uri/database/table, e.g. https://help.kusto.windows.net/Samples/nyc_taxi")]
         public string Source { get; set; } = string.Empty;
 
         [Option(
             'd',
             "destination",
             Required = false,
-            HelpText = "Set the destination in the format uri cluster uri/database/table (table is optional), e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
+            HelpText = "Set the destination in the form cluster uri/database/table (table is optional), e.g. https://mycluster.eastus.kusto.windows.net/mydb")]
         public string Destination { get; set; } = string.Empty;
+
+        [Option(
+            't',
+            "staging-storage",
+            Required = false,
+            HelpText = "Set the staging storage in the form of storage container uris")]
+        public IEnumerable<string> StagingStorage { get; set; } = Array.Empty<string>();
 
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;

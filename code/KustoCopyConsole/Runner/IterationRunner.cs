@@ -5,6 +5,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using KustoCopyConsole.Storage.AzureStorage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -64,7 +65,7 @@ namespace KustoCopyConsole.Runner
 
                     return new ProgressReport(
                         currentIterationItem.State == TableState.Planning
-                        ? ProgessStatus.Progress
+                        ? (blockMap.Count > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                         : ProgessStatus.Completed,
                         $"Planned:  {currentIterationItem.SourceTable.ToStringCompact()}"
                         + $"({currentIterationItem.IterationId}) {blockMap.Count}");
@@ -98,7 +99,7 @@ namespace KustoCopyConsole.Runner
 
                         return new ProgressReport(
                             stateReachedCount != blockMap.Count
-                            ? ProgessStatus.Progress
+                            ? (stateReachedCount > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                             : ProgessStatus.Completed,
                             $"{state}:  {currentIterationItem.SourceTable.ToStringCompact()}" +
                             $"({currentIterationItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
@@ -187,7 +188,7 @@ namespace KustoCopyConsole.Runner
             await Task.WhenAll(processBlockTasks);
         }
 
-        private IBlobPathProvider GetBlobPathFactory(TableIdentity sourceTable)
+        private IStagingBlobUriProvider GetBlobPathFactory(TableIdentity sourceTable)
         {
             var activity = Parameterization.Activities
                 .Where(a => a.Source.GetTableIdentity() == sourceTable)
@@ -200,16 +201,18 @@ namespace KustoCopyConsole.Runner
             else
             {
                 var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new TempUriProvider(DbClientFactory.GetDmCommandClient(
-                    destinationTable.ClusterUri,
-                    destinationTable.DatabaseName));
+                var tempUriProvider = new AzureBlobUriProvider(
+                    Parameterization.StagingStorageContainers
+                    .Select(s => new Uri(s))
+                    .ToImmutableArray(),
+                    Parameterization.GetCredentials());
 
                 return tempUriProvider;
             }
         }
 
         private async Task ProcessSingleBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -222,7 +225,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> ExportBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)
@@ -242,7 +245,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> QueueBlockForIngestionAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             TableRowItem iterationItem,
             BlockRowItem blockItem,
             CancellationToken ct)

@@ -160,7 +160,6 @@ namespace KustoCopyConsole
             {
                 await using (var mainRunner = await MainRunner.CreateAsync(
                     parameterization,
-                    options.Authentication,
                     options.LogFilePath,
                     cancellationTokenSource.Token))
                 {

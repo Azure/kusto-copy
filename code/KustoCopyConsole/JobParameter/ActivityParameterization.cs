@@ -18,7 +18,7 @@ namespace KustoCopyConsole.JobParameter
             Source.Validate();
             if (string.IsNullOrWhiteSpace(Source.TableName))
             {
-                throw new CopyException($"{Source.TableName} is required", false);
+                throw new CopyException($"{nameof(Source.TableName)} is required", false);
             }
             Destination.Validate();
             TableOption.Validate();

@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
         }
 
         public async Task<BlockRowItem> RunAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -32,7 +32,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<BlockRowItem> QueueIngestBlockAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             BlockRowItem blockItem,
             CancellationToken ct)
         {
@@ -50,19 +50,14 @@ namespace KustoCopyConsole.Runner
                 blockItem.DestinationTable.DatabaseName,
                 tempTableName);
             var blockTag = $"kusto-copy:{Guid.NewGuid()}";
-            var authorizeTasks = urlItems
-                .Select(u => new Uri(u.Url))
-                .Select(url => new
-                {
-                    Url = url,
-                    Task = blobPathProvider.AuthorizeUriAsync(url, ct)
-                })
+            var uriTasks = urlItems
+                .Select(u => blobPathProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(authorizeTasks.Select(o => o.Task));
+            await Task.WhenAll(uriTasks);
 
-            var queueTasks = authorizeTasks
-                .Select(o => ingestClient.QueueBlobAsync(o.Task.Result, blockTag, ct))
+            var queueTasks = uriTasks
+                .Select(t => ingestClient.QueueBlobAsync(t.Result, blockTag, ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(queueTasks);

@@ -135,7 +135,7 @@ namespace KustoCopyConsole.Storage
 
         public async Task FlushAsync(CancellationToken ct)
         {
-            while(_schedulePersistanceQueue.TryDequeue(out var task))
+            while (_schedulePersistanceQueue.TryDequeue(out var task))
             {
                 await task;
             }
@@ -189,9 +189,9 @@ namespace KustoCopyConsole.Storage
             var oldPersistanceAsyncLock = _persistanceAsyncLock;
 
             await _appendStorage.AtomicAppendAsync(buffer, ct);
-            _persistanceAsyncLock = new PersistanceAsyncLock(
+            Interlocked.Exchange(ref _persistanceAsyncLock, new PersistanceAsyncLock(
                 new TaskCompletionSource(),
-                new TaskCompletionSource());
+                new TaskCompletionSource()));
             //  Unblock waiting threads
             oldPersistanceAsyncLock.ExitSource.SetResult();
         }

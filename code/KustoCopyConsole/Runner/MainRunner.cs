@@ -22,7 +22,6 @@ namespace KustoCopyConsole.Runner
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
             MainJobParameterization parameterization,
-            string authentication,
             string logFilePath,
             CancellationToken ct)
         {
@@ -30,7 +29,7 @@ namespace KustoCopyConsole.Runner
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
-                CreateCredentials(authentication),
+                parameterization.GetCredentials(),
                 ct);
 
             return new MainRunner(parameterization, rowItemGateway, dbClientFactory);
@@ -42,19 +41,6 @@ namespace KustoCopyConsole.Runner
             DbClientFactory dbClientFactory)
             : base(parameterization, rowItemGateway, dbClientFactory)
         {
-        }
-
-        private static TokenCredential CreateCredentials(string authentication)
-        {
-            if (string.IsNullOrWhiteSpace(authentication))
-            {
-                //return new DefaultAzureCredential();
-                return new AzureCliCredential();
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
         }
 
         private static IAppendStorage CreateAppendStorage(string logFilePath)

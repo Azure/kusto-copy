@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -26,10 +27,11 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> NewExportAsync(
-            IBlobPathProvider blobPathProvider,
+            IStagingBlobUriProvider blobPathProvider,
             DbCommandClient exportCommandClient,
             string tableName,
             long iterationId,
+            string folderName,
             long blockId,
             string cursorStart,
             string cursorEnd,
@@ -45,9 +47,10 @@ namespace KustoCopyConsole.Kusto
                     new KustoDbPriority(iterationId, tableName, blockId)),
                 async () =>
                 {
-                    var tempUri = await blobPathProvider.FetchUriAsync(ct);
+                    var rootUris =
+                    await blobPathProvider.GetWritableFolderUrisAsync(folderName, ct);
                     var operationId = await exportCommandClient.ExportBlockAsync(
-                        tempUri,
+                        rootUris,
                         tableName,
                         cursorStart,
                         cursorEnd,

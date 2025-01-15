@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Azure.Core;
+using Azure.Identity;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,11 +12,17 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        public bool IsContinuousRun { get; set; } = false;
-
         public IImmutableList<ActivityParameterization> Activities { get; set; } =
             ImmutableArray<ActivityParameterization>.Empty;
 
+        public bool IsContinuousRun { get; set; } = false;
+
+        public IImmutableList<string> StagingStorageContainers { get; set; } =
+            ImmutableArray<string>.Empty;
+
+        public string Authentication { get; set; } = string.Empty;
+
+        #region Constructors
         public static MainJobParameterization FromOptions(CommandLineOptions options)
         {
             if (!string.IsNullOrWhiteSpace(options.Source))
@@ -61,7 +69,7 @@ namespace KustoCopyConsole.JobParameter
                 sourceBuilder.Path = string.Empty;
                 destinationBuilder.Path = string.Empty;
 
-                return new MainJobParameterization
+                var parameterization = new MainJobParameterization
                 {
                     IsContinuousRun = options.IsContinuousRun,
                     Activities = ImmutableList.Create(
@@ -80,20 +88,44 @@ namespace KustoCopyConsole.JobParameter
                             },
                             Query = options.Query,
                             TableOption = new TableOption()
-                        })
+                        }),
+                    Authentication = options.Authentication,
+                    StagingStorageContainers = options.StagingStorage.ToImmutableArray()
                 };
+
+                parameterization.Validate();
+
+                return parameterization;
             }
             else
             {
                 throw new NotImplementedException();
             }
         }
+        #endregion
 
         internal void Validate()
         {
             foreach (var a in Activities)
             {
                 a.Validate();
+            }
+            foreach (var uri in StagingStorageContainers)
+            {
+                ValidateStagingUri(uri);
+            }
+        }
+
+        internal TokenCredential GetCredentials()
+        {
+            if (string.IsNullOrWhiteSpace(Authentication))
+            {
+                //return new DefaultAzureCredential();
+                return new AzureCliCredential();
+            }
+            else
+            {
+                throw new NotImplementedException();
             }
         }
 
@@ -103,6 +135,29 @@ namespace KustoCopyConsole.JobParameter
             var yaml = serializer.Serialize(this);
 
             return yaml;
+        }
+
+        private void ValidateStagingUri(string uriText)
+        {
+            if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri))
+            {
+                throw new CopyException($"Not a valid staging URI:  '{uri}'", false);
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(uri.Query))
+                {
+                    throw new CopyException(
+                        $"{nameof(StagingStorageContainers)} can't contain query string:  '{uri}'",
+                        false);
+                }
+                if (uri.Segments.Length != 2)
+                {
+                    throw new CopyException(
+                        $"{nameof(StagingStorageContainers)} should point to a container:  '{uri}'",
+                        false);
+                }
+            }
         }
     }
 }
