@@ -75,6 +75,7 @@ namespace KustoCopyConsole.JobParameter
                     Activities = ImmutableList.Create(
                         new ActivityParameterization
                         {
+                            ActivityName = "default",
                             Source = new TableParameterization
                             {
                                 ClusterUri = sourceBuilder.ToString(),

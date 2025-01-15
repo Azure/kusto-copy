@@ -5,6 +5,8 @@ namespace KustoCopyConsole.JobParameter
 {
     public class ActivityParameterization
     {
+        public string ActivityName { get; set; } = string.Empty;
+
         public TableParameterization Source { get; set; } = new();
 
         public TableParameterization Destination { get; set; } = new();
@@ -15,6 +17,10 @@ namespace KustoCopyConsole.JobParameter
 
         public void Validate()
         {
+            if (string.IsNullOrWhiteSpace(ActivityName))
+            {
+                throw new CopyException($"{nameof(ActivityName)} is required", false);
+            }
             Source.Validate();
             if (string.IsNullOrWhiteSpace(Source.TableName))
             {

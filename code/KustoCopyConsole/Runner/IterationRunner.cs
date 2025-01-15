@@ -1,5 +1,4 @@
 ﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
