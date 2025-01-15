@@ -65,7 +65,7 @@ namespace KustoCopyConsole.Runner
 
                     return new ProgressReport(
                         currentIterationItem.State == TableState.Planning
-                        ? ProgessStatus.Progress
+                        ? (blockMap.Count > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                         : ProgessStatus.Completed,
                         $"Planned:  {currentIterationItem.SourceTable.ToStringCompact()}"
                         + $"({currentIterationItem.IterationId}) {blockMap.Count}");
@@ -99,7 +99,7 @@ namespace KustoCopyConsole.Runner
 
                         return new ProgressReport(
                             stateReachedCount != blockMap.Count
-                            ? ProgessStatus.Progress
+                            ? (stateReachedCount > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                             : ProgessStatus.Completed,
                             $"{state}:  {currentIterationItem.SourceTable.ToStringCompact()}" +
                             $"({currentIterationItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
@@ -202,7 +202,9 @@ namespace KustoCopyConsole.Runner
             {
                 var destinationTable = activity.Destination.GetTableIdentity();
                 var tempUriProvider = new AzureBlobUriProvider(
-                    Parameterization.StagingStorageContainers,
+                    Parameterization.StagingStorageContainers
+                    .Select(s => new Uri(s))
+                    .ToImmutableArray(),
                     Parameterization.GetCredentials());
 
                 return tempUriProvider;

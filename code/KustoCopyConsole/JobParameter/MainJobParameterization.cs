@@ -17,8 +17,8 @@ namespace KustoCopyConsole.JobParameter
 
         public bool IsContinuousRun { get; set; } = false;
 
-        public IImmutableList<Uri> StagingStorageContainers { get; set; } =
-            ImmutableArray<Uri>.Empty;
+        public IImmutableList<string> StagingStorageContainers { get; set; } =
+            ImmutableArray<string>.Empty;
 
         public string Authentication { get; set; } = string.Empty;
 
@@ -90,9 +90,7 @@ namespace KustoCopyConsole.JobParameter
                             TableOption = new TableOption()
                         }),
                     Authentication = options.Authentication,
-                    StagingStorageContainers = options.StagingStorage
-                    .Select(s => new Uri(s))
-                    .ToImmutableArray()
+                    StagingStorageContainers = options.StagingStorage.ToImmutableArray()
                 };
 
                 parameterization.Validate();
@@ -139,19 +137,26 @@ namespace KustoCopyConsole.JobParameter
             return yaml;
         }
 
-        private void ValidateStagingUri(Uri uri)
+        private void ValidateStagingUri(string uriText)
         {
-            if (!string.IsNullOrWhiteSpace(uri.Query))
+            if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri))
             {
-                throw new CopyException(
-                    $"{nameof(StagingStorageContainers)} can't contain query string:  '{uri}'",
-                    false);
+                throw new CopyException($"Not a valid staging URI:  '{uri}'", false);
             }
-            if (uri.Segments.Length != 2)
+            else
             {
-                throw new CopyException(
-                    $"{nameof(StagingStorageContainers)} should point to a container:  '{uri}'",
-                    false);
+                if (!string.IsNullOrWhiteSpace(uri.Query))
+                {
+                    throw new CopyException(
+                        $"{nameof(StagingStorageContainers)} can't contain query string:  '{uri}'",
+                        false);
+                }
+                if (uri.Segments.Length != 2)
+                {
+                    throw new CopyException(
+                        $"{nameof(StagingStorageContainers)} should point to a container:  '{uri}'",
+                        false);
+                }
             }
         }
     }

@@ -136,10 +136,12 @@ namespace KustoCopyConsole.Storage.AzureStorage
             builder.Path += '/';
 
             var containerUri = builder.Uri.ToString();
-            
-            if(_containerMap.TryGetValue(containerUri, out var provider))
+
+            if (_containerMap.TryGetValue(containerUri, out var provider))
             {
-                return await provider.AuthorizeUriAsync(uri.LocalPath.TrimStart('/'), ct);
+                var path = string.Join('/', uri.LocalPath.Split('/').Skip(2));
+
+                return await provider.AuthorizeUriAsync(path, ct);
             }
             else
             {

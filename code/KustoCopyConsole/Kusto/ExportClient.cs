@@ -42,7 +42,7 @@ namespace KustoCopyConsole.Kusto
                 _exportCommandClient,
                 _tableName,
                 iterationId,
-                $"{iterationId}",
+                $"iterations/{iterationId:D20}/blocks/{blockId:D20}",
                 blockId,
                 cursorStart,
                 cursorEnd,
