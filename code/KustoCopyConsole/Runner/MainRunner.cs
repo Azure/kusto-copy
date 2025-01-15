@@ -76,6 +76,7 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(CancellationToken ct)
         {
             var runTasks = Parameterization.Activities
+                .Values
                 .Select(a => RunActivityAsync(a, ct))
                 .ToImmutableArray();
 

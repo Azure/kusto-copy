@@ -12,8 +12,8 @@ namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        public IImmutableList<ActivityParameterization> Activities { get; set; } =
-            ImmutableArray<ActivityParameterization>.Empty;
+        public IImmutableDictionary<string, ActivityParameterization> Activities { get; set; } =
+            ImmutableDictionary<string, ActivityParameterization>.Empty;
 
         public bool IsContinuousRun { get; set; } = false;
 
@@ -89,7 +89,8 @@ namespace KustoCopyConsole.JobParameter
                             },
                             Query = options.Query,
                             TableOption = new TableOption()
-                        }),
+                        })
+                    .ToImmutableDictionary(a => a.ActivityName, a => a),
                     Authentication = options.Authentication,
                     StagingStorageContainers = options.StagingStorage.ToImmutableArray()
                 };
@@ -107,7 +108,7 @@ namespace KustoCopyConsole.JobParameter
 
         internal void Validate()
         {
-            foreach (var a in Activities)
+            foreach (var a in Activities.Values)
             {
                 a.Validate();
             }

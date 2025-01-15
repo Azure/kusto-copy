@@ -190,6 +190,7 @@ namespace KustoCopyConsole.Runner
         private IStagingBlobUriProvider GetBlobPathFactory(TableIdentity sourceTable)
         {
             var activity = Parameterization.Activities
+                .Values
                 .Where(a => a.Source.GetTableIdentity() == sourceTable)
                 .FirstOrDefault();
 

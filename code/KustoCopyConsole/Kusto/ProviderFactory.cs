@@ -21,9 +21,11 @@ namespace KustoCopyConsole.Kusto
         public ProviderFactory(MainJobParameterization parameterization, TokenCredential credentials)
         {
             var sourceClusterUris = parameterization.Activities
+                .Values
                 .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
+                .Values
                 .Select(a => NormalizedUri.NormalizeUri(a.Destination.ClusterUri))
                 .Distinct();
             var allClusterUris = sourceClusterUris
