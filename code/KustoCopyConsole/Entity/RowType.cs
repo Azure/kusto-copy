@@ -4,10 +4,9 @@
     {
         Unspecified,
         FileVersion,
-        SourceTable,
-        SourceBlock,
-        SourceUrl,
-        DestinationTable,
-        DestinationBlock
+        Activity,
+        Iteration,
+        Block,
+        Url
     }
 }
