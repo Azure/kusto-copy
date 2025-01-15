@@ -4,24 +4,28 @@ using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Kusto
 {
-    public class KustoPriority : KustoPriorityBase, IComparable<KustoPriority>
+    public class KustoPriority : IComparable<KustoPriority>
     {
-        public KustoPriority(string databaseName, KustoDbPriority kustoDbPriority)
+        public KustoPriority(
+            string? activityName = null,
+            long? iterationId = null,
+            long? blockId = null)
         {
-            DatabaseName = databaseName;
-            KustoDbPriority = kustoDbPriority;
+            ActivityName = activityName;
+            IterationId = iterationId;
+            BlockId = blockId;
         }
 
-        public static KustoPriority HighestPriority { get; } =
-            new KustoPriority(string.Empty, KustoDbPriority.HighestPriority);
+        public static KustoPriority HighestPriority { get; } = new KustoPriority();
 
-        public string DatabaseName { get; }
+        public string? ActivityName { get; }
 
-        public KustoDbPriority KustoDbPriority { get; }
+        public long? IterationId { get; }
+
+        public long? BlockId { get; }
 
         int IComparable<KustoPriority>.CompareTo(KustoPriority? other)
         {
@@ -31,10 +35,52 @@ namespace KustoCopyConsole.Kusto
             }
 
             return CompareHierarchicalCompare(
-                () => CompareLongs(KustoDbPriority.IterationId, KustoDbPriority.IterationId),
-                () => CompareStrings(DatabaseName, other.DatabaseName),
-                () => CompareStrings(KustoDbPriority.TableName, other.KustoDbPriority.TableName),
-                () => CompareLongs(KustoDbPriority.BlockId, other.KustoDbPriority.BlockId));
+                () => CompareStrings(ActivityName, other.ActivityName),
+                () => CompareLongs(IterationId, other.IterationId),
+                () => CompareLongs(BlockId, other.BlockId));
         }
+
+        #region Compare primitives
+        private int CompareStrings(string? a, string? b)
+        {
+            return (a == null && b == null)
+                ? 0
+                : (a == null && b != null)
+                ? -1
+                : (a != null && b == null)
+                ? 1
+                : a!.CompareTo(b!);
+        }
+
+        private static int CompareLongs(long? a, long? b)
+        {
+            return (a == null && b == null)
+                ? 0
+                : (a == null && b != null)
+                ? -1
+                : (a != null && b == null)
+                ? 1
+                : a!.Value.CompareTo(b!.Value);
+        }
+
+        private static int CompareHierarchicalCompare(params Func<int>[] compareValueEvaluators)
+        {
+            if (compareValueEvaluators.Length == 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(compareValueEvaluators));
+            }
+            foreach (var evaluator in compareValueEvaluators)
+            {
+                var value = evaluator();
+
+                if (value != 0)
+                {
+                    return value;
+                }
+            }
+
+            return 0;
+        }
+        #endregion
     }
 }

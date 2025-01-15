@@ -7,15 +7,17 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Entity
 {
     public record TableIdentity(Uri ClusterUri, string DatabaseName, string TableName)
-        : DatabaseIdentity(ClusterUri, DatabaseName)
     {
-        public static new TableIdentity Empty { get; }
-            = new TableIdentity(DatabaseIdentity.Empty.ClusterUri, string.Empty, string.Empty);
+        private static readonly Uri EMPTY_URI = new Uri("http://tempuri");
 
-        public override void Validate()
+        public static TableIdentity Empty { get; }
+            = new TableIdentity(EMPTY_URI, string.Empty, string.Empty);
+
+        public void Validate()
         {
-            base.Validate();
-            if (string.IsNullOrWhiteSpace(TableName))
+            if (ClusterUri == EMPTY_URI
+                || string.IsNullOrWhiteSpace(DatabaseName)
+                || string.IsNullOrWhiteSpace(TableName))
             {
                 throw new InvalidDataException($"Table identity is invalid:  {this}");
             }
@@ -26,7 +28,7 @@ namespace KustoCopyConsole.Entity
             return $"(Cluster:'{ClusterUri}', Database:'{DatabaseName}', Table:'{TableName}')";
         }
 
-        public override string ToStringCompact()
+        public string ToStringCompact()
         {
             return $"{ClusterUri}{DatabaseName}/{TableName}";
         }

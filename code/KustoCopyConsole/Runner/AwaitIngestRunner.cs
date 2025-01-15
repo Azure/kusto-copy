@@ -44,8 +44,10 @@ namespace KustoCopyConsole.Runner
             while (true)
             {
                 var rowCount = await commandClient.GetExtentRowCountAsync(
-                    blockItem.IterationId,
-                    activityCache.RowItem.DestinationTable.TableName,
+                    new KustoPriority(
+                        blockItem.ActivityName,
+                        blockItem.IterationId,
+                        blockItem.BlockId),
                     tempTableName,
                     blockItem.BlockTag,
                     ct);

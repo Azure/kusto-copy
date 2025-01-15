@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public string ActivityName { get; set; } = string.Empty;
 
-        public DatabaseIdentity SourceDatabase { get; set; } = DatabaseIdentity.Empty;
+        public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
 
         public TableIdentity DestinationTable { get; set; } = TableIdentity.Empty;
 
@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 throw new InvalidDataException($"{nameof(ActivityName)} must have a value");
             }
-            SourceDatabase.Validate();
+            SourceTable.Validate();
             DestinationTable.Validate();
         }
 

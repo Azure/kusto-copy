@@ -74,8 +74,10 @@ namespace KustoCopyConsole.Kusto
                 try
                 {
                     var operationIds = GetOperationIds();
-                    var operationStatus =
-                        await _operationCommandClient.ShowOperationsAsync(operationIds, ct);
+                    var operationStatus = await _operationCommandClient.ShowOperationsAsync(
+                        KustoPriority.HighestPriority,
+                        operationIds,
+                        ct);
                     var notPendingOperations = operationStatus
                         .Where(s => s.State != "InProgress" && s.State != "Scheduled");
                     var lostOperationIds = operationIds

@@ -87,7 +87,7 @@ namespace KustoCopyConsole.JobParameter
                                 ClusterUri = destinationBuilder.ToString(),
                                 DatabaseName = destinationDb
                             },
-                            Query = options.Query,
+                            KqlQuery = options.Query,
                             TableOption = new TableOption()
                         })
                     .ToImmutableDictionary(a => a.ActivityName, a => a),

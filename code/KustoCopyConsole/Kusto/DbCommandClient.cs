@@ -12,11 +12,11 @@ namespace KustoCopyConsole.Kusto
     {
         private readonly Random _random = new();
         private readonly ICslAdminProvider _provider;
-        private readonly PriorityExecutionQueue<KustoDbPriority> _commandQueue;
+        private readonly PriorityExecutionQueue<KustoPriority> _commandQueue;
 
         public DbCommandClient(
             ICslAdminProvider provider,
-            PriorityExecutionQueue<KustoDbPriority> commandQueue,
+            PriorityExecutionQueue<KustoPriority> commandQueue,
             string databaseName)
         {
             _provider = provider;
@@ -27,13 +27,14 @@ namespace KustoCopyConsole.Kusto
         public string DatabaseName { get; }
 
         public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
+            KustoPriority priority,
             IEnumerable<string> operationIds,
             CancellationToken ct)
         {
             if (operationIds.Any())
             {
                 return await _commandQueue.RequestRunAsync(
-                    KustoDbPriority.HighestPriority,
+                    priority,
                     async () =>
                     {
                         var operationIdsText = string.Join(", ", operationIds);
@@ -62,8 +63,9 @@ namespace KustoCopyConsole.Kusto
         }
 
         public async Task<string> ExportBlockAsync(
+            KustoPriority priority,
             IEnumerable<Uri> storageRootUris,
-            string tableName,
+            string kqlQuery,
             string cursorStart,
             string cursorEnd,
             DateTime ingestionTimeStart,
@@ -71,7 +73,7 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-                KustoDbPriority.HighestPriority,
+                priority,
                 async () =>
                 {
                     const string CURSOR_START_PARAM = "CursorStart";
@@ -94,7 +96,7 @@ declare query_parameters(
     {CURSOR_END_PARAM}:string,
     {INGESTION_TIME_START_PARAM}:datetime,
     {INGESTION_TIME_END_PARAM}:datetime);
-let BlockData = ['{tableName}']
+let BlockData = ['{kqlQuery}']
     | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
     | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
     | where iif(isnull({INGESTION_TIME_START_PARAM}), true, ingestion_time()>=todatetime({INGESTION_TIME_START_PARAM}))
@@ -119,13 +121,13 @@ BlockData
         }
 
         public async Task<IImmutableList<ExtentDate>> GetExtentDatesAsync(
-            long iterationId,
+            KustoPriority priority,
             string tableName,
             IEnumerable<string> extentIds,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
+                priority,
                 async () =>
                 {
                     var extentList = string.Join(", ", extentIds);
@@ -149,13 +151,12 @@ BlockData
         }
 
         public async Task<IImmutableList<ExportDetail>> ShowExportDetailsAsync(
-            long iterationId,
-            string tableName,
+            KustoPriority priority,
             string operationId,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
+                priority,
                 async () =>
                 {
                     var commandText = @$"
@@ -180,12 +181,12 @@ BlockData
 
         #region Table Management
         public async Task DropTableIfExistsAsync(
-            long iterationId,
+            KustoPriority priority,
             string tableName,
             CancellationToken ct)
         {
             await _commandQueue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
+                priority,
                 async () =>
                 {
                     var commandText = @$"
@@ -201,13 +202,13 @@ BlockData
         }
 
         public async Task CreateTempTableAsync(
-            long iterationId,
+            KustoPriority priority,
             string tableName,
             string tempTableName,
             CancellationToken ct)
         {
             await _commandQueue.RequestRunAsync(
-                new KustoDbPriority(iterationId, tableName),
+                priority,
                 async () =>
                 {
                     var commandText = @$"
@@ -268,14 +269,13 @@ BlockData
         #endregion
 
         public async Task<long> GetExtentRowCountAsync(
-            long iterationId,
-            string tableName,
+            KustoPriority priority,
             string tempTableName,
             string blockTag,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-               new KustoDbPriority(iterationId, tableName),
+               priority,
                async () =>
                {
                    var commandText = @$"
@@ -297,14 +297,14 @@ BlockData
         }
 
         public async Task<int> MoveExtentsAsync(
-            long iterationId,
+            KustoPriority priority,
             string tempTableName,
             string tableName,
             string blockTag,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-               new KustoDbPriority(iterationId, tableName),
+               priority,
                async () =>
                {
                    var commandText = @$"
@@ -340,13 +340,13 @@ BlockData
         }
 
         public async Task<int> CleanExtentTagsAsync(
-            long iterationId,
+            KustoPriority priority,
             string tableName,
             string blockTag,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
-               new KustoDbPriority(iterationId, tableName),
+               priority,
                async () =>
                {
                    var commandText = @$"

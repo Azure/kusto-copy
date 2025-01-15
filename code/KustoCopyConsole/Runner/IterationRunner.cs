@@ -66,7 +66,7 @@ namespace KustoCopyConsole.Runner
                         currentIterationItem.State == TableState.Planning
                         ? (blockMap.Count > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                         : ProgessStatus.Completed,
-                        $"Planned:  {currentIterationItem.SourceTable.ToStringCompact()}"
+                        $"Planned:  {currentIterationItem.ActivityName}"
                         + $"({currentIterationItem.IterationId}) {blockMap.Count}");
                 });
         }
@@ -100,7 +100,7 @@ namespace KustoCopyConsole.Runner
                             stateReachedCount != blockMap.Count
                             ? (stateReachedCount > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                             : ProgessStatus.Completed,
-                            $"{state}:  {currentIterationItem.SourceTable.ToStringCompact()}" +
+                            $"{state}:  {currentIterationItem.ActivityName}" +
                             $"({currentIterationItem.IterationId}) {stateReachedCount}/{blockMap.Count}");
                     }
                 });
@@ -130,9 +130,11 @@ namespace KustoCopyConsole.Runner
                     .ActivityMap[iterationItem.ActivityName]
                     .RowItem;
                 var queryClient = DbClientFactory.GetDbQueryClient(
-                        activity.SourceDatabase.ClusterUri,
-                        activity.SourceDatabase.DatabaseName);
-                var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
+                        activity.SourceTable.ClusterUri,
+                        activity.SourceTable.DatabaseName);
+                var cursorEnd = await queryClient.GetCurrentCursorAsync(
+                    new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                    ct);
 
                 iterationItem = iterationItem.ChangeState(TableState.Planning);
                 iterationItem.CursorEnd = cursorEnd;
@@ -172,7 +174,7 @@ namespace KustoCopyConsole.Runner
         #region Block Level
         private async Task ProcessAllBlocksAsync(IterationRowItem iterationItem, CancellationToken ct)
         {
-            var blobPathProvider = GetBlobPathFactory(iterationItem.SourceTable);
+            var blobPathProvider = GetBlobPathFactory();
             var blockItems = RowItemGateway.InMemoryCache
                 .ActivityMap[iterationItem.ActivityName]
                 .IterationMap[iterationItem.IterationId]
@@ -190,28 +192,15 @@ namespace KustoCopyConsole.Runner
             await Task.WhenAll(processBlockTasks);
         }
 
-        private IStagingBlobUriProvider GetBlobPathFactory(TableIdentity sourceTable)
+        private IStagingBlobUriProvider GetBlobPathFactory()
         {
-            var activity = Parameterization.Activities
-                .Values
-                .Where(a => a.Source.GetTableIdentity() == sourceTable)
-                .FirstOrDefault();
+            var tempUriProvider = new AzureBlobUriProvider(
+                Parameterization.StagingStorageContainers
+                .Select(s => new Uri(s))
+                .ToImmutableArray(),
+                Parameterization.GetCredentials());
 
-            if (activity == null)
-            {
-                throw new InvalidDataException($"Can't find table in parameters:  {sourceTable}");
-            }
-            else
-            {
-                var destinationTable = activity.Destination.GetTableIdentity();
-                var tempUriProvider = new AzureBlobUriProvider(
-                    Parameterization.StagingStorageContainers
-                    .Select(s => new Uri(s))
-                    .ToImmutableArray(),
-                    Parameterization.GetCredentials());
-
-                return tempUriProvider;
-            }
+            return tempUriProvider;
         }
 
         private async Task ProcessSingleBlockAsync(
@@ -240,7 +229,6 @@ namespace KustoCopyConsole.Runner
 
             blockItem = await exportingRunner.RunAsync(
                 blobPathProvider,
-                iterationItem,
                 blockItem,
                 ct);
 

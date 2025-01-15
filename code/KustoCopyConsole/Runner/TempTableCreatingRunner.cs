@@ -48,13 +48,15 @@ namespace KustoCopyConsole.Runner
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 activity.DestinationTable.ClusterUri,
                 activity.DestinationTable.DatabaseName);
+            var priority = new KustoPriority(
+                iterationItem.ActivityName, iterationItem.IterationId);
 
             await dbCommandClient.DropTableIfExistsAsync(
-                iterationItem.IterationId,
+                priority,
                 iterationItem.TempTableName,
                 ct);
             await dbCommandClient.CreateTempTableAsync(
-                iterationItem.IterationId,
+                priority,
                 activity.DestinationTable.TableName,
                 iterationItem.TempTableName,
                 ct);

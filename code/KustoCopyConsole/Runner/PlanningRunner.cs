@@ -56,11 +56,11 @@ namespace KustoCopyConsole.Runner
                 .ActivityMap[iterationItem.ActivityName]
                 .RowItem;
             var queryClient = DbClientFactory.GetDbQueryClient(
-                activity.SourceDatabase.ClusterUri,
-                activity.SourceDatabase.DatabaseName);
+                activity.SourceTable.ClusterUri,
+                activity.SourceTable.DatabaseName);
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                activity.SourceDatabase.ClusterUri,
-                activity.SourceDatabase.DatabaseName);
+                activity.SourceTable.ClusterUri,
+                activity.SourceTable.DatabaseName);
 
             //  Loop on block batches
             while (iterationItem.State == TableState.Planning)
@@ -147,18 +147,23 @@ namespace KustoCopyConsole.Runner
         }
 
         //  Merge results from query + show extents command
-        private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
-            IterationRowItem sourceTableItem,
+        private async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
+            IterationRowItem iterationItem,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)
         {
+            var activityItem = RowItemGateway.InMemoryCache
+                .ActivityMap[iterationItem.ActivityName]
+                .RowItem;
+            var activityParam = Parameterization.Activities[iterationItem.ActivityName];
             var distributions = await queryClient.GetRecordDistributionAsync(
-                sourceTableItem.IterationId,
-                sourceTableItem.SourceTable.TableName,
-                sourceTableItem.CursorStart,
-                sourceTableItem.CursorEnd,
+                new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                activityItem.SourceTable.TableName,
+                activityParam.KqlQuery,
+                iterationItem.CursorStart,
+                iterationItem.CursorEnd,
                 ingestionTimeStart,
                 MAX_STATS_COUNT,
                 ct);
@@ -170,8 +175,8 @@ namespace KustoCopyConsole.Runner
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Distinct();
                 var extentDates = await dbCommandClient.GetExtentDatesAsync(
-                    sourceTableItem.IterationId,
-                    sourceTableItem.SourceTable.TableName,
+                    new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                    activityItem.SourceTable.TableName,
                     extentIds,
                     ct);
 
@@ -195,7 +200,7 @@ namespace KustoCopyConsole.Runner
                 else
                 {
                     return await GetRecordDistributionInExtents(
-                        sourceTableItem,
+                        iterationItem,
                         ingestionTimeStart,
                         queryClient,
                         dbCommandClient,

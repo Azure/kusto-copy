@@ -40,14 +40,16 @@ namespace KustoCopyConsole.Runner
                 var commandClient = DbClientFactory.GetDbCommandClient(
                     activityCache.RowItem.DestinationTable.ClusterUri,
                     activityCache.RowItem.DestinationTable.DatabaseName);
+                var priority = new KustoPriority(
+                    blockItem.ActivityName, blockItem.IterationId, blockItem.BlockId);
                 var extentCount = await commandClient.MoveExtentsAsync(
-                    blockItem.IterationId,
+                    priority,
                     iterationItem.TempTableName,
                     activityCache.RowItem.DestinationTable.TableName,
                     blockItem.BlockTag,
                     ct);
                 var cleanCount = await commandClient.CleanExtentTagsAsync(
-                    blockItem.IterationId,
+                    priority,
                     activityCache.RowItem.DestinationTable.TableName,
                     blockItem.BlockTag,
                     ct);

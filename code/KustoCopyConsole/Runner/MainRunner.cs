@@ -150,7 +150,7 @@ namespace KustoCopyConsole.Runner
                 {
                     State = ActivityState.Active,
                     ActivityName = activityParam.ActivityName,
-                    SourceDatabase = activityParam.Source.GetTableIdentity(),
+                    SourceTable = activityParam.Source.GetTableIdentity(),
                     DestinationTable = activityParam.GetEffectiveDestinationTableIdentity()
                 };
 

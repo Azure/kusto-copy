@@ -14,7 +14,7 @@ namespace KustoCopyConsole
             's',
             "source",
             Required = false,
-            HelpText = "Set the source database in the form cluster uri/database, e.g. https://help.kusto.windows.net/Samples")]
+            HelpText = "Set the source in the form cluster uri/database/table, e.g. https://help.kusto.windows.net/Samples/nyc_taxi")]
         public string Source { get; set; } = string.Empty;
 
         [Option(
@@ -34,14 +34,14 @@ namespace KustoCopyConsole
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;
 
+        [Option('q', "query", Required = true, HelpText = "Set query, e.g. nyc_taxi.")]
+        public string Query { get; set; } = string.Empty;
+
         [Option(
             "continuous",
             Required = false,
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool IsContinuousRun { get; set; } = false;
-
-        [Option('q', "query", Required = true, HelpText = "Set query, e.g. nyc_taxi.")]
-        public string Query { get; set; } = string.Empty;
 
         [Option("log-path", Required = false, HelpText = "Set log file path.")]
         public string LogFilePath { get; set; } = string.Empty;
