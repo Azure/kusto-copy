@@ -39,49 +39,56 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<IterationRowItem> CreateTempTableAsync(
-            IterationRowItem tableRowItem,
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
+            var activity = RowItemGateway.InMemoryCache
+                .ActivityMap[iterationItem.ActivityName]
+                .RowItem;
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                tableRowItem.DestinationTable.ClusterUri,
-                tableRowItem.DestinationTable.DatabaseName);
+                activity.DestinationTable.ClusterUri,
+                activity.DestinationTable.DatabaseName);
 
             await dbCommandClient.DropTableIfExistsAsync(
-                tableRowItem.IterationId,
-                tableRowItem.TempTableName,
+                iterationItem.IterationId,
+                iterationItem.TempTableName,
                 ct);
             await dbCommandClient.CreateTempTableAsync(
-                tableRowItem.IterationId,
-                tableRowItem.DestinationTable.TableName,
-                tableRowItem.TempTableName,
+                iterationItem.IterationId,
+                activity.DestinationTable.TableName,
+                iterationItem.TempTableName,
                 ct);
 
-            tableRowItem = tableRowItem.ChangeState(TableState.TempTableCreated);
+            iterationItem = iterationItem.ChangeState(TableState.TempTableCreated);
 
-            var rowItemAppend = await RowItemGateway.AppendAsync(tableRowItem, ct);
+            var rowItemAppend = await RowItemGateway.AppendAsync(iterationItem, ct);
 
             //  We want to make sure this is recorded before we start ingesting data into it
             await rowItemAppend.ItemAppendTask;
-            return tableRowItem;
+
+            return iterationItem;
         }
 
         private async Task<IterationRowItem> PrepareTempTableAsync(
-            IterationRowItem tableRowItem,
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
+            var activity = RowItemGateway.InMemoryCache
+                .ActivityMap[iterationItem.ActivityName]
+                .RowItem;
             var tempTableName =
-                $"kc-{tableRowItem.DestinationTable.TableName}-{Guid.NewGuid().ToString("N")}";
+                $"kc-{activity.DestinationTable.TableName}-{Guid.NewGuid().ToString("N")}";
 
-            tableRowItem = tableRowItem.ChangeState(TableState.TempTableCreating);
-            tableRowItem.TempTableName = tempTableName;
+            iterationItem = iterationItem.ChangeState(TableState.TempTableCreating);
+            iterationItem.TempTableName = tempTableName;
 
-            var rowItemAppend = await RowItemGateway.AppendAsync(tableRowItem, ct);
+            var rowItemAppend = await RowItemGateway.AppendAsync(iterationItem, ct);
 
             //  We want to ensure the item is appended before creating a temp table so
             //  we don't lose track of the table
             await rowItemAppend.ItemAppendTask;
 
-            return tableRowItem;
+            return iterationItem;
         }
     }
 }

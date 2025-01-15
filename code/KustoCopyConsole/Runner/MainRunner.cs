@@ -1,5 +1,6 @@
-﻿using Azure.Core;
-using Azure.Identity;
+﻿using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage.LocalDisk;
@@ -10,10 +11,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems;
+using Kusto.Cloud.Platform.Utils;
 
 namespace KustoCopyConsole.Runner
 {
@@ -84,20 +82,21 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task RunActivityAsync(
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             CancellationToken ct)
         {
-            if (activity.TableOption.ExportMode != ExportMode.BackfillOnly)
+            if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
             {
                 throw new NotSupportedException(
-                    $"'{activity.TableOption.ExportMode}' isn't supported yet");
+                    $"'{activityParam.TableOption.ExportMode}' isn't supported yet");
             }
 
-            var sourceTableIdentity = activity.Source.GetTableIdentity();
-            var destinationTableIdentity = activity.GetEffectiveDestinationTableIdentity();
+            await EnsureActivityAsync(activityParam, ct);
+
             var cache = RowItemGateway.InMemoryCache;
-            var cachedIterations = cache.ActivityMap.ContainsKey(sourceTableIdentity)
-                ? cache.ActivityMap[sourceTableIdentity].IterationMap.Values
+            var activity = cache.ActivityMap[activityParam.ActivityName].RowItem;
+            var cachedIterations = cache.ActivityMap.ContainsKey(activityParam.ActivityName)
+                ? cache.ActivityMap[activityParam.ActivityName].IterationMap.Values
                 : Array.Empty<IterationCache>();
             var completedIterations = cachedIterations
                 .Select(c => c.RowItem)
@@ -106,7 +105,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.RowItem)
                 .Where(i => i.State != TableState.Completed);
             var isBackfillOnly =
-                activity.TableOption.ExportMode == ExportMode.BackfillOnly;
+                activityParam.TableOption.ExportMode == ExportMode.BackfillOnly;
             var iterationRunner =
                 new IterationRunner(Parameterization, RowItemGateway, DbClientFactory);
 
@@ -125,8 +124,7 @@ namespace KustoCopyConsole.Runner
                 var newIterationItem = new IterationRowItem
                 {
                     State = TableState.Starting,
-                    SourceTable = sourceTableIdentity,
-                    DestinationTable = destinationTableIdentity,
+                    ActivityName = activityParam.ActivityName,
                     IterationId = newIterationId,
                     CursorStart = cursorStart,
                     CursorEnd = string.Empty
@@ -139,6 +137,24 @@ namespace KustoCopyConsole.Runner
             {
                 await Task.WhenAll(activeIterations
                     .Select(i => iterationRunner.RunAsync(i, ct)));
+            }
+        }
+
+        private async Task EnsureActivityAsync(
+            ActivityParameterization activityParam,
+            CancellationToken ct)
+        {
+            if (!RowItemGateway.InMemoryCache.ActivityMap.ContainsKey(activityParam.ActivityName))
+            {
+                var activity = new ActivityRowItem
+                {
+                    State = ActivityState.Active,
+                    ActivityName = activityParam.ActivityName,
+                    SourceDatabase = activityParam.Source.GetTableIdentity(),
+                    DestinationTable = activityParam.GetEffectiveDestinationTableIdentity()
+                };
+
+                await RowItemGateway.AppendAsync(activity, ct);
             }
         }
     }

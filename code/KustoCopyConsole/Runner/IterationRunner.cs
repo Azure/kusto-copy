@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Runner
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .ActivityMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.ActivityName]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -80,7 +80,7 @@ namespace KustoCopyConsole.Runner
                 () =>
                 {
                     var iteration = RowItemGateway.InMemoryCache
-                    .ActivityMap[iterationItem.SourceTable]
+                    .ActivityMap[iterationItem.ActivityName]
                     .IterationMap[iterationItem.IterationId];
                     var currentIterationItem = iteration
                     .RowItem;
@@ -126,9 +126,12 @@ namespace KustoCopyConsole.Runner
         {
             if (iterationItem.State == TableState.Starting)
             {
+                var activity = RowItemGateway.InMemoryCache
+                    .ActivityMap[iterationItem.ActivityName]
+                    .RowItem;
                 var queryClient = DbClientFactory.GetDbQueryClient(
-                        iterationItem.SourceTable.ClusterUri,
-                        iterationItem.SourceTable.DatabaseName);
+                        activity.SourceDatabase.ClusterUri,
+                        activity.SourceDatabase.DatabaseName);
                 var cursorEnd = await queryClient.GetCurrentCursorAsync(ct);
 
                 iterationItem = iterationItem.ChangeState(TableState.Planning);
@@ -171,7 +174,7 @@ namespace KustoCopyConsole.Runner
         {
             var blobPathProvider = GetBlobPathFactory(iterationItem.SourceTable);
             var blockItems = RowItemGateway.InMemoryCache
-                .ActivityMap[iterationItem.SourceTable]
+                .ActivityMap[iterationItem.ActivityName]
                 .IterationMap[iterationItem.IterationId]
                 .BlockMap
                 .Values

@@ -59,8 +59,7 @@ namespace KustoCopyConsole.Runner
                 .Select(e => new UrlRowItem
                 {
                     State = UrlState.Exported,
-                    SourceTable = blockItem.SourceTable,
-                    DestinationTable = blockItem.DestinationTable,
+                    ActivityName = blockItem.ActivityName,
                     IterationId = blockItem.IterationId,
                     BlockId = blockItem.BlockId,
                     Url = e.BlobUri.ToString(),
@@ -90,7 +89,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iteration = RowItemGateway.InMemoryCache
-                .ActivityMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.ActivityName]
                 .IterationMap[blockItem.IterationId]
                 .RowItem;
             var operationId = await exportClient.NewExportAsync(
@@ -115,7 +114,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var existingUrls = RowItemGateway.InMemoryCache
-                .ActivityMap[blockItem.SourceTable]
+                .ActivityMap[blockItem.ActivityName]
                 .IterationMap[blockItem.IterationId]
                 .BlockMap[blockItem.BlockId]
                 .UrlMap

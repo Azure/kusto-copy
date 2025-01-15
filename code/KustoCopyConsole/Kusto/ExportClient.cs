@@ -1,5 +1,4 @@
-﻿using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Kusto.Data;
+﻿using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections;

@@ -11,9 +11,7 @@ namespace KustoCopyConsole.Entity.RowItems
     {
         public TableState State { get; set; }
 
-        public TableIdentity SourceTable { get; set; } = TableIdentity.Empty;
-
-        public TableIdentity DestinationTable { get; set; } = TableIdentity.Empty;
+        public string ActivityName { get; set; } = string.Empty;
 
         public long IterationId { get; set; }
 
@@ -25,8 +23,10 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public override void Validate()
         {
-            SourceTable.Validate();
-            DestinationTable.Validate();
+            if (string.IsNullOrWhiteSpace(ActivityName))
+            {
+                throw new InvalidDataException($"{nameof(ActivityName)} must have a value");
+            }
             if (IterationId < 1)
             {
                 throw new InvalidDataException(

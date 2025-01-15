@@ -36,9 +36,8 @@ namespace KustoCopyConsole.Runner
             BlockRowItem blockItem,
             CancellationToken ct)
         {
-            var iterationItem = RowItemGateway.InMemoryCache
-                .ActivityMap[blockItem.SourceTable]
-                .IterationMap[blockItem.IterationId];
+            var activityCache = RowItemGateway.InMemoryCache.ActivityMap[blockItem.ActivityName];
+            var iterationItem = activityCache.IterationMap[blockItem.IterationId];
             var urlItems = iterationItem
                 .BlockMap[blockItem.BlockId]
                 .UrlMap
@@ -46,8 +45,8 @@ namespace KustoCopyConsole.Runner
                 .Select(u => u.RowItem);
             var tempTableName = iterationItem.RowItem.TempTableName;
             var ingestClient = DbClientFactory.GetIngestClient(
-                blockItem.DestinationTable.ClusterUri,
-                blockItem.DestinationTable.DatabaseName,
+                activityCache.RowItem.DestinationTable.ClusterUri,
+                activityCache.RowItem.DestinationTable.DatabaseName,
                 tempTableName);
             var blockTag = $"kusto-copy:{Guid.NewGuid()}";
             var uriTasks = urlItems

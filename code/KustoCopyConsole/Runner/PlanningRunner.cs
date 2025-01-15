@@ -49,28 +49,31 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<IterationRowItem> PlanBlocksAsync(
-            IterationRowItem tableItem,
+            IterationRowItem iterationItem,
             CancellationToken ct)
         {
+            var activity = RowItemGateway.InMemoryCache
+                .ActivityMap[iterationItem.ActivityName]
+                .RowItem;
             var queryClient = DbClientFactory.GetDbQueryClient(
-                tableItem.SourceTable.ClusterUri,
-                tableItem.SourceTable.DatabaseName);
+                activity.SourceDatabase.ClusterUri,
+                activity.SourceDatabase.DatabaseName);
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                tableItem.SourceTable.ClusterUri,
-                tableItem.SourceTable.DatabaseName);
+                activity.SourceDatabase.ClusterUri,
+                activity.SourceDatabase.DatabaseName);
 
             //  Loop on block batches
-            while (tableItem.State == TableState.Planning)
+            while (iterationItem.State == TableState.Planning)
             {
                 var blockMap = RowItemGateway.InMemoryCache
-                    .ActivityMap[tableItem.SourceTable]
-                    .IterationMap[tableItem.IterationId]
+                    .ActivityMap[iterationItem.ActivityName]
+                    .IterationMap[iterationItem.IterationId]
                     .BlockMap;
                 var lastBlock = blockMap.Any()
                     ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                     : null;
                 var distributionInExtents = await GetRecordDistributionInExtents(
-                    tableItem,
+                    iterationItem,
                     lastBlock?.IngestionTimeEnd,
                     queryClient,
                     dbCommandClient,
@@ -86,7 +89,7 @@ namespace KustoCopyConsole.Runner
                     while (orderedDistributionInExtents.Any())
                     {
                         (var newBlockItem, var remainingDistributionInExtents) = PlanSingleBlock(
-                            tableItem,
+                            iterationItem,
                             lastBlock,
                             orderedDistributionInExtents);
 
@@ -98,16 +101,16 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    tableItem = tableItem.ChangeState(TableState.Planned);
-                    await RowItemGateway.AppendAsync(tableItem, ct);
+                    iterationItem = iterationItem.ChangeState(TableState.Planned);
+                    await RowItemGateway.AppendAsync(iterationItem, ct);
                 }
             }
 
-            return tableItem;
+            return iterationItem;
         }
 
         private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(
-            IterationRowItem tableItem,
+            IterationRowItem iterationItem,
             BlockRowItem? lastBlock,
             IImmutableList<RecordDistributionInExtent> distributionInExtents)
         {
@@ -129,9 +132,8 @@ namespace KustoCopyConsole.Runner
                     var blockItem = new BlockRowItem
                     {
                         State = BlockState.Planned,
-                        SourceTable = tableItem.SourceTable,
-                        DestinationTable = tableItem.DestinationTable,
-                        IterationId = tableItem.IterationId,
+                        ActivityName = iterationItem.ActivityName,
+                        IterationId = iterationItem.IterationId,
                         BlockId = nextBlockId++,
                         IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
                         IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)

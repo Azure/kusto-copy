@@ -3,21 +3,19 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
-    internal class ActivityCache
+    internal class ActivityCache : CacheBase<ActivityRowItem>
     {
         public ActivityCache(
+            ActivityRowItem item,
             IImmutableDictionary<long, IterationCache> iterationMap)
+            : base(item)
         {
             IterationMap = iterationMap;
         }
 
-        public ActivityCache(IterationRowItem iterationItem)
+        public ActivityCache(ActivityRowItem item)
+            : this(item, ImmutableDictionary<long, IterationCache>.Empty)
         {
-            var iterationId = iterationItem.IterationId;
-
-            IterationMap = ImmutableDictionary<long, IterationCache>
-                .Empty
-                .Add(iterationId, new IterationCache(iterationItem));
         }
 
         public IImmutableDictionary<long, IterationCache> IterationMap { get; }
@@ -26,7 +24,7 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var iterationId = iteration.RowItem.IterationId;
 
-            return new ActivityCache(IterationMap.SetItem(iterationId, iteration));
+            return new ActivityCache(RowItem, IterationMap.SetItem(iterationId, iteration));
         }
     }
 }
