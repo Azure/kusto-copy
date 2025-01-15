@@ -34,7 +34,7 @@ namespace KustoCopyTest.InMemoryCache
                 RowCount = 125
             };
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = TableState.Planning,
                 IterationId = iterationId,

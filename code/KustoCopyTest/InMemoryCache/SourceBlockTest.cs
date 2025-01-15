@@ -23,7 +23,7 @@ namespace KustoCopyTest.InMemoryCache
                 BlockId = blockId
             };
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = TableState.Planning,
                 IterationId = iterationId,
@@ -60,7 +60,7 @@ namespace KustoCopyTest.InMemoryCache
                 OperationId = "abc"
             };
 
-            cache.AppendItem(new TableRowItem
+            cache.AppendItem(new IterationRowItem
             {
                 State = TableState.Planning,
                 IterationId = iterationId,

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class TableRowItem : RowItemBase
+    internal class IterationRowItem : RowItemBase
     {
         public TableState State { get; set; }
 
@@ -44,9 +44,9 @@ namespace KustoCopyConsole.Entity.RowItems
             }
         }
 
-        public TableRowItem ChangeState(TableState newState)
+        public IterationRowItem ChangeState(TableState newState)
         {
-            var clone = (TableRowItem)Clone();
+            var clone = (IterationRowItem)Clone();
 
             clone.State = newState;
 

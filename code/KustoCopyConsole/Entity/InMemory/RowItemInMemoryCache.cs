@@ -60,7 +60,7 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             switch (item)
             {
-                case TableRowItem st:
+                case IterationRowItem st:
                     return AppendSourceTable(st);
                 case BlockRowItem sb:
                     return AppendSourceBlock(sb);
@@ -73,7 +73,7 @@ namespace KustoCopyConsole.Entity.InMemory
         }
 
         private IImmutableDictionary<TableIdentity, TableCache> AppendSourceTable(
-            TableRowItem item)
+            IterationRowItem item)
         {
             var tableId = item.SourceTable;
 

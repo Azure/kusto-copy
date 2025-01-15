@@ -122,7 +122,7 @@ namespace KustoCopyConsole.Runner
                 var cursorStart = lastIteration != null
                     ? lastIteration.CursorEnd
                     : string.Empty;
-                var newIterationItem = new TableRowItem
+                var newIterationItem = new IterationRowItem
                 {
                     State = TableState.Starting,
                     SourceTable = sourceTableIdentity,

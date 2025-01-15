@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task<BlockRowItem> RunAsync(
             IStagingBlobUriProvider blobPathProvider,
-            TableRowItem tableRowItem,
+            IterationRowItem tableRowItem,
             BlockRowItem blockItem,
             CancellationToken ct)
         {

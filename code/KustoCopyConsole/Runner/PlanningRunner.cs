@@ -36,8 +36,8 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task<TableRowItem> RunAsync(
-            TableRowItem tableRowItem,
+        public async Task<IterationRowItem> RunAsync(
+            IterationRowItem tableRowItem,
             CancellationToken ct)
         {
             if (tableRowItem.State == TableState.Planning)
@@ -48,8 +48,8 @@ namespace KustoCopyConsole.Runner
             return tableRowItem;
         }
 
-        private async Task<TableRowItem> PlanBlocksAsync(
-            TableRowItem tableItem,
+        private async Task<IterationRowItem> PlanBlocksAsync(
+            IterationRowItem tableItem,
             CancellationToken ct)
         {
             var queryClient = DbClientFactory.GetDbQueryClient(
@@ -107,7 +107,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(
-            TableRowItem tableItem,
+            IterationRowItem tableItem,
             BlockRowItem? lastBlock,
             IImmutableList<RecordDistributionInExtent> distributionInExtents)
         {
@@ -146,7 +146,7 @@ namespace KustoCopyConsole.Runner
 
         //  Merge results from query + show extents command
         private static async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
-            TableRowItem sourceTableItem,
+            IterationRowItem sourceTableItem,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,

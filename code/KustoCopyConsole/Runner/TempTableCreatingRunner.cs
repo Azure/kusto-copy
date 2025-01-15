@@ -24,7 +24,7 @@ namespace KustoCopyConsole.Runner
         /// <param name="tableRowItem"></param>
         /// <param name="ct"></param>
         /// <returns></returns>
-        public async Task<TableRowItem> RunAsync(TableRowItem tableRowItem, CancellationToken ct)
+        public async Task<IterationRowItem> RunAsync(IterationRowItem tableRowItem, CancellationToken ct)
         {
             if (tableRowItem.State == TableState.Planned)
             {
@@ -38,8 +38,8 @@ namespace KustoCopyConsole.Runner
             return tableRowItem;
         }
 
-        private async Task<TableRowItem> CreateTempTableAsync(
-            TableRowItem tableRowItem,
+        private async Task<IterationRowItem> CreateTempTableAsync(
+            IterationRowItem tableRowItem,
             CancellationToken ct)
         {
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
@@ -65,8 +65,8 @@ namespace KustoCopyConsole.Runner
             return tableRowItem;
         }
 
-        private async Task<TableRowItem> PrepareTempTableAsync(
-            TableRowItem tableRowItem,
+        private async Task<IterationRowItem> PrepareTempTableAsync(
+            IterationRowItem tableRowItem,
             CancellationToken ct)
         {
             var tempTableName =

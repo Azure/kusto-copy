@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Entity.InMemory
             IterationMap = iterationMap;
         }
 
-        public TableCache(TableRowItem iterationItem)
+        public TableCache(IterationRowItem iterationItem)
         {
             var iterationId = iterationItem.IterationId;
 
