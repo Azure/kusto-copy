@@ -61,7 +61,7 @@ namespace KustoCopyConsole.Runner
                 if (rowCount == targetRowCount)
                 {
                     blockItem = blockItem.ChangeState(BlockState.Ingested);
-                    await RowItemGateway.AppendAsync(blockItem, ct);
+                    RowItemGateway.Append(blockItem);
 
                     return blockItem;
                 }

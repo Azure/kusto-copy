@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Runner
                     ct);
 
                 blockItem = blockItem.ChangeState(BlockState.ExtentMoved);
-                await RowItemGateway.AppendAsync(blockItem, ct);
+                RowItemGateway.Append(blockItem);
             }
 
             return blockItem;

@@ -91,7 +91,7 @@ namespace KustoCopyConsole.Runner
                     $"'{activityParam.TableOption.ExportMode}' isn't supported yet");
             }
 
-            await EnsureActivityAsync(activityParam, ct);
+            EnsureActivity(activityParam);
 
             var cache = RowItemGateway.InMemoryCache;
             var activity = cache.ActivityMap[activityParam.ActivityName].RowItem;
@@ -130,7 +130,7 @@ namespace KustoCopyConsole.Runner
                     CursorEnd = string.Empty
                 };
 
-                await RowItemGateway.AppendAsync(newIterationItem, ct);
+                RowItemGateway.Append(newIterationItem);
                 await iterationRunner.RunAsync(newIterationItem, ct);
             }
             else
@@ -140,9 +140,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task EnsureActivityAsync(
-            ActivityParameterization activityParam,
-            CancellationToken ct)
+        private void EnsureActivity(ActivityParameterization activityParam)
         {
             if (!RowItemGateway.InMemoryCache.ActivityMap.ContainsKey(activityParam.ActivityName))
             {
@@ -154,7 +152,7 @@ namespace KustoCopyConsole.Runner
                     DestinationTable = activityParam.GetEffectiveDestinationTableIdentity()
                 };
 
-                await RowItemGateway.AppendAsync(activity, ct);
+                RowItemGateway.Append(activity);
             }
         }
     }

@@ -63,7 +63,7 @@ namespace KustoCopyConsole.Runner
 
             blockItem = blockItem.ChangeState(BlockState.Queued);
             blockItem.BlockTag = blockTag;
-            await RowItemGateway.AppendAsync(blockItem, ct);
+            RowItemGateway.Append(blockItem);
 
             return blockItem;
         }

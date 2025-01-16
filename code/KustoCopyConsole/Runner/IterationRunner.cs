@@ -138,7 +138,7 @@ namespace KustoCopyConsole.Runner
 
                 iterationItem = iterationItem.ChangeState(TableState.Planning);
                 iterationItem.CursorEnd = cursorEnd;
-                await RowItemGateway.AppendAsync(iterationItem, ct);
+                RowItemGateway.Append(iterationItem);
             }
 
             return iterationItem;

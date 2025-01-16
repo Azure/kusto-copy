@@ -62,11 +62,7 @@ namespace KustoCopyConsole.Runner
                 ct);
 
             iterationItem = iterationItem.ChangeState(TableState.TempTableCreated);
-
-            var rowItemAppend = await RowItemGateway.AppendAsync(iterationItem, ct);
-
-            //  We want to make sure this is recorded before we start ingesting data into it
-            await rowItemAppend.ItemAppendTask;
+            RowItemGateway.Append(iterationItem);
 
             return iterationItem;
         }
@@ -84,11 +80,9 @@ namespace KustoCopyConsole.Runner
             iterationItem = iterationItem.ChangeState(TableState.TempTableCreating);
             iterationItem.TempTableName = tempTableName;
 
-            var rowItemAppend = await RowItemGateway.AppendAsync(iterationItem, ct);
-
             //  We want to ensure the item is appended before creating a temp table so
             //  we don't lose track of the table
-            await rowItemAppend.ItemAppendTask;
+            await RowItemGateway.AppendAndPersistAsync(iterationItem, ct);
 
             return iterationItem;
         }

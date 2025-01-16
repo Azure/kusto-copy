@@ -14,6 +14,8 @@ namespace KustoCopyConsole.Entity.InMemory
         private volatile IImmutableDictionary<string, ActivityCache> _activityMap =
             ImmutableDictionary<string, ActivityCache>.Empty;
 
+        public event EventHandler<RowItemBase>? RowItemAppended;
+
         public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
         {
             lock (_lock)
@@ -52,6 +54,15 @@ namespace KustoCopyConsole.Entity.InMemory
             lock (_lock)
             {
                 Interlocked.Exchange(ref _activityMap, AppendItemToCache(item));
+                OnRowItemAppended(item);
+            }
+        }
+
+        private void OnRowItemAppended(RowItemBase item)
+        {
+            if (RowItemAppended != null)
+            {
+                RowItemAppended(this, item);
             }
         }
 
