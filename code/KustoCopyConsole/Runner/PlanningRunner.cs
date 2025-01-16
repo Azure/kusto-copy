@@ -44,20 +44,20 @@ namespace KustoCopyConsole.Runner
             while (taskMap.Any() || !AllActivitiesCompleted())
             {
                 var newIterations = RowItemGateway.InMemoryCache.ActivityMap
-                    .Values
-                    .SelectMany(a => a.IterationMap.Values)
-                    .Select(i => i.RowItem)
-                    .Where(i => i.State == IterationState.Planning)
-                    .Select(i => new
-                    {
-                        Key = i.GetIterationKey(),
-                        Iteration = i
-                    })
-                    .Where(o => !taskMap.ContainsKey(o.Key));
+                     .Values
+                     .SelectMany(a => a.IterationMap.Values)
+                     .Select(i => i.RowItem)
+                     .Where(i => i.State <= IterationState.Planning)
+                     .Select(i => new
+                     {
+                         Key = i.GetIterationKey(),
+                         Iteration = i
+                     })
+                     .Where(o => !taskMap.ContainsKey(o.Key));
 
                 foreach (var o in newIterations)
                 {
-                    taskMap.Add(o.Key, PlanBlocksAsync(o.Iteration, ct));
+                    taskMap.Add(o.Key, PlanIterationAsync(o.Iteration, ct));
                 }
                 await CleanTaskMapAsync(taskMap);
                 //  Sleep
@@ -85,7 +85,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task<IterationRowItem> PlanBlocksAsync(
+        private async Task PlanIterationAsync(
             IterationRowItem iterationItem,
             CancellationToken ct)
         {
@@ -99,6 +99,25 @@ namespace KustoCopyConsole.Runner
                 activity.SourceTable.ClusterUri,
                 activity.SourceTable.DatabaseName);
 
+            if (iterationItem.State == IterationState.Starting)
+            {
+                var cursor = await queryClient.GetCurrentCursorAsync(
+                    new KustoPriority(iterationItem.GetIterationKey()),
+                    ct);
+
+                iterationItem = iterationItem.ChangeState(IterationState.Planning);
+                iterationItem.CursorEnd = cursor;
+                RowItemGateway.Append(iterationItem);
+            }
+            await PlanBlocksAsync(queryClient, dbCommandClient, iterationItem, ct);
+        }
+
+        private async Task PlanBlocksAsync(
+            DbQueryClient queryClient,
+            DbCommandClient dbCommandClient,
+            IterationRowItem iterationItem,
+            CancellationToken ct)
+        {
             //  Loop on block batches
             while (iterationItem.State == IterationState.Planning)
             {
@@ -142,8 +161,6 @@ namespace KustoCopyConsole.Runner
                     RowItemGateway.Append(iterationItem);
                 }
             }
-
-            return iterationItem;
         }
 
         private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(

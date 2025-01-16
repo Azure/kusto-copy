@@ -32,12 +32,13 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IEnumerable<RowItemBase> GetItems()
         {
-            foreach (var sourceTable in ActivityMap.Values)
+            foreach (var activity in ActivityMap.Values)
             {
-                foreach (var sourceTableIteration in sourceTable.IterationMap.Values)
+                yield return activity.RowItem;
+                foreach (var iteration in activity.IterationMap.Values)
                 {
-                    yield return sourceTableIteration.RowItem;
-                    foreach (var block in sourceTableIteration.BlockMap.Values)
+                    yield return iteration.RowItem;
+                    foreach (var block in iteration.BlockMap.Values)
                     {
                         yield return block.RowItem;
                         foreach (var url in block.UrlMap.Values)
@@ -54,8 +55,8 @@ namespace KustoCopyConsole.Entity.InMemory
             lock (_lock)
             {
                 Interlocked.Exchange(ref _activityMap, AppendItemToCache(item));
-                OnRowItemAppended(item);
             }
+            OnRowItemAppended(item);
         }
 
         private void OnRowItemAppended(RowItemBase item)

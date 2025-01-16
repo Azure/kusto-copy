@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Tracing;
 using System.Linq;
@@ -7,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto
 {
-    public class KustoPriority : IComparable<KustoPriority>
+    internal class KustoPriority : IComparable<KustoPriority>
     {
         public KustoPriority(
             string? activityName = null,
@@ -17,6 +18,11 @@ namespace KustoCopyConsole.Kusto
             ActivityName = activityName;
             IterationId = iterationId;
             BlockId = blockId;
+        }
+
+        public KustoPriority(IterationKey key)
+            : this(key.ActivityName, key.IterationId)
+        {
         }
 
         public static KustoPriority HighestPriority { get; } = new KustoPriority();

@@ -22,13 +22,11 @@ namespace KustoCopyConsole.Runner
             {
                 if(IsWakeUpRelevant(e))
                 {
-                    var wakeUpSource = _wakeUpSource;
+                    var wakeUpSource = Interlocked.Exchange(
+                        ref _wakeUpSource,
+                        new TaskCompletionSource());
 
                     wakeUpSource.TrySetResult();
-                    Interlocked.CompareExchange(
-                        ref _wakeUpSource,
-                        new TaskCompletionSource(),
-                        wakeUpSource);
                 }
             };
         }
