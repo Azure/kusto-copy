@@ -33,8 +33,6 @@ namespace KustoCopyConsole.Storage
         private readonly Task _backgroundTask;
         private readonly TaskCompletionSource _backgroundCompletedSource = new();
 
-        public event EventHandler<RowItemAppend>? RowItemAppended;
-
         #region Construction
         private RowItemGateway(
             IAppendStorage appendStorage,
@@ -138,15 +136,7 @@ namespace KustoCopyConsole.Storage
             var binaryItem = GetBytes(item);
 
             _queue.Enqueue(new QueueItem(DateTime.Now, binaryItem, TaskSource));
-            OnRowItemAppended(item);
-        }
-
-        private void OnRowItemAppended(RowItemBase item)
-        {
-            if (RowItemAppended != null)
-            {
-                RowItemAppended(this, new RowItemAppend(item));
-            }
+            InMemoryCache.AppendItem(item);
         }
 
         private static byte[] GetBytes(RowItemBase item)
@@ -165,16 +155,17 @@ namespace KustoCopyConsole.Storage
             {
                 if (_queue.TryPeek(out var queueItem))
                 {
-                    var delta = DateTime.Now.Subtract(queueItem.enqueueTime);
+                    var delta = DateTime.Now - queueItem.enqueueTime;
+                    var waitTime = FLUSH_PERIOD - delta;
 
-                    if (delta < MIN_WAIT_PERIOD)
+                    if (waitTime < MIN_WAIT_PERIOD)
                     {
                         await PersistBatchAsync(ct);
                     }
                     else
                     {   //  Wait for first item to age to about FLUSH_PERIOD
                         await Task.WhenAny(
-                            Task.Delay(delta, ct),
+                            Task.Delay(waitTime, ct),
                             _backgroundCompletedSource.Task);
                     }
                 }
@@ -209,6 +200,8 @@ namespace KustoCopyConsole.Storage
                         {
                             source.SetResult();
                         }
+
+                        return;
                     }
                     else
                     {
