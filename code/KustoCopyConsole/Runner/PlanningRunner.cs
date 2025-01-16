@@ -95,14 +95,14 @@ namespace KustoCopyConsole.Runner
 
                         orderedDistributionInExtents = remainingDistributionInExtents
                             .ToImmutableArray();
-                        await RowItemGateway.AppendAsync(newBlockItem, ct);
+                        RowItemGateway.Append(newBlockItem);
                         lastBlock = newBlockItem;
                     }
                 }
                 else
                 {
                     iterationItem = iterationItem.ChangeState(TableState.Planned);
-                    await RowItemGateway.AppendAsync(iterationItem, ct);
+                    RowItemGateway.Append(iterationItem);
                 }
             }
 

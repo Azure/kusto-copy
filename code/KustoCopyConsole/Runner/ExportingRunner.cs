@@ -35,7 +35,7 @@ namespace KustoCopyConsole.Runner
 
             if (blockItem.State == BlockState.CompletingExport)
             {
-                blockItem = await CleanUrlsAsync(blockItem, ct);
+                blockItem = CleanUrls(blockItem);
             }
             if (blockItem.State == BlockState.Planned)
             {
@@ -75,13 +75,13 @@ namespace KustoCopyConsole.Runner
                 throw new InvalidDataException("No URL exported");
             }
             blockItem = blockItem.ChangeState(BlockState.CompletingExport);
-            await RowItemGateway.AppendAsync(blockItem, ct);
+            RowItemGateway.Append(blockItem);
             foreach (var urlItem in urlItems)
             {
-                await RowItemGateway.AppendAsync(urlItem, ct);
+                RowItemGateway.Append(urlItem);
             }
             blockItem = blockItem.ChangeState(BlockState.Exported);
-            await RowItemGateway.AppendAsync(blockItem, ct);
+            RowItemGateway.Append(blockItem);
 
             return blockItem;
         }
@@ -112,14 +112,12 @@ namespace KustoCopyConsole.Runner
 
             blockItem = blockItem.ChangeState(BlockState.Exporting);
             blockItem.OperationId = operationId;
-            await RowItemGateway.AppendAsync(blockItem, ct);
+            RowItemGateway.Append(blockItem);
 
             return blockItem;
         }
 
-        private async Task<BlockRowItem> CleanUrlsAsync(
-            BlockRowItem blockItem,
-            CancellationToken ct)
+        private BlockRowItem CleanUrls(BlockRowItem blockItem)
         {
             var existingUrls = RowItemGateway.InMemoryCache
                 .ActivityMap[blockItem.ActivityName]
@@ -130,12 +128,10 @@ namespace KustoCopyConsole.Runner
 
             foreach (var url in existingUrls)
             {
-                await RowItemGateway.AppendAsync(
-                    url.RowItem.ChangeState(UrlState.Deleted),
-                    ct);
+                RowItemGateway.Append(url.RowItem.ChangeState(UrlState.Deleted));
             }
             blockItem = blockItem.ChangeState(BlockState.Exporting);
-            await RowItemGateway.AppendAsync(blockItem, ct);
+            RowItemGateway.Append(blockItem);
 
             return blockItem;
         }

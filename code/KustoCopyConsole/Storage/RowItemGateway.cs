@@ -1,5 +1,4 @@
-﻿using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using System;
@@ -17,40 +16,33 @@ namespace KustoCopyConsole.Storage
     internal class RowItemGateway : IAsyncDisposable
     {
         #region Inner Types
-        private record QueueItem(byte[] Buffer, TaskCompletionSource TaskSource);
-
-        private record PersistanceAsyncLock(
-            TaskCompletionSource EnterSource,
-            TaskCompletionSource ExitSource);
-
-        private record AppendTrial(
-            IEnumerable<Task> TasksToAwait,
-            RowItemAppend? RowItemAppend,
-            PersistanceAsyncLock? PersistanceAsyncLock,
-            Task? PersistanceTask,
-            byte[]? BufferToPersist);
+        private record QueueItem(
+            DateTime enqueueTime,
+            byte[] Buffer,
+            TaskCompletionSource? TaskSource);
         #endregion
 
         private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
+        private static readonly TimeSpan MIN_WAIT_PERIOD = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan FLUSH_PERIOD = TimeSpan.FromSeconds(5);
 
         private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
 
         private readonly IAppendStorage _appendStorage;
-        //  The lock object is used to lock access to the stream and switch around the task source
-        private readonly object _lock = new object();
-        private readonly MemoryStream _bufferStream = new();
-        private readonly ConcurrentQueue<Task> _schedulePersistanceQueue = new();
-        private volatile PersistanceAsyncLock _persistanceAsyncLock = new(
-            new TaskCompletionSource(),
-            new TaskCompletionSource());
+        private readonly ConcurrentQueue<QueueItem> _queue = new();
+        private readonly Task _backgroundTask;
+        private readonly TaskCompletionSource _backgroundCompletedSource = new();
 
         public event EventHandler<RowItemAppend>? RowItemAppended;
 
         #region Construction
-        private RowItemGateway(IAppendStorage appendStorage, RowItemInMemoryCache cache)
+        private RowItemGateway(
+            IAppendStorage appendStorage,
+            RowItemInMemoryCache cache,
+            CancellationToken ct)
         {
             _appendStorage = appendStorage;
+            _backgroundTask = BackgroundPersistanceAsync(ct);
             InMemoryCache = cache;
         }
 
@@ -112,7 +104,7 @@ namespace KustoCopyConsole.Storage
 
                 await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
 
-                return new RowItemGateway(appendStorage, cache);
+                return new RowItemGateway(appendStorage, cache, ct);
             }
         }
         #endregion
@@ -121,148 +113,39 @@ namespace KustoCopyConsole.Storage
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await FlushAsync(CancellationToken.None);
+            _backgroundCompletedSource.SetResult();
             await _appendStorage.DisposeAsync();
         }
 
-        public async Task<RowItemAppend> AppendAsync(RowItemBase item, CancellationToken ct)
+        public void Append(RowItemBase item)
+        {
+            AppendInternal(item, null);
+        }
+
+        public Task AppendAndPersistAsync(RowItemBase item, CancellationToken ct)
+        {
+            var taskSource = new TaskCompletionSource();
+
+            AppendInternal(item, taskSource);
+
+            return taskSource.Task;
+        }
+
+        private void AppendInternal(RowItemBase item, TaskCompletionSource? TaskSource)
         {
             item.Validate();
 
             var binaryItem = GetBytes(item);
 
-            return await AppendInternalAsync(item, binaryItem, ct);
+            _queue.Enqueue(new QueueItem(DateTime.Now, binaryItem, TaskSource));
+            OnRowItemAppended(item);
         }
 
-        public async Task FlushAsync(CancellationToken ct)
+        private void OnRowItemAppended(RowItemBase item)
         {
-            while (_schedulePersistanceQueue.TryDequeue(out var task))
+            if (RowItemAppended != null)
             {
-                await task;
-            }
-        }
-
-        private async Task<RowItemAppend> AppendInternalAsync(
-            RowItemBase item,
-            byte[] binaryItem,
-            CancellationToken ct)
-        {
-            while (true)
-            {
-                var appendTrial = TryAppendInBuffer(item, binaryItem);
-
-                await Task.WhenAll(appendTrial.TasksToAwait);
-                if (appendTrial.RowItemAppend != null)
-                {
-                    Func<Task> schedulePersistance = async () =>
-                    {
-                        await Task.Delay(FLUSH_PERIOD, ct);
-
-                        var buffer = TryAcquirePersistanceAsyncLock();
-
-                        if (buffer != null)
-                        {
-                            await PersistBufferAsync(buffer, ct);
-                        }
-                    };
-
-                    _schedulePersistanceQueue.Enqueue(schedulePersistance());
-
-                    return appendTrial.RowItemAppend;
-                }
-                else if (appendTrial.BufferToPersist != null)
-                {
-                    await PersistBufferAsync(appendTrial.BufferToPersist, ct);
-                }
-                else if (appendTrial.PersistanceTask != null)
-                {   //  Wait for the thread doing the work
-                    await appendTrial.PersistanceTask;
-                }
-                else
-                {
-                    throw new InvalidOperationException("Shouldn't get here");
-                }
-            }
-        }
-
-        private async Task PersistBufferAsync(byte[] buffer, CancellationToken ct)
-        {
-            var oldPersistanceAsyncLock = _persistanceAsyncLock;
-
-            await _appendStorage.AtomicAppendAsync(buffer, ct);
-            Interlocked.Exchange(ref _persistanceAsyncLock, new PersistanceAsyncLock(
-                new TaskCompletionSource(),
-                new TaskCompletionSource()));
-            //  Unblock waiting threads
-            oldPersistanceAsyncLock.ExitSource.SetResult();
-        }
-
-        private AppendTrial TryAppendInBuffer(RowItemBase item, byte[] binaryItem)
-        {
-            lock (_lock)
-            {
-                var tasks = DequeueTasksToAwait();
-
-                if (_bufferStream.Length + binaryItem.Length <= _appendStorage.MaxBufferSize)
-                {
-                    var package = new RowItemAppend(item, _persistanceAsyncLock.ExitSource.Task);
-
-                    _bufferStream.Write(binaryItem);
-                    OnRowItemAppended(package);
-
-                    return new AppendTrial(tasks, package, _persistanceAsyncLock, null, null);
-                }
-                else
-                {
-                    var buffer = TryAcquirePersistanceAsyncLock();
-
-                    if (buffer != null)
-                    {
-                        return new AppendTrial(tasks, null, null, null, buffer);
-                    }
-                    else
-                    {
-                        return new AppendTrial(
-                            tasks, null, null, _persistanceAsyncLock.ExitSource.Task, null);
-                    }
-                }
-            }
-        }
-
-        private IEnumerable<Task> DequeueTasksToAwait()
-        {
-            lock (_lock)
-            {
-                var tasks = new List<Task>();
-
-                while (_schedulePersistanceQueue.TryPeek(out var task) && task.IsCompleted)
-                {
-                    if (_schedulePersistanceQueue.TryDequeue(out var dequeuedTask))
-                    {
-                        tasks.Add(task);
-                    }
-                }
-
-                return tasks;
-            }
-        }
-
-        private byte[]? TryAcquirePersistanceAsyncLock()
-        {
-            lock (_lock)
-            {
-                if (_persistanceAsyncLock.EnterSource.TrySetResult())
-                {
-                    var buffer = _bufferStream.ToArray();
-
-                    _bufferStream.SetLength(0);
-
-                    return buffer;
-                }
-                else
-                {
-                    return null;
-                }
+                RowItemAppended(this, new RowItemAppend(item));
             }
         }
 
@@ -276,12 +159,74 @@ namespace KustoCopyConsole.Storage
             }
         }
 
-        private void OnRowItemAppended(RowItemAppend package)
+        private async Task BackgroundPersistanceAsync(CancellationToken ct)
         {
-            InMemoryCache.AppendItem(package.Item);
-            if (RowItemAppended != null)
+            while (!_backgroundCompletedSource.Task.IsCompleted)
             {
-                RowItemAppended(this, package);
+                if (_queue.TryPeek(out var queueItem))
+                {
+                    var delta = DateTime.Now.Subtract(queueItem.enqueueTime);
+
+                    if (delta < MIN_WAIT_PERIOD)
+                    {
+                        await PersistBatchAsync(ct);
+                    }
+                    else
+                    {   //  Wait for first item to age to about FLUSH_PERIOD
+                        await Task.WhenAny(
+                            Task.Delay(delta, ct),
+                            _backgroundCompletedSource.Task);
+                    }
+                }
+                else
+                {   //  Wait for an element to pop in
+                    await Task.WhenAny(
+                        Task.Delay(FLUSH_PERIOD, ct),
+                        _backgroundCompletedSource.Task);
+                }
+            }
+        }
+
+        private async Task PersistBatchAsync(CancellationToken ct)
+        {
+            using (var bufferStream = new MemoryStream())
+            {
+                var sources = new List<TaskCompletionSource>();
+
+                while (true)
+                {
+                    if (!_queue.TryPeek(out var queueItem)
+                        || bufferStream.Length + queueItem.Buffer.Length
+                            > _appendStorage.MaxBufferSize)
+                    {
+                        if (bufferStream.Length == 0)
+                        {
+                            throw new InvalidDataException("No buffer to append");
+                        }
+                        await _appendStorage.AtomicAppendAsync(bufferStream.ToArray(), ct);
+                        //  Release tasks
+                        foreach (var source in sources)
+                        {
+                            source.SetResult();
+                        }
+                    }
+                    else
+                    {
+                        if (!_queue.TryDequeue(out queueItem))
+                        {
+                            throw new InvalidOperationException(
+                                "We dequeue what we just peeked, this shouldn't fail");
+                        }
+                        else
+                        {
+                            bufferStream.Write(queueItem.Buffer);
+                            if (queueItem.TaskSource != null)
+                            {
+                                sources.Add(queueItem.TaskSource);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
