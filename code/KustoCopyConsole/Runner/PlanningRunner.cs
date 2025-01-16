@@ -68,7 +68,7 @@ namespace KustoCopyConsole.Runner
         protected override bool IsWakeUpRelevant(RowItemBase item)
         {
             return item is IterationRowItem i
-                && i.State == IterationState.Planning;
+                && i.State == IterationState.Starting;
         }
 
         private async Task CleanTaskMapAsync(IDictionary<IterationKey, Task> taskMap)
