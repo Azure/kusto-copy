@@ -8,16 +8,19 @@ namespace KustoCopyConsole.Runner
 {
     internal class RunnerBase
     {
+        private readonly TimeSpan _wakePeriod;
         private volatile TaskCompletionSource _wakeUpSource = new TaskCompletionSource();
 
         public RunnerBase(
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory)
+            DbClientFactory dbClientFactory,
+            TimeSpan wakePeriod)
         {
             Parameterization = parameterization;
             RowItemGateway = rowItemGateway;
             DbClientFactory = dbClientFactory;
+            _wakePeriod = wakePeriod;
             rowItemGateway.InMemoryCache.RowItemAppended += (sender, e) =>
             {
                 if(IsWakeUpRelevant(e))
@@ -58,10 +61,10 @@ namespace KustoCopyConsole.Runner
             return false;
         }
 
-        protected Task SleepAsync(TimeSpan duration, CancellationToken ct)
+        protected Task SleepAsync(CancellationToken ct)
         {
             return Task.WhenAny(
-                Task.Delay(duration, ct),
+                Task.Delay(_wakePeriod, ct),
                 WakeUpTask);
         }
     }

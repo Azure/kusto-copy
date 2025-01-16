@@ -20,8 +20,6 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public string CursorEnd { get; set; } = string.Empty;
 
-        public string TempTableName { get; set; } = string.Empty;
-
         public override void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))
@@ -36,12 +34,6 @@ namespace KustoCopyConsole.Entity.RowItems
             if (State != IterationState.Starting && string.IsNullOrWhiteSpace(CursorEnd))
             {
                 throw new InvalidDataException($"{nameof(CursorEnd)} should have a value");
-            }
-            if (State >= IterationState.TempTableCreating && string.IsNullOrWhiteSpace(TempTableName))
-            {
-                throw new InvalidDataException(
-                    $"{nameof(TempTableName)} should have a value for" +
-                    $"state {State}");
             }
         }
 

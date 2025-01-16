@@ -24,8 +24,6 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private static readonly TimeSpan WAKE_PERIOD = TimeSpan.FromMinutes(1);
-
         private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
@@ -33,7 +31,7 @@ namespace KustoCopyConsole.Runner
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory)
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromMinutes(1))
         {
         }
 
@@ -61,7 +59,7 @@ namespace KustoCopyConsole.Runner
                 }
                 await CleanTaskMapAsync(taskMap);
                 //  Sleep
-                await SleepAsync(WAKE_PERIOD, ct);
+                await SleepAsync(ct);
             }
         }
 

@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory)
-            : base(parameterization, rowItemGateway, dbClientFactory)
+            : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.Zero)
         {
         }
 
@@ -82,8 +82,12 @@ namespace KustoCopyConsole.Runner
                 }
                 var iterationRunner =
                     new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var tempTableRunner =
+                    new TempTableCreatingRunner(Parameterization, RowItemGateway, DbClientFactory);
 
-                await Task.WhenAll(iterationRunner.RunAsync(ct));
+                await Task.WhenAll(
+                    iterationRunner.RunAsync(ct),
+                    tempTableRunner.RunAsync(ct));
             }
         }
 
