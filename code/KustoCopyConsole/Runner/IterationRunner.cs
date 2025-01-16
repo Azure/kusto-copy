@@ -63,7 +63,7 @@ namespace KustoCopyConsole.Runner
                     .BlockMap;
 
                     return new ProgressReport(
-                        currentIterationItem.State == TableState.Planning
+                        currentIterationItem.State == IterationState.Planning
                         ? (blockMap.Count > 0 ? ProgessStatus.Progress : ProgessStatus.Nothing)
                         : ProgessStatus.Completed,
                         $"Planned:  {currentIterationItem.ActivityName}"
@@ -85,7 +85,7 @@ namespace KustoCopyConsole.Runner
                     var currentIterationItem = iteration
                     .RowItem;
 
-                    if (currentIterationItem.State == TableState.Planning)
+                    if (currentIterationItem.State == IterationState.Planning)
                     {
                         return new ProgressReport(ProgessStatus.Nothing, string.Empty);
                     }
@@ -124,7 +124,7 @@ namespace KustoCopyConsole.Runner
             IterationRowItem iterationItem,
             CancellationToken ct)
         {
-            if (iterationItem.State == TableState.Starting)
+            if (iterationItem.State == IterationState.Starting)
             {
                 var activity = RowItemGateway.InMemoryCache
                     .ActivityMap[iterationItem.ActivityName]
@@ -136,7 +136,7 @@ namespace KustoCopyConsole.Runner
                     new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
                     ct);
 
-                iterationItem = iterationItem.ChangeState(TableState.Planning);
+                iterationItem = iterationItem.ChangeState(IterationState.Planning);
                 iterationItem.CursorEnd = cursorEnd;
                 RowItemGateway.Append(iterationItem);
             }

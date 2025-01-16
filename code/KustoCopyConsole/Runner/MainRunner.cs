@@ -100,10 +100,10 @@ namespace KustoCopyConsole.Runner
                 : Array.Empty<IterationCache>();
             var completedIterations = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State == TableState.Completed);
+                .Where(i => i.State == IterationState.Completed);
             var activeIterations = cachedIterations
                 .Select(c => c.RowItem)
-                .Where(i => i.State != TableState.Completed);
+                .Where(i => i.State != IterationState.Completed);
             var isBackfillOnly =
                 activityParam.TableOption.ExportMode == ExportMode.BackfillOnly;
             var iterationRunner =
@@ -123,7 +123,7 @@ namespace KustoCopyConsole.Runner
                     : string.Empty;
                 var newIterationItem = new IterationRowItem
                 {
-                    State = TableState.Starting,
+                    State = IterationState.Starting,
                     ActivityName = activityParam.ActivityName,
                     IterationId = newIterationId,
                     CursorStart = cursorStart,

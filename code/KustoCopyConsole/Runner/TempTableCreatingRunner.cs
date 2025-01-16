@@ -26,11 +26,11 @@ namespace KustoCopyConsole.Runner
         /// <returns></returns>
         public async Task<IterationRowItem> RunAsync(IterationRowItem tableRowItem, CancellationToken ct)
         {
-            if (tableRowItem.State == TableState.Planned)
+            if (tableRowItem.State == IterationState.Planned)
             {
                 tableRowItem = await PrepareTempTableAsync(tableRowItem, ct);
             }
-            if (tableRowItem.State == TableState.TempTableCreating)
+            if (tableRowItem.State == IterationState.TempTableCreating)
             {
                 tableRowItem = await CreateTempTableAsync(tableRowItem, ct);
             }
@@ -61,7 +61,7 @@ namespace KustoCopyConsole.Runner
                 iterationItem.TempTableName,
                 ct);
 
-            iterationItem = iterationItem.ChangeState(TableState.TempTableCreated);
+            iterationItem = iterationItem.ChangeState(IterationState.TempTableCreated);
             RowItemGateway.Append(iterationItem);
 
             return iterationItem;
@@ -77,7 +77,7 @@ namespace KustoCopyConsole.Runner
             var tempTableName =
                 $"kc-{activity.DestinationTable.TableName}-{Guid.NewGuid().ToString("N")}";
 
-            iterationItem = iterationItem.ChangeState(TableState.TempTableCreating);
+            iterationItem = iterationItem.ChangeState(IterationState.TempTableCreating);
             iterationItem.TempTableName = tempTableName;
 
             //  We want to ensure the item is appended before creating a temp table so

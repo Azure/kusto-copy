@@ -211,7 +211,7 @@ namespace KustoCopyConsole.Entity.InMemory
             }
             else
             {
-                throw new NotSupportedException("Activity should come before block in logs");
+                throw new NotSupportedException("Activity should come before iteration in logs");
             }
         }
     }

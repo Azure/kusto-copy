@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyConsole.Entity.State
 {
-    public enum TableState
+    public enum IterationState
     {
         Starting,
         Planning,

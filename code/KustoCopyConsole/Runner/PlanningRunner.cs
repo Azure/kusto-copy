@@ -40,7 +40,7 @@ namespace KustoCopyConsole.Runner
             IterationRowItem tableRowItem,
             CancellationToken ct)
         {
-            if (tableRowItem.State == TableState.Planning)
+            if (tableRowItem.State == IterationState.Planning)
             {
                 tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
             }
@@ -63,7 +63,7 @@ namespace KustoCopyConsole.Runner
                 activity.SourceTable.DatabaseName);
 
             //  Loop on block batches
-            while (iterationItem.State == TableState.Planning)
+            while (iterationItem.State == IterationState.Planning)
             {
                 var blockMap = RowItemGateway.InMemoryCache
                     .ActivityMap[iterationItem.ActivityName]
@@ -101,7 +101,7 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    iterationItem = iterationItem.ChangeState(TableState.Planned);
+                    iterationItem = iterationItem.ChangeState(IterationState.Planned);
                     RowItemGateway.Append(iterationItem);
                 }
             }

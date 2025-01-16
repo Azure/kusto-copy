@@ -9,7 +9,7 @@ namespace KustoCopyConsole.Entity.RowItems
 {
     internal class IterationRowItem : RowItemBase
     {
-        public TableState State { get; set; }
+        public IterationState State { get; set; }
 
         public string ActivityName { get; set; } = string.Empty;
 
@@ -32,11 +32,11 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IterationId)} should be positive but is {IterationId}");
             }
-            if (State != TableState.Starting && string.IsNullOrWhiteSpace(CursorEnd))
+            if (State != IterationState.Starting && string.IsNullOrWhiteSpace(CursorEnd))
             {
                 throw new InvalidDataException($"{nameof(CursorEnd)} should have a value");
             }
-            if (State >= TableState.TempTableCreating && string.IsNullOrWhiteSpace(TempTableName))
+            if (State >= IterationState.TempTableCreating && string.IsNullOrWhiteSpace(TempTableName))
             {
                 throw new InvalidDataException(
                     $"{nameof(TempTableName)} should have a value for" +
@@ -44,7 +44,7 @@ namespace KustoCopyConsole.Entity.RowItems
             }
         }
 
-        public IterationRowItem ChangeState(TableState newState)
+        public IterationRowItem ChangeState(IterationState newState)
         {
             var clone = (IterationRowItem)Clone();
 
