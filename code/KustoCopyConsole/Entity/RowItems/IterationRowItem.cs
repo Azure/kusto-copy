@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.State;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
+using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,6 +43,11 @@ namespace KustoCopyConsole.Entity.RowItems
                     $"{nameof(TempTableName)} should have a value for" +
                     $"state {State}");
             }
+        }
+
+        public IterationKey GetIterationKey()
+        {
+            return new IterationKey(ActivityName, IterationId);
         }
 
         public IterationRowItem ChangeState(IterationState newState)

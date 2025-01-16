@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -11,8 +12,6 @@ namespace KustoCopyConsole.Runner
     internal class PlanningRunner : RunnerBase
     {
         #region Inner Types
-        private record TaskKey(string ActivityName, long IterationId);
-
         private record RecordDistributionInExtent(
             DateTime IngestionTime,
             string ExtentId,
@@ -40,7 +39,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var taskMap = new Dictionary<TaskKey, Task>();
+            var taskMap = new Dictionary<IterationKey, Task>();
 
             while (taskMap.Any() || !AllActivitiesCompleted())
             {
@@ -51,7 +50,7 @@ namespace KustoCopyConsole.Runner
                     .Where(i => i.State == IterationState.Planning)
                     .Select(i => new
                     {
-                        Key = new TaskKey(i.ActivityName, i.IterationId),
+                        Key = i.GetIterationKey(),
                         Iteration = i
                     })
                     .Where(o => !taskMap.ContainsKey(o.Key));
@@ -62,9 +61,7 @@ namespace KustoCopyConsole.Runner
                 }
                 await CleanTaskMapAsync(taskMap);
                 //  Sleep
-                await Task.WhenAny(
-                    Task.Delay(WAKE_PERIOD, ct),
-                    WakeUpTask);
+                await SleepAsync(WAKE_PERIOD, ct);
             }
         }
 
@@ -74,7 +71,7 @@ namespace KustoCopyConsole.Runner
                 && i.State == IterationState.Planning;
         }
 
-        private async Task CleanTaskMapAsync(IDictionary<TaskKey, Task> taskMap)
+        private async Task CleanTaskMapAsync(IDictionary<IterationKey, Task> taskMap)
         {
             foreach (var taskKey in taskMap.Keys.ToImmutableArray())
             {

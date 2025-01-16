@@ -73,15 +73,18 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            foreach (var a in Parameterization.Activities.Values)
+            await using (var progressBar = new ProgressBar(RowItemGateway.InMemoryCache, ct))
             {
-                EnsureActivity(a);
-                EnsureIteration(a);
-            }
-            var iterationRunner =
-                new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
+                foreach (var a in Parameterization.Activities.Values)
+                {
+                    EnsureActivity(a);
+                    EnsureIteration(a);
+                }
+                var iterationRunner =
+                    new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
 
-            await Task.WhenAll(iterationRunner.RunAsync(ct));
+                await Task.WhenAll(iterationRunner.RunAsync(ct));
+            }
         }
 
         private void EnsureIteration(ActivityParameterization activityParam)

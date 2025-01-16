@@ -59,5 +59,12 @@ namespace KustoCopyConsole.Runner
         {
             return false;
         }
+
+        protected Task SleepAsync(TimeSpan duration, CancellationToken ct)
+        {
+            return Task.WhenAny(
+                Task.Delay(duration, ct),
+                WakeUpTask);
+        }
     }
 }
