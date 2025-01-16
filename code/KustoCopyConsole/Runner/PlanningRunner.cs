@@ -1,6 +1,4 @@
-﻿using Azure.Storage.Blobs.Models;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -13,6 +11,8 @@ namespace KustoCopyConsole.Runner
     internal class PlanningRunner : RunnerBase
     {
         #region Inner Types
+        private record TaskKey(string ActivityName, long IterationId);
+
         private record RecordDistributionInExtent(
             DateTime IngestionTime,
             string ExtentId,
@@ -25,6 +25,8 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
+        private static readonly TimeSpan WAKE_PERIOD = TimeSpan.FromMinutes(1);
+
         private const int MAX_STATS_COUNT = 1000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
@@ -36,16 +38,54 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task<IterationRowItem> RunAsync(
-            IterationRowItem tableRowItem,
-            CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            if (tableRowItem.State == IterationState.Planning)
-            {
-                tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
-            }
+            var taskMap = new Dictionary<TaskKey, Task>();
 
-            return tableRowItem;
+            while (taskMap.Any() || !AllActivitiesCompleted())
+            {
+                var newIterations = RowItemGateway.InMemoryCache.ActivityMap
+                    .Values
+                    .SelectMany(a => a.IterationMap.Values)
+                    .Select(i => i.RowItem)
+                    .Where(i => i.State == IterationState.Planning)
+                    .Select(i => new
+                    {
+                        Key = new TaskKey(i.ActivityName, i.IterationId),
+                        Iteration = i
+                    })
+                    .Where(o => !taskMap.ContainsKey(o.Key));
+
+                foreach (var o in newIterations)
+                {
+                    taskMap.Add(o.Key, PlanBlocksAsync(o.Iteration, ct));
+                }
+                await CleanTaskMapAsync(taskMap);
+                //  Sleep
+                await Task.WhenAny(
+                    Task.Delay(WAKE_PERIOD, ct),
+                    WakeUpTask);
+            }
+        }
+
+        protected override bool IsWakeUpRelevant(RowItemBase item)
+        {
+            return item is IterationRowItem i
+                && i.State == IterationState.Planning;
+        }
+
+        private async Task CleanTaskMapAsync(IDictionary<TaskKey, Task> taskMap)
+        {
+            foreach (var taskKey in taskMap.Keys.ToImmutableArray())
+            {
+                var task = taskMap[taskKey];
+
+                if (task.IsCompleted)
+                {
+                    await task;
+                    taskMap.Remove(taskKey);
+                }
+            }
         }
 
         private async Task<IterationRowItem> PlanBlocksAsync(

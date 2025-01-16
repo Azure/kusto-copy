@@ -14,10 +14,7 @@
 
   <ItemGroup>
     <!-- Remove Legacy files from being compiled -->
-    <Compile Remove="Legacy\**\*.cs" />
-    <Compile Remove="Storage\Entity\**" />
-    <EmbeddedResource Remove="Storage\Entity\**" />
-    <None Remove="Storage\Entity\**" />
+    <Compile Remove="Runner\Legacy\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,11 +24,6 @@
     <Compile Remove="Orchestration\SourceTableIterationOrchestration.cs" />
     <Compile Remove="Orchestration\SourceTablePlanningOrchestration.cs" />
     <Compile Remove="Orchestration\SubOrchestrationBase.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Explicitly include Legacy files as None -->
-    <None Update="Legacy\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
