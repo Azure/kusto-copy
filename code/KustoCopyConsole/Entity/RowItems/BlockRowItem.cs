@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.State;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
+using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -68,6 +69,11 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
             }
+        }
+
+        public BlockKey GetIterationKey()
+        {
+            return new BlockKey(ActivityName, IterationId, BlockId);
         }
 
         public BlockRowItem ChangeState(BlockState newState)

@@ -25,6 +25,11 @@ namespace KustoCopyConsole.Kusto
         {
         }
 
+        public KustoPriority(BlockKey key)
+            : this(key.ActivityName, key.IterationId, key.blockId)
+        {
+        }
+
         public static KustoPriority HighestPriority { get; } = new KustoPriority();
 
         public string? ActivityName { get; }
