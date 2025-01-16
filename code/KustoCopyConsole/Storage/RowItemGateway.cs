@@ -50,6 +50,7 @@ namespace KustoCopyConsole.Storage
                 .AddType<FileVersionRowItem>(RowType.FileVersion)
                 .AddType<ActivityRowItem>(RowType.Activity)
                 .AddType<IterationRowItem>(RowType.Iteration)
+                .AddType<TempTableRowItem>(RowType.TempTable)
                 .AddType<BlockRowItem>(RowType.Block)
                 .AddType<UrlRowItem>(RowType.Url);
         }

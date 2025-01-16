@@ -6,6 +6,7 @@
         FileVersion,
         Activity,
         Iteration,
+        TempTable,
         Block,
         Url
     }

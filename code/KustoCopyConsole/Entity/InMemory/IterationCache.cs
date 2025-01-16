@@ -7,16 +7,20 @@ namespace KustoCopyConsole.Entity.InMemory
     {
         public IterationCache(
             IterationRowItem item,
+            TempTableRowItem? tempTable,
             IImmutableDictionary<long, BlockCache> blockMap)
             : base(item)
         {
+            TempTable = tempTable;
             BlockMap = blockMap;
         }
 
         public IterationCache(IterationRowItem item)
-            : this(item, ImmutableDictionary<long, BlockCache>.Empty)
+            : this(item, null, ImmutableDictionary<long, BlockCache>.Empty)
         {
         }
+
+        public TempTableRowItem? TempTable { get; }
 
         public IImmutableDictionary<long, BlockCache> BlockMap { get; }
 
@@ -24,7 +28,7 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var newBlockMap = BlockMap.SetItem(block.RowItem.BlockId, block);
 
-            return new IterationCache(RowItem, newBlockMap);
+            return new IterationCache(RowItem, TempTable, newBlockMap);
         }
     }
 }
