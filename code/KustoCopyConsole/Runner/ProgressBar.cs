@@ -87,7 +87,7 @@ namespace KustoCopyConsole.Runner
             Console.WriteLine(
                 $"Progress ({key.ActivityName}, {key.IterationId}):  Planned={blockMap.Count}, " +
                 $"Exporting={exportingCount}, Exported={exportedCount}, " +
-                $"Queued={queuedCount}, Ingested={ingestedCount}," +
+                $"Queued={queuedCount}, Ingested={ingestedCount}, " +
                 $"Moved={movedCount}");
         }
     }
