@@ -61,7 +61,8 @@ namespace KustoCopyConsole.Runner
 
                 foreach (var item in db.Items)
                 {
-                    var folderPath = $"iterations/{item.Iteration.IterationId:D20}" +
+                    var folderPath = $"activities/{item.Activity.ActivityName}" +
+                        $"iterations/{item.Iteration.IterationId:D20}" +
                         $"/blocks/{item.BlockItem.BlockId:D20}";
                     var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
                     var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(

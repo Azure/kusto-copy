@@ -16,6 +16,8 @@ namespace KustoCopyConsole.Runner
         private record ClusterBlocks(Uri ClusterUri, IEnumerable<BlockRowItem> BlockItems);
         #endregion
 
+        private const int MAX_OPERATIONS = 25;
+
         public AwaitExportedRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
@@ -43,27 +45,17 @@ namespace KustoCopyConsole.Runner
 
         private IEnumerable<ClusterBlocks> GetClusterBlocks()
         {
-            var exportingBlocks = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed)
-                .SelectMany(i => i.BlockMap.Values)
-                .Select(b => b.RowItem)
-                .Where(b => b.State == BlockState.Exporting);
+            var hierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                a => a.RowItem.State != ActivityState.Completed,
+                i => i.RowItem.State != IterationState.Completed);
+            var exportingBlocks = hierarchy
+                .Where(h => h.BlockItem.State == BlockState.Exporting);
             var clusterBlocks = exportingBlocks
-                .Select(b => new
-                {
-                    RowItemGateway.InMemoryCache
-                    .ActivityMap[b.ActivityName]
-                    .RowItem
-                    .SourceTable
-                    .ClusterUri,
-                    BlockItem = b
-                })
-                .GroupBy(o => o.ClusterUri, o => o.BlockItem)
-                .Select(g => new ClusterBlocks(g.Key, g.ToImmutableArray()));
+                .GroupBy(h => h.Activity.SourceTable.ClusterUri)
+                .Select(g => new ClusterBlocks(
+                    g.Key,
+                    g.Select(h => h.BlockItem).OrderBy(b => b.Updated).Take(MAX_OPERATIONS)));
+
             return clusterBlocks;
         }
 
