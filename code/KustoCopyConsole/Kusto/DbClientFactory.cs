@@ -17,7 +17,6 @@ namespace KustoCopyConsole.Kusto
     internal class DbClientFactory : IDisposable
     {
         private const int MAX_CONCURRENT_DM_COMMAND = 2;
-        private const int MAX_CONCURRENT_DB_COMMAND = 10;
 
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _allClusterQueryQueueMap;
@@ -65,7 +64,7 @@ namespace KustoCopyConsole.Kusto
             var allClusterCommandQueueMap = allClusterQueryCount
                 .ToImmutableDictionary(
                 o => o.Uri,
-                o => new PriorityExecutionQueue<KustoPriority>(MAX_CONCURRENT_DB_COMMAND));
+                o => new PriorityExecutionQueue<KustoPriority>(o.ConcurrentQueryCount));
             var destinationClusterDmQueryQueueMap = destinationClusterUris
                 .ToImmutableDictionary(
                 u => u,
