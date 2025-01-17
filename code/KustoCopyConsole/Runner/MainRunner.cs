@@ -90,13 +90,16 @@ namespace KustoCopyConsole.Runner
                     new AwaitExportedRunner(Parameterization, RowItemGateway, DbClientFactory);
                 var queueIngestRunner =
                     new QueueIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var awaitIngestRunner =
+                    new AwaitIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
 
                 await Task.WhenAll(
                     iterationRunner.RunAsync(ct),
                     tempTableRunner.RunAsync(ct),
                     exportingRunner.RunAsync(ct),
                     awaitExportedRunner.RunAsync(ct),
-                    queueIngestRunner.RunAsync(ct));
+                    queueIngestRunner.RunAsync(ct),
+                    awaitIngestRunner.RunAsync(ct));
             }
         }
 

@@ -30,7 +30,8 @@ namespace KustoCopyConsole.Runner
                 var exportedBlocks = allBlocks
                     .Where(h => h.BlockItem.State == BlockState.Exported);
                 var ingestionTasks = exportedBlocks
-                    .Select(h => QueueIngestBlockAsync(h, ct));
+                    .Select(h => QueueIngestBlockAsync(h, ct))
+                    .ToImmutableArray();
 
                 await Task.WhenAll(ingestionTasks);
 
