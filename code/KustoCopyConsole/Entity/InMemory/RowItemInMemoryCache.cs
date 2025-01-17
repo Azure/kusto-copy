@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -30,6 +31,24 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IImmutableDictionary<string, ActivityCache> ActivityMap
             => _activityMap;
+
+        public IEnumerable<ActivityFlatHierarchy> GetActivityFlatHierarchy(
+            Func<ActivityCache, bool> activityPredicate,
+            Func<IterationCache, bool> iterationPredicate)
+        {
+            return ActivityMap
+                .Values
+                .Where(a => activityPredicate(a))
+                .SelectMany(a => a.IterationMap.Values.Where(i => iterationPredicate(i)).Select(i => new
+                {
+                    Activity = a,
+                    Iteration = i
+                }))
+                .SelectMany(o => o.Iteration.BlockMap.Values.Select(b => new ActivityFlatHierarchy(
+                    o.Activity.RowItem,
+                    o.Iteration.RowItem,
+                    b.RowItem)));
+        }
 
         public IEnumerable<RowItemBase> GetItems()
         {

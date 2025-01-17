@@ -1,8 +1,10 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using Microsoft.Extensions.Azure;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -13,8 +15,6 @@ namespace KustoCopyConsole.Runner
     {
         #region Inner Types
         private record CapacityCache(DateTime CachedTime, int CachedCapacity);
-
-        private record ExportLineUp(Uri ClusterUri, BlockRowItem BlockItem);
         #endregion
 
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
@@ -33,7 +33,8 @@ namespace KustoCopyConsole.Runner
 
             while (!AllActivitiesCompleted())
             {
-                var exportCount = await StartExportAsync(capacityMap, ct);
+                var exportLineUp = await GetExportLineUpAsync(capacityMap, ct);
+                var exportCount = await StartExportAsync(exportLineUp, ct);
 
                 //  Sleep
                 await SleepAsync(ct);
@@ -41,108 +42,105 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<int> StartExportAsync(
-            IDictionary<Uri, CapacityCache> capacityMap,
+            IEnumerable<ActivityFlatHierarchy> exportLineUp,
             CancellationToken ct)
         {
-            var exportLineUp = await GetExportLineUpAsync(capacityMap, ct);
-            var enrichedLineUp = exportLineUp
-                .Select(o => new
+            var enrichedLineUpByDatabase = exportLineUp
+                //  Group by cluster + db
+                .GroupBy(h => (h.Activity.SourceTable.ClusterUri, h.Activity.SourceTable.DatabaseName))
+                .Select(g => new
                 {
-                    DbClient = DbClientFactory.GetDbCommandClient(o.ClusterUri, string.Empty),
-                    Query = Parameterization
-                    .Activities[o.BlockItem.ActivityName]
-                    .KqlQuery,
-                    IterationItem = RowItemGateway.InMemoryCache
-                    .ActivityMap[o.BlockItem.ActivityName]
-                    .IterationMap[o.BlockItem.IterationId]
-                    .RowItem,
-                    o.BlockItem
+                    DbClient = DbClientFactory.GetDbCommandClient(g.Key.ClusterUri, g.Key.DatabaseName),
+                    Items = g
                 });
-            var list = new List<(Task<string> Task, BlockRowItem BlockItem)>();
+            var taskList = new List<Task>();
 
-            foreach (var lineUpItem in enrichedLineUp)
+            foreach (var db in enrichedLineUpByDatabase)
             {
-                var folderPath = $"iterations/{lineUpItem.IterationItem.IterationId:D20}" +
-                    $"/blocks/{lineUpItem.BlockItem.BlockId:D20}";
-                var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                    folderPath, ct);
-                var task = lineUpItem.DbClient.ExportBlockAsync(
-                    new KustoPriority(lineUpItem.BlockItem.GetIterationKey()),
-                    writableUris,
-                    lineUpItem.Query,
-                    lineUpItem.IterationItem.CursorStart,
-                    lineUpItem.IterationItem.CursorEnd,
-                    lineUpItem.BlockItem.IngestionTimeStart,
-                    lineUpItem.BlockItem.IngestionTimeEnd,
-                    ct);
+                var dbClient = db.DbClient;
 
-                list.Add((task, lineUpItem.BlockItem));
+                foreach (var item in db.Items)
+                {
+                    var folderPath = $"iterations/{item.Iteration.IterationId:D20}" +
+                        $"/blocks/{item.BlockItem.BlockId:D20}";
+                    var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
+                    var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
+                        folderPath,
+                        ct);
+                    var exportTask = dbClient.ExportBlockAsync(
+                        new KustoPriority(item.BlockItem.GetIterationKey()),
+                        writableUris,
+                        query,
+                        item.Iteration.CursorStart,
+                        item.Iteration.CursorEnd,
+                        item.BlockItem.IngestionTimeStart,
+                        item.BlockItem.IngestionTimeEnd,
+                        ct);
+                    var updateOperationIdTask = exportTask.ContinueWith(t =>
+                    {
+                        var blockItem = item.BlockItem.ChangeState(BlockState.Exporting);
+
+                        blockItem.OperationId = t.Result;
+                        RowItemGateway.Append(blockItem);
+                    });
+
+                    taskList.Add(updateOperationIdTask);
+                }
             }
+            await Task.WhenAll(taskList);
 
-            await Task.WhenAll(list.Select(o => o.Task));
-
-            foreach (var exportItem in list)
-            {
-                var blockItem = exportItem.BlockItem.ChangeState(BlockState.Exporting);
-
-                blockItem.OperationId = exportItem.Task.Result;
-                RowItemGateway.Append(blockItem);
-            }
-
-            return list.Count;
+            return taskList.Count;
         }
 
-        private async Task<IEnumerable<ExportLineUp>> GetExportLineUpAsync(
+        private async Task<IEnumerable<ActivityFlatHierarchy>> GetExportLineUpAsync(
             IDictionary<Uri, CapacityCache> capacityMap,
             CancellationToken ct)
         {
-            //  Ensure we have the capacity for clusters with candidates 
-            await EnsureCapacityCache(capacityMap, ct);
-
-            var allBlocks = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed)
-                .SelectMany(i => i.BlockMap.Values)
-                .Select(b => b.RowItem)
-                .Where(b => b.State == BlockState.Exporting || b.State == BlockState.Planned);
-            var status = allBlocks
-                .Select(b => new
-                {
-                    BlockItem = b,
-                    RowItemGateway.InMemoryCache.ActivityMap[b.ActivityName]
-                    .RowItem.SourceTable.ClusterUri
-                })
-                .GroupBy(o => o.ClusterUri, o => o.BlockItem)
-                .Where(g => g.Any(b => b.State == BlockState.Planned))
+            var flatHierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                a => a.RowItem.State != ActivityState.Completed,
+                i => i.RowItem.State != IterationState.Completed);
+            //  Find candidates for export and group them by cluster
+            var candidatesByCluster = flatHierarchy
+                .GroupBy(h => h.Activity.SourceTable.ClusterUri)
                 .Select(g => new
                 {
                     ClusterUri = g.Key,
-                    Capacity = capacityMap[g.Key].CachedCapacity,
-                    ExportingCount = g.Count(b => b.State == BlockState.Exporting),
-                    Candidates = g
-                    .Where(b => b.State == BlockState.Planned)
-                    .OrderBy(b => new KustoPriority(b.GetIterationKey()))
-                });
-            var exportLineUp = status
-                .Where(o => o.Capacity > o.ExportingCount)
-                .SelectMany(o => o.Candidates.Take(o.Capacity - o.ExportingCount).Select(
-                    b => new ExportLineUp(o.ClusterUri, b)));
+                    ExportingCount = g.Count(h => h.BlockItem.State == BlockState.Exporting),
+                    Candidates = g.Where(h => h.BlockItem.State == BlockState.Planned)
+                })
+                //  Keep only clusters with candidates
+                .Where(o => o.Candidates.Any())
+                .ToImmutableDictionary(o => o.ClusterUri);
+
+            //  Ensure we have the capacity for clusters with candidates 
+            await EnsureCapacityCache(capacityMap, candidatesByCluster.Keys, ct);
+
+            //  Create the line up
+            var exportLineUp = candidatesByCluster
+                .Values
+                .Select(o => new
+                {
+                    o.Candidates,
+                    //  Find the export availability (capacity - current usage)
+                    ExportingAvailability = capacityMap[o.ClusterUri].CachedCapacity - o.ExportingCount
+                })
+                //  Keep only clusters with availability
+                .Where(o => o.ExportingAvailability > 0)
+                //  Select candidates by priority
+                .SelectMany(o => o.Candidates
+                .OrderBy(c => new KustoPriority(c.BlockItem.GetIterationKey()))
+                .Take(o.ExportingAvailability))
+                .ToImmutableArray();
 
             return exportLineUp;
         }
 
         private async Task EnsureCapacityCache(
             IDictionary<Uri, CapacityCache> capacityMap,
+            IEnumerable<Uri> clusterUris,
             CancellationToken ct)
         {
-            var clustersToUpdate = Parameterization
-                .Activities
-                .Values
-                .Select(a => a.Source.GetTableIdentity().ClusterUri)
-                .Distinct()
+            var clustersToUpdate = clusterUris
                 .Where(u => !capacityMap.ContainsKey(u)
                 || capacityMap[u].CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now);
             var capacityUpdateTasks = clustersToUpdate
