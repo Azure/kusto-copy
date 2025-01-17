@@ -86,11 +86,14 @@ namespace KustoCopyConsole.Runner
                     new TempTableCreatingRunner(Parameterization, RowItemGateway, DbClientFactory);
                 var exportingRunner =
                     new ExportingRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var awaitExportedRunner =
+                    new AwaitExportedRunner(Parameterization, RowItemGateway, DbClientFactory);
 
                 await Task.WhenAll(
                     iterationRunner.RunAsync(ct),
                     tempTableRunner.RunAsync(ct),
-                    exportingRunner.RunAsync(ct));
+                    exportingRunner.RunAsync(ct),
+                    awaitExportedRunner.RunAsync(ct));
             }
         }
 
