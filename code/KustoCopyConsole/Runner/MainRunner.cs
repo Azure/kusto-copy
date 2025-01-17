@@ -94,6 +94,8 @@ namespace KustoCopyConsole.Runner
                     new AwaitIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
                 var moveExtentsRunner =
                     new MoveExtentsRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var iterationCompletingRunner =
+                    new IterationCompletingRunner(Parameterization, RowItemGateway, DbClientFactory);
 
                 await Task.WhenAll(
                     iterationRunner.RunAsync(ct),
@@ -102,7 +104,8 @@ namespace KustoCopyConsole.Runner
                     awaitExportedRunner.RunAsync(ct),
                     queueIngestRunner.RunAsync(ct),
                     awaitIngestRunner.RunAsync(ct),
-                    moveExtentsRunner.RunAsync(ct));
+                    moveExtentsRunner.RunAsync(ct),
+                    iterationCompletingRunner.RunAsync(ct));
             }
         }
 
