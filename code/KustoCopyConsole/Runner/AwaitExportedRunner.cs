@@ -60,12 +60,12 @@ namespace KustoCopyConsole.Runner
                 a => a.RowItem.State != ActivityState.Completed,
                 i => i.RowItem.State != IterationState.Completed);
             var exportingBlocks = hierarchy
-                .Where(h => h.BlockItem.State == BlockState.Exporting);
+                .Where(h => h.Block.State == BlockState.Exporting);
             var clusterBlocks = exportingBlocks
                 .GroupBy(h => h.Activity.SourceTable.ClusterUri)
                 .Select(g => new ClusterBlocks(
                     g.Key,
-                    g.Select(h => h.BlockItem).OrderBy(b => b.Updated).Take(MAX_OPERATIONS)));
+                    g.Select(h => h.Block).OrderBy(b => b.Updated).Take(MAX_OPERATIONS)));
 
             return clusterBlocks;
         }

@@ -28,7 +28,7 @@ namespace KustoCopyConsole.Runner
                     a => a.RowItem.State != ActivityState.Completed,
                     i => i.RowItem.State != IterationState.Completed);
                 var exportedBlocks = allBlocks
-                    .Where(h => h.BlockItem.State == BlockState.Exported);
+                    .Where(h => h.Block.State == BlockState.Exported);
                 var ingestionTasks = exportedBlocks
                     .Select(h => QueueIngestBlockAsync(h, ct))
                     .ToImmutableArray();
@@ -42,25 +42,17 @@ namespace KustoCopyConsole.Runner
 
         private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
         {
-            var iterationCache = RowItemGateway.InMemoryCache
-                .ActivityMap[item.Activity.ActivityName]
-                .IterationMap[item.Iteration.IterationId];
-
             //  It's possible, although unlikely, the temp table hasn't been created yet
             //  If so, we'll process this block later
-            if (iterationCache.TempTable != null)
+            if (item.TempTable != null)
             {
-                var urlItems = iterationCache
-                    .BlockMap[item.BlockItem.BlockId]
-                    .UrlMap
-                    .Values
-                    .Select(u => u.RowItem);
                 var ingestClient = DbClientFactory.GetIngestClient(
                     item.Activity.DestinationTable.ClusterUri,
                     item.Activity.DestinationTable.DatabaseName,
-                    iterationCache.TempTable.TempTableName);
+                    item.TempTable!.TempTableName);
                 var blockTag = $"kusto-copy:{Guid.NewGuid()}";
-                var uriTasks = urlItems
+                var uriTasks = item
+                    .Urls
                     .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
                     .ToImmutableArray();
 
@@ -72,7 +64,7 @@ namespace KustoCopyConsole.Runner
 
                 await Task.WhenAll(queueTasks);
 
-                var newBlockItem = item.BlockItem.ChangeState(BlockState.Queued);
+                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
                 newBlockItem.BlockTag = blockTag;
                 RowItemGateway.Append(newBlockItem);

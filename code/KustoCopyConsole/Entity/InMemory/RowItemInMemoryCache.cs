@@ -42,12 +42,15 @@ namespace KustoCopyConsole.Entity.InMemory
                 .SelectMany(a => a.IterationMap.Values.Where(i => iterationPredicate(i)).Select(i => new
                 {
                     Activity = a,
-                    Iteration = i
+                    Iteration = i,
+                    TempTableItem = i.TempTable
                 }))
                 .SelectMany(o => o.Iteration.BlockMap.Values.Select(b => new ActivityFlatHierarchy(
                     o.Activity.RowItem,
                     o.Iteration.RowItem,
-                    b.RowItem)));
+                    o.TempTableItem,
+                    b.RowItem,
+                    b.UrlMap.Values.Select(u => u.RowItem))));
         }
 
         public IEnumerable<RowItemBase> GetItems()

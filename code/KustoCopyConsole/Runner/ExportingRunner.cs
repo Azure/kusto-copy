@@ -54,21 +54,21 @@ namespace KustoCopyConsole.Runner
                     item.Activity.SourceTable.DatabaseName);
                 var folderPath = $"activities/{item.Activity.ActivityName}" +
                     $"iterations/{item.Iteration.IterationId:D20}" +
-                    $"/blocks/{item.BlockItem.BlockId:D20}";
+                    $"/blocks/{item.Block.BlockId:D20}";
                 var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
                     folderPath,
                     ct);
                 var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
                 var operationId = await dbClient.ExportBlockAsync(
-                    new KustoPriority(item.BlockItem.GetIterationKey()),
+                    new KustoPriority(item.Block.GetIterationKey()),
                     writableUris,
                     query,
                     item.Iteration.CursorStart,
                     item.Iteration.CursorEnd,
-                    item.BlockItem.IngestionTimeStart,
-                    item.BlockItem.IngestionTimeEnd,
+                    item.Block.IngestionTimeStart,
+                    item.Block.IngestionTimeEnd,
                     ct);
-                var blockItem = item.BlockItem.ChangeState(BlockState.Exporting);
+                var blockItem = item.Block.ChangeState(BlockState.Exporting);
 
                 blockItem.OperationId = operationId;
                 RowItemGateway.Append(blockItem);
@@ -96,8 +96,8 @@ namespace KustoCopyConsole.Runner
                 .Select(g => new
                 {
                     ClusterUri = g.Key,
-                    ExportingCount = g.Count(h => h.BlockItem.State == BlockState.Exporting),
-                    Candidates = g.Where(h => h.BlockItem.State == BlockState.Planned)
+                    ExportingCount = g.Count(h => h.Block.State == BlockState.Exporting),
+                    Candidates = g.Where(h => h.Block.State == BlockState.Planned)
                 })
                 //  Keep only clusters with candidates
                 .Where(o => o.Candidates.Any())
@@ -119,7 +119,7 @@ namespace KustoCopyConsole.Runner
                 .Where(o => o.ExportingAvailability > 0)
                 //  Select candidates by priority
                 .SelectMany(o => o.Candidates
-                .OrderBy(c => new KustoPriority(c.BlockItem.GetIterationKey()))
+                .OrderBy(c => new KustoPriority(c.Block.GetIterationKey()))
                 .Take(o.ExportingAvailability))
                 .ToImmutableArray();
 

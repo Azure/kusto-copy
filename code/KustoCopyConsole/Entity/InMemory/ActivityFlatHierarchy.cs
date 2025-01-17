@@ -10,5 +10,7 @@ namespace KustoCopyConsole.Entity.InMemory
     internal record ActivityFlatHierarchy(
         ActivityRowItem Activity,
         IterationRowItem Iteration,
-        BlockRowItem BlockItem);
+        TempTableRowItem? TempTable,
+        BlockRowItem Block,
+        IEnumerable<UrlRowItem> Urls);
 }
