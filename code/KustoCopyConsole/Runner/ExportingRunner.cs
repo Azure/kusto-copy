@@ -45,52 +45,42 @@ namespace KustoCopyConsole.Runner
             IEnumerable<ActivityFlatHierarchy> exportLineUp,
             CancellationToken ct)
         {
-            var enrichedLineUpByDatabase = exportLineUp
-                //  Group by cluster + db
-                .GroupBy(h => (h.Activity.SourceTable.ClusterUri, h.Activity.SourceTable.DatabaseName))
-                .Select(g => new
-                {
-                    DbClient = DbClientFactory.GetDbCommandClient(g.Key.ClusterUri, g.Key.DatabaseName),
-                    Items = g
-                });
-            var taskList = new List<Task>();
-
-            foreach (var db in enrichedLineUpByDatabase)
+            async Task ProcessBlockAsync(
+                ActivityFlatHierarchy item,
+                CancellationToken ct)
             {
-                var dbClient = db.DbClient;
+                var dbClient = DbClientFactory.GetDbCommandClient(
+                    item.Activity.SourceTable.ClusterUri,
+                    item.Activity.SourceTable.DatabaseName);
+                var folderPath = $"activities/{item.Activity.ActivityName}" +
+                    $"iterations/{item.Iteration.IterationId:D20}" +
+                    $"/blocks/{item.BlockItem.BlockId:D20}";
+                var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
+                    folderPath,
+                    ct);
+                var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
+                var operationId = await dbClient.ExportBlockAsync(
+                    new KustoPriority(item.BlockItem.GetIterationKey()),
+                    writableUris,
+                    query,
+                    item.Iteration.CursorStart,
+                    item.Iteration.CursorEnd,
+                    item.BlockItem.IngestionTimeStart,
+                    item.BlockItem.IngestionTimeEnd,
+                    ct);
+                var blockItem = item.BlockItem.ChangeState(BlockState.Exporting);
 
-                foreach (var item in db.Items)
-                {
-                    var folderPath = $"activities/{item.Activity.ActivityName}" +
-                        $"iterations/{item.Iteration.IterationId:D20}" +
-                        $"/blocks/{item.BlockItem.BlockId:D20}";
-                    var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
-                    var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                        folderPath,
-                        ct);
-                    var exportTask = dbClient.ExportBlockAsync(
-                        new KustoPriority(item.BlockItem.GetIterationKey()),
-                        writableUris,
-                        query,
-                        item.Iteration.CursorStart,
-                        item.Iteration.CursorEnd,
-                        item.BlockItem.IngestionTimeStart,
-                        item.BlockItem.IngestionTimeEnd,
-                        ct);
-                    var updateOperationIdTask = exportTask.ContinueWith(t =>
-                    {
-                        var blockItem = item.BlockItem.ChangeState(BlockState.Exporting);
-
-                        blockItem.OperationId = t.Result;
-                        RowItemGateway.Append(blockItem);
-                    });
-
-                    taskList.Add(updateOperationIdTask);
-                }
+                blockItem.OperationId = operationId;
+                RowItemGateway.Append(blockItem);
             }
-            await Task.WhenAll(taskList);
 
-            return taskList.Count;
+            var tasks = exportLineUp
+                .Select(h => ProcessBlockAsync(h, ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(tasks);
+
+            return tasks.Count();
         }
 
         private async Task<IEnumerable<ActivityFlatHierarchy>> GetExportLineUpAsync(

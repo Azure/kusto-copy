@@ -77,7 +77,8 @@ namespace KustoCopyConsole.Runner
                 .ActivityMap[key.ActivityName]
                 .IterationMap[key.IterationId];
             var blockMap = iterationCache.BlockMap;
-            var blockItems = blockMap.Values.Select(b=>b.RowItem);
+            var blockItems = blockMap.Values.Select(b => b.RowItem);
+            var plannedCount = blockItems.Count(b => b.State == BlockState.Planned);
             var exportingCount = blockItems.Count(b => b.State == BlockState.Exporting);
             var exportedCount = blockItems.Count(b => b.State == BlockState.Exported);
             var queuedCount = blockItems.Count(b => b.State == BlockState.Queued);
@@ -85,7 +86,8 @@ namespace KustoCopyConsole.Runner
             var movedCount = blockItems.Count(b => b.State == BlockState.ExtentMoved);
 
             Console.WriteLine(
-                $"Progress ({key.ActivityName}, {key.IterationId}):  Planned={blockMap.Count}, " +
+                $"Progress ({key.ActivityName}, {key.IterationId}):  " +
+                $"Total={blockMap.Count}, Planned={plannedCount}, " +
                 $"Exporting={exportingCount}, Exported={exportedCount}, " +
                 $"Queued={queuedCount}, Ingested={ingestedCount}, " +
                 $"Moved={movedCount}");
