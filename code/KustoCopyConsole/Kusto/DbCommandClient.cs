@@ -293,10 +293,9 @@ BlockData
         }
         #endregion
 
-        public async Task<long> GetExtentRowCountAsync(
+        public async Task<IImmutableList<ExtentRowCount>> GetExtentRowCountsAsync(
             KustoPriority priority,
             string tempTableName,
-            string blockTag,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
@@ -304,8 +303,8 @@ BlockData
                async () =>
                {
                    var commandText = @$"
-.show table ['{tempTableName}'] extents where tags contains '{blockTag}'
-| summarize sum(RowCount)
+.show table ['{tempTableName}'] extents
+| summarize RowCount=sum(RowCount) by Tags
 ";
                    var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
@@ -314,8 +313,10 @@ BlockData
                        properties);
                    var result = reader.ToDataSet().Tables[0].Rows
                        .Cast<DataRow>()
-                       .Select(r => (long)r[0])
-                       .First();
+                       .Select(r => new ExtentRowCount(
+                           (string)r["Tags"],
+                           (long)r["RowCount"]))
+                       .ToImmutableArray();
 
                    return result;
                });

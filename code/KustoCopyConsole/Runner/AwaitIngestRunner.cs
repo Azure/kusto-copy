@@ -28,7 +28,9 @@ namespace KustoCopyConsole.Runner
                 var queuedBlocks = allBlocks
                     .Where(h => h.Block.State == BlockState.Queued);
                 var ingestionTasks = queuedBlocks
-                    .Select(h => UpdateQueuedBlockAsync(h, ct))
+                    .Where(h => h.TempTable != null)
+                    .GroupBy(h => h.TempTable)
+                    .Select(g => UpdateQueuedBlocksAsync(g, ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(ingestionTasks);
@@ -38,33 +40,46 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task UpdateQueuedBlockAsync(
-            ActivityFlatHierarchy item,
+        private async Task UpdateQueuedBlocksAsync(
+            IEnumerable<ActivityFlatHierarchy> items,
             CancellationToken ct)
         {
-            var targetRowCount = item
-                .Urls
-                .Sum(u => u.RowCount);
+            var activity = items.First().Activity;
+            var iteration = items.First().Iteration;
+            var tempTableName = items.First().TempTable!.TempTableName;
             var dbClient = DbClientFactory.GetDbCommandClient(
-                item.Activity.DestinationTable.ClusterUri,
-                item.Activity.DestinationTable.DatabaseName);
-            var rowCount = await dbClient.GetExtentRowCountAsync(
-                new KustoPriority(item.Block.GetIterationKey()),
-                item.TempTable!.TempTableName,
-                item.Block.BlockTag,
+                activity.DestinationTable.ClusterUri,
+                activity.DestinationTable.DatabaseName);
+            var extentRowCounts = await dbClient.GetExtentRowCountsAsync(
+                new KustoPriority(iteration.GetIterationKey()),
+                tempTableName,
                 ct);
 
-            if (rowCount > targetRowCount)
+            foreach (var item in items)
             {
-                throw new CopyException(
-                    $"Target row count is {targetRowCount} while we observe {rowCount}",
-                    false);
-            }
-            if (rowCount == targetRowCount)
-            {
-                var newBlockItem = item.Block.ChangeState(BlockState.Ingested);
+                var targetRowCount = item
+                    .Urls
+                    .Sum(h => h.RowCount);
+                var blockExtentRowCount = extentRowCounts
+                    .Where(e => e.Tags.Contains(item.Block.BlockTag))
+                    .FirstOrDefault();
 
-                RowItemGateway.Append(newBlockItem);
+                if (blockExtentRowCount != null)
+                {
+                    if (blockExtentRowCount.RecordCount > targetRowCount)
+                    {
+                        throw new CopyException(
+                            $"Target row count is {targetRowCount} while " +
+                            $"we observe {blockExtentRowCount.RecordCount}",
+                            false);
+                    }
+                    if (blockExtentRowCount.RecordCount == targetRowCount)
+                    {
+                        var newBlockItem = item.Block.ChangeState(BlockState.Ingested);
+
+                        RowItemGateway.Append(newBlockItem);
+                    }
+                }
             }
         }
     }
