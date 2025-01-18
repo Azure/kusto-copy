@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Runner
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromMinutes(1))
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(10))
         {
         }
 

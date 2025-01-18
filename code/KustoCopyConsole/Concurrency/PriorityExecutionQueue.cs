@@ -1,6 +1,4 @@
-﻿using Polly;
-using Polly.Bulkhead;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,44 +35,50 @@ namespace KustoCopyConsole.Concurrency
         }
         #endregion
 
-        private readonly AsyncBulkheadPolicy _bulkheadPolicy;
-        private readonly PriorityQueue<Request, TPriority> _requestQueue;
+        private readonly PriorityQueue<Request, TPriority> _requestQueue = new();
+        private readonly ConcurrentQueue<Task> _runnerTasks = new();
+        private volatile int _parallelRunCount = 0;
 
-        public PriorityExecutionQueue(int parallelRunCount)
+        public PriorityExecutionQueue(int maxParallelRunCount)
         {
-            _bulkheadPolicy = Policy.BulkheadAsync(parallelRunCount, int.MaxValue);
-            _requestQueue = new PriorityQueue<Request, TPriority>();
+            if (maxParallelRunCount < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxParallelRunCount));
+            }
+            MaxParallelRunCount = maxParallelRunCount;
         }
 
-        public int ParallelRunCount => _bulkheadPolicy.BulkheadAvailableCount;
+        public int MaxParallelRunCount { get; }
 
         public async Task<T> RequestRunAsync<T>(TPriority priority, Func<Task<T>> actionAsync)
         {
-            var request = new Request<T>(actionAsync);
+            //  Optimistic path:  if there is capacity
+            if (TryOptimistic())
+            {   //  Optimistic try out succeeded!
+                var result = await actionAsync();
 
-            lock (_requestQueue)
-            {   //  Add our item in the queue
-                _requestQueue.Enqueue(request, priority);
+                Interlocked.Decrement(ref _parallelRunCount);
+                TryDequeueRequest();
+
+                return result;
             }
-            //  Remove/execute one item from the queue (when parallelism allows)
-            //  Either the item is "us" or someone before us
-            await _bulkheadPolicy.ExecuteAsync(async () =>
-            {
-                Request? request;
+            else
+            {   //  Optimistic try out failed:  get in queue
+                var request = new Request<T>(actionAsync);
 
                 lock (_requestQueue)
-                {
-                    if (!_requestQueue.TryDequeue(out request, out _))
-                    {
-                        throw new InvalidOperationException("Request queue is corrupted");
-                    }
+                {   //  Add our item in the queue
+                    _requestQueue.Enqueue(request, priority);
                 }
+                TryDequeueRequest();
 
-                await request.ExecuteAsync();
-            });
+                //  Wait for our own turn
+                var result = await request.Source.Task;
 
-            //  Wait for our own turn
-            return await request.Source.Task;
+                await ObserveRunnerTasksAsync();
+
+                return result;
+            }
         }
 
         public async Task RequestRunAsync(TPriority priority, Func<Task> actionAsync)
@@ -85,6 +89,72 @@ namespace KustoCopyConsole.Concurrency
 
                 return 0;
             });
+        }
+
+        private bool TryOptimistic()
+        {
+            var currentSnapshot = _parallelRunCount;
+
+            if (currentSnapshot >= MaxParallelRunCount)
+            {   //  We've reached capacity
+                return false;
+            }
+            else
+            {
+                if (Interlocked.CompareExchange(
+                    ref _parallelRunCount,
+                    currentSnapshot + 1,
+                    currentSnapshot) == currentSnapshot)
+                {
+                    return true;
+                }
+                else
+                {   //  Somebody else modified in the meantime, we retry
+                    return TryOptimistic();
+                }
+            }
+        }
+
+        private void TryDequeueRequest()
+        {
+            if (TryOptimistic())
+            {
+                lock (_requestQueue)
+                {
+                    if (_requestQueue.TryDequeue(out var request, out _))
+                    {
+                        var runningTask = Task.Run(async () =>
+                        {
+                            await request.ExecuteAsync();
+                            Interlocked.Decrement(ref _parallelRunCount);
+                            TryDequeueRequest();
+                        });
+
+                        _runnerTasks.Enqueue(runningTask);
+                    }
+                    else
+                    {   //  Revert increment since there won't be any run
+                        Interlocked.Decrement(ref _parallelRunCount);
+                    }
+                }
+            }
+        }
+
+        private async Task ObserveRunnerTasksAsync()
+        {
+            while(_runnerTasks.TryDequeue(out var task))
+            {
+                if(task.IsCompleted)
+                {
+                    await task;
+                }
+                else
+                {
+                    _runnerTasks.Enqueue(task);
+
+                    return;
+                }
+            }
         }
     }
 }

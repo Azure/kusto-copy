@@ -1,5 +1,6 @@
 ﻿using Kusto.Data.Common;
 using Kusto.Ingest;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Kusto
 {

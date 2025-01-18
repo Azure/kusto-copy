@@ -33,8 +33,11 @@ namespace KustoCopyConsole.Runner
 
                 await Task.WhenAll(moveTasks);
 
-                //  Sleep
-                await SleepAsync(ct);
+                if (!moveTasks.Any())
+                {
+                    //  Sleep
+                    await SleepAsync(ct);
+                }
             }
         }
 

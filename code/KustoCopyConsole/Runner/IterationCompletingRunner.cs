@@ -61,7 +61,7 @@ namespace KustoCopyConsole.Runner
 
                     await dbClient.DropTableIfExistsAsync(
                         new KustoPriority(iteration.RowItem.GetIterationKey()),
-                        tableId.TableName,
+                        iteration.TempTable.TempTableName,
                         ct);
                 }
                 var newIteration = iteration.RowItem.ChangeState(IterationState.Completed);

@@ -7,6 +7,7 @@ using KustoCopyConsole.Storage;
 using Microsoft.Extensions.Azure;
 using System;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -36,9 +37,18 @@ namespace KustoCopyConsole.Runner
                 var exportLineUp = await GetExportLineUpAsync(capacityMap, ct);
                 var exportCount = await StartExportAsync(exportLineUp, ct);
 
-                //  Sleep
-                await SleepAsync(ct);
+                if (exportCount == 0)
+                {
+                    //  Sleep
+                    await SleepAsync(ct);
+                }
             }
+        }
+
+        protected override bool IsWakeUpRelevant(RowItemBase item)
+        {
+            return item is BlockRowItem b
+                && (b.State == BlockState.Planned || b.State == BlockState.Exported);
         }
 
         private async Task<int> StartExportAsync(
