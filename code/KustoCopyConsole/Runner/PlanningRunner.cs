@@ -189,7 +189,8 @@ namespace KustoCopyConsole.Runner
                         BlockId = nextBlockId++,
                         IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
                         IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime),
-                        ExtentCreationTime = cummulativeDistributions.Min(d => d.MinCreatedOn)
+                        ExtentCreationTime = cummulativeDistributions.Min(d => d.MinCreatedOn),
+                        PlannedRowCount = cummulativeDistributions.Sum(d => d.RowCount)
                     };
 
                     return (blockItem, remainingDistributions);

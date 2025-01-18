@@ -178,6 +178,7 @@ namespace KustoCopyConsole.Runner
                     RowItemGateway.Append(url);
                 }
                 RowItemGateway.Append(block.ChangeState(BlockState.Exported));
+                ValidatePlannedRowCount(block);
             }
 
             var tasks = statuses
@@ -186,6 +187,23 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableArray();
 
             await Task.WhenAll(tasks);
+        }
+
+        private void ValidatePlannedRowCount(BlockRowItem block)
+        {
+            var cachedBlock = RowItemGateway.InMemoryCache
+                .ActivityMap[block.ActivityName]
+                .IterationMap[block.IterationId]
+                .BlockMap[block.BlockId];
+            var exportedRowCount = cachedBlock.UrlMap.Values.Sum(u => u.RowItem.RowCount);
+
+            if (cachedBlock.RowItem.PlannedRowCount != exportedRowCount)
+            {
+                Trace.TraceWarning($"Warning!  For block ID {block.BlockId} " +
+                    $"(activity '{block.ActivityName}', iteration {block.IterationId}) " +
+                    $"had planned row count of {cachedBlock.RowItem.PlannedRowCount} but " +
+                    $"exported {exportedRowCount} rows");
+            }
         }
         #endregion
 

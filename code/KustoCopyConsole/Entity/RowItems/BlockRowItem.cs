@@ -21,8 +21,10 @@ namespace KustoCopyConsole.Entity.RowItems
         public DateTime IngestionTimeStart { get; set; } = DateTime.MinValue;
 
         public DateTime IngestionTimeEnd { get; set; } = DateTime.MinValue;
-        
+
         public DateTime ExtentCreationTime { get; set; } = DateTime.MinValue;
+
+        public long PlannedRowCount { get; set; } = 0;
 
         public string OperationId { get; set; } = string.Empty;
 
@@ -58,6 +60,11 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 throw new InvalidDataException(
                     $"{nameof(ExtentCreationTime)} hasn't been populated");
+            }
+            if (PlannedRowCount < 0)
+            {
+                throw new InvalidDataException(
+                    $"{nameof(PlannedRowCount)} should be superior to zero");
             }
             if (State != BlockState.Planned && string.IsNullOrWhiteSpace(OperationId))
             {
