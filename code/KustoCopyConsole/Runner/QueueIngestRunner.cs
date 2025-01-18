@@ -6,6 +6,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
@@ -29,15 +30,25 @@ namespace KustoCopyConsole.Runner
                     i => i.RowItem.State != IterationState.Completed);
                 var exportedBlocks = allBlocks
                     .Where(h => h.Block.State == BlockState.Exported);
+                var s = new Stopwatch(); s.Start();
                 var ingestionTasks = exportedBlocks
                     .Select(h => QueueIngestBlockAsync(h, ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(ingestionTasks);
 
-                //  Sleep
-                await SleepAsync(ct);
+                if (!ingestionTasks.Any())
+                {
+                    //  Sleep
+                    await SleepAsync(ct);
+                }
             }
+        }
+
+        protected override bool IsWakeUpRelevant(RowItemBase item)
+        {
+            return item is BlockRowItem b
+                && b.State == BlockState.Exported;
         }
 
         private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)

@@ -17,7 +17,7 @@ namespace KustoCopyConsole.Runner
         private record ClusterBlocks(Uri ClusterUri, IEnumerable<BlockRowItem> BlockItems);
         #endregion
 
-        private const int MAX_OPERATIONS = 50;
+        private const int MAX_OPERATIONS = 200;
         private static readonly IImmutableSet<string> FAILED_STATUS =
             ImmutableHashSet.Create(
                 [
@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Runner
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(5))
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(3))
         {
         }
 

@@ -5,6 +5,7 @@ using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 using System.Data;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Kusto
 {
