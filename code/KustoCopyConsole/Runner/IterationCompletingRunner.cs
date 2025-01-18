@@ -25,7 +25,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                CompleteIterations();
+                await CompleteIterationsAsync(ct);
                 CompleteActivities();
 
                 //  Sleep
@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void CompleteIterations()
+        private async Task CompleteIterationsAsync(CancellationToken ct)
         {
             var completingIterations = RowItemGateway.InMemoryCache
                 .ActivityMap
@@ -43,12 +43,28 @@ namespace KustoCopyConsole.Runner
                 //  The iteration is planned, hence all its blocks are in place
                 .Where(i => i.RowItem.State == IterationState.Planned)
                 //  All blocks in the iteration are moved
-                .Where(i => !i.BlockMap.Values.Any(b => b.RowItem.State != BlockState.ExtentMoved))
-                .Select(i => i.RowItem);
+                .Where(i => !i.BlockMap.Any()
+                || !i.BlockMap.Values.Any(b => b.RowItem.State != BlockState.ExtentMoved));
 
             foreach (var iteration in completingIterations)
             {
-                var newIteration = iteration.ChangeState(IterationState.Completed);
+                if (iteration.TempTable != null
+                    && iteration.TempTable.State == TempTableState.Created)
+                {
+                    var tableId = RowItemGateway.InMemoryCache
+                        .ActivityMap[iteration.RowItem.ActivityName]
+                        .RowItem
+                        .DestinationTable;
+                    var dbClient = DbClientFactory.GetDbCommandClient(
+                        tableId.ClusterUri,
+                        tableId.DatabaseName);
+
+                    await dbClient.DropTableIfExistsAsync(
+                        new KustoPriority(iteration.RowItem.GetIterationKey()),
+                        tableId.TableName,
+                        ct);
+                }
+                var newIteration = iteration.RowItem.ChangeState(IterationState.Completed);
 
                 RowItemGateway.Append(newIteration);
             }

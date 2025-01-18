@@ -59,7 +59,11 @@ namespace KustoCopyConsole.Runner
                 await Task.WhenAll(uriTasks);
 
                 var queueTasks = uriTasks
-                    .Select(t => ingestClient.QueueBlobAsync(t.Result, blockTag, ct))
+                    .Select(t => ingestClient.QueueBlobAsync(
+                        t.Result,
+                        blockTag,
+                        item.Block.ExtentCreationTime,
+                        ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(queueTasks);

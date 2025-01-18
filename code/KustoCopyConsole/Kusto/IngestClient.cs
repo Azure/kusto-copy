@@ -22,18 +22,22 @@ namespace KustoCopyConsole.Kusto
         public async Task QueueBlobAsync(
             Uri blobPath,
             string extentTag,
+            DateTime creationTime,
             CancellationToken ct)
         {
             var tagList = new[] { extentTag };
-            var properties = new KustoIngestionProperties(_database, _table)
+            var properties = new KustoQueuedIngestionProperties(_database, _table)
             {
                 Format = DataSourceFormat.parquet,
-                IngestByTags = tagList,
                 DropByTags = tagList,
-                IngestIfNotExists = tagList
+                ReportLevel = IngestionReportLevel.FailuresAndSuccesses,
+                ReportMethod = IngestionReportMethod.Table,
+                AdditionalProperties =
+                {
+                    {"creationTime", creationTime.ToString("o") }
+                }
             };
-
-            await _ingestProvider.IngestFromStorageAsync(
+            var ingestionResult = await _ingestProvider.IngestFromStorageAsync(
                 blobPath.ToString(),
                 properties);
         }

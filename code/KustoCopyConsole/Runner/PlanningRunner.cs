@@ -16,7 +16,7 @@ namespace KustoCopyConsole.Runner
             DateTime IngestionTime,
             string ExtentId,
             long RowCount,
-            DateTime? MinCreatedOn);
+            DateTime MinCreatedOn);
 
         private record BatchExportBlock(
             IEnumerable<Task> exportingTasks,
@@ -188,7 +188,8 @@ namespace KustoCopyConsole.Runner
                         IterationId = iterationItem.IterationId,
                         BlockId = nextBlockId++,
                         IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
-                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)
+                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime),
+                        ExtentCreationTime = cummulativeDistributions.Min(d => d.MinCreatedOn)
                     };
 
                     return (blockItem, remainingDistributions);
@@ -231,20 +232,19 @@ namespace KustoCopyConsole.Runner
                     activityItem.SourceTable.TableName,
                     extentIds,
                     ct);
+                var extentDateMap = extentDates
+                    .ToImmutableDictionary(e => e.ExtentId, e => e.MinCreatedOn);
 
                 //  Check for racing condition where extents got merged and extent ids don't exist
                 //  between 2 queries
                 if (extentDates.Count == extentIds.Count())
                 {
                     var distributionInExtents = distributions
-                        .GroupJoin(
-                        extentDates,
-                        d => d.ExtentId, e => e.ExtentId,
-                        (left, rightGroup) => new RecordDistributionInExtent(
-                            left.IngestionTime,
-                            left.ExtentId,
-                            left.RowCount,
-                            rightGroup.FirstOrDefault()?.MinCreatedOn))
+                        .Select(d => new RecordDistributionInExtent(
+                            d.IngestionTime,
+                            d.ExtentId,
+                            d.RowCount,
+                            extentDateMap[d.ExtentId]))
                         .ToImmutableArray();
 
                     return distributionInExtents;
