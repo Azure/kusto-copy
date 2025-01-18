@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory)
-            : base(parameterization, rowItemGateway, dbClientFactory)
+            : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.Zero)
         {
         }
 
@@ -73,17 +73,43 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var runTasks = Parameterization.Activities
-                .Values
-                .Select(a => RunActivityAsync(a, ct))
-                .ToImmutableArray();
+            await using (var progressBar = new ProgressBar(RowItemGateway.InMemoryCache, ct))
+            {
+                foreach (var a in Parameterization.Activities.Values)
+                {
+                    EnsureActivity(a);
+                    EnsureIteration(a);
+                }
+                var iterationRunner =
+                    new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var tempTableRunner =
+                    new TempTableCreatingRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var exportingRunner =
+                    new ExportingRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var awaitExportedRunner =
+                    new AwaitExportedRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var queueIngestRunner =
+                    new QueueIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var awaitIngestRunner =
+                    new AwaitIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var moveExtentsRunner =
+                    new MoveExtentsRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var iterationCompletingRunner =
+                    new IterationCompletingRunner(Parameterization, RowItemGateway, DbClientFactory);
 
-            await Task.WhenAll(runTasks);
+                await Task.WhenAll(
+                    Task.Run(() => iterationRunner.RunAsync(ct)),
+                    Task.Run(() => tempTableRunner.RunAsync(ct)),
+                    Task.Run(() => exportingRunner.RunAsync(ct)),
+                    Task.Run(() => awaitExportedRunner.RunAsync(ct)),
+                    Task.Run(() => queueIngestRunner.RunAsync(ct)),
+                    Task.Run(() => awaitIngestRunner.RunAsync(ct)),
+                    Task.Run(() => moveExtentsRunner.RunAsync(ct)),
+                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
+            }
         }
 
-        private async Task RunActivityAsync(
-            ActivityParameterization activityParam,
-            CancellationToken ct)
+        private void EnsureIteration(ActivityParameterization activityParam)
         {
             if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
             {
@@ -91,10 +117,8 @@ namespace KustoCopyConsole.Runner
                     $"'{activityParam.TableOption.ExportMode}' isn't supported yet");
             }
 
-            EnsureActivity(activityParam);
-
             var cache = RowItemGateway.InMemoryCache;
-            var activity = cache.ActivityMap[activityParam.ActivityName].RowItem;
+            var activityItem = cache.ActivityMap[activityParam.ActivityName].RowItem;
             var cachedIterations = cache.ActivityMap.ContainsKey(activityParam.ActivityName)
                 ? cache.ActivityMap[activityParam.ActivityName].IterationMap.Values
                 : Array.Empty<IterationCache>();
@@ -106,8 +130,6 @@ namespace KustoCopyConsole.Runner
                 .Where(i => i.State != IterationState.Completed);
             var isBackfillOnly =
                 activityParam.TableOption.ExportMode == ExportMode.BackfillOnly;
-            var iterationRunner =
-                new IterationRunner(Parameterization, RowItemGateway, DbClientFactory);
 
             //  Start new iteration if need to
             if (!cachedIterations.Any())
@@ -131,12 +153,6 @@ namespace KustoCopyConsole.Runner
                 };
 
                 RowItemGateway.Append(newIterationItem);
-                await iterationRunner.RunAsync(newIterationItem, ct);
-            }
-            else
-            {
-                await Task.WhenAll(activeIterations
-                    .Select(i => iterationRunner.RunAsync(i, ct)));
             }
         }
 

@@ -5,8 +5,6 @@
         Starting,
         Planning,
         Planned,
-        TempTableCreating,
-        TempTableCreated,
         Completed
     }
 }

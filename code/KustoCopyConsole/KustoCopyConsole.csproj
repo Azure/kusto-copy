@@ -14,24 +14,7 @@
 
   <ItemGroup>
     <!-- Remove Legacy files from being compiled -->
-    <Compile Remove="Legacy\**\*.cs" />
-    <Compile Remove="Storage\Entity\**" />
-    <EmbeddedResource Remove="Storage\Entity\**" />
-    <None Remove="Storage\Entity\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="Orchestration\DestinationTableLifeCycleOrchestration.cs" />
-    <Compile Remove="Orchestration\MainOrchestration.cs" />
-    <Compile Remove="Orchestration\SourceTableExportingOrchestration.cs" />
-    <Compile Remove="Orchestration\SourceTableIterationOrchestration.cs" />
-    <Compile Remove="Orchestration\SourceTablePlanningOrchestration.cs" />
-    <Compile Remove="Orchestration\SubOrchestrationBase.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Explicitly include Legacy files as None -->
-    <None Update="Legacy\**\*.cs" />
+    <Compile Remove="Runner\Legacy\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,15 +24,6 @@
     <PackageReference Include="Microsoft.Azure.Kusto.Ingest" Version="12.2.8" />
     <PackageReference Include="Polly" Version="8.5.0" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Orchestration\DestinationTableLifeCycleOrchestration.cs" />
-    <None Include="Orchestration\MainOrchestration.cs" />
-    <None Include="Orchestration\SourceTableExportingOrchestration.cs" />
-    <None Include="Orchestration\SourceTableIterationOrchestration.cs" />
-    <None Include="Orchestration\SourceTablePlanningOrchestration.cs" />
-    <None Include="Orchestration\SubOrchestrationBase.cs" />
   </ItemGroup>
 
 </Project>

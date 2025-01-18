@@ -103,7 +103,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
         private readonly IImmutableDictionary<string, ContainerProvider> _containerMap;
 
         public AzureBlobUriProvider(
-            IImmutableList<Uri> stagingStorageContainers,
+            IEnumerable<Uri> stagingStorageContainers,
             TokenCredential credential)
         {
             _containerMap = stagingStorageContainers

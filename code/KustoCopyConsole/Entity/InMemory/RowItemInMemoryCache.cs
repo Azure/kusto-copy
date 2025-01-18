@@ -1,10 +1,12 @@
 ﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
@@ -30,14 +32,40 @@ namespace KustoCopyConsole.Entity.InMemory
         public IImmutableDictionary<string, ActivityCache> ActivityMap
             => _activityMap;
 
+        public IEnumerable<ActivityFlatHierarchy> GetActivityFlatHierarchy(
+            Func<ActivityCache, bool> activityPredicate,
+            Func<IterationCache, bool> iterationPredicate)
+        {
+            return ActivityMap
+                .Values
+                .Where(a => activityPredicate(a))
+                .SelectMany(a => a.IterationMap.Values.Where(i => iterationPredicate(i)).Select(i => new
+                {
+                    Activity = a,
+                    Iteration = i,
+                    TempTableItem = i.TempTable
+                }))
+                .SelectMany(o => o.Iteration.BlockMap.Values.Select(b => new ActivityFlatHierarchy(
+                    o.Activity.RowItem,
+                    o.Iteration.RowItem,
+                    o.TempTableItem,
+                    b.RowItem,
+                    b.UrlMap.Values.Select(u => u.RowItem))));
+        }
+
         public IEnumerable<RowItemBase> GetItems()
         {
-            foreach (var sourceTable in ActivityMap.Values)
+            foreach (var activity in ActivityMap.Values)
             {
-                foreach (var sourceTableIteration in sourceTable.IterationMap.Values)
+                yield return activity.RowItem;
+                foreach (var iteration in activity.IterationMap.Values)
                 {
-                    yield return sourceTableIteration.RowItem;
-                    foreach (var block in sourceTableIteration.BlockMap.Values)
+                    yield return iteration.RowItem;
+                    if (iteration.TempTable != null)
+                    {
+                        yield return iteration.TempTable;
+                    }
+                    foreach (var block in iteration.BlockMap.Values)
                     {
                         yield return block.RowItem;
                         foreach (var url in block.UrlMap.Values)
@@ -54,8 +82,8 @@ namespace KustoCopyConsole.Entity.InMemory
             lock (_lock)
             {
                 Interlocked.Exchange(ref _activityMap, AppendItemToCache(item));
-                OnRowItemAppended(item);
             }
+            OnRowItemAppended(item);
         }
 
         private void OnRowItemAppended(RowItemBase item)
@@ -75,10 +103,12 @@ namespace KustoCopyConsole.Entity.InMemory
                     return AppendActivity(a);
                 case IterationRowItem i:
                     return AppendIteration(i);
+                case TempTableRowItem t:
+                    return AppendTempTable(t);
                 case BlockRowItem sb:
-                    return AppendSourceBlock(sb);
+                    return AppendBlock(sb);
                 case UrlRowItem url:
-                    return AppendSourceUrl(url);
+                    return AppendUrl(url);
                 default:
                     throw new NotSupportedException(
                         $"Not supported row item type:  {item.GetType().Name}");
@@ -120,7 +150,7 @@ namespace KustoCopyConsole.Entity.InMemory
                     return _activityMap.SetItem(
                         activityName,
                         table.AppendIteration(
-                            new IterationCache(item, iteration.BlockMap)));
+                            new IterationCache(item, iteration.TempTable, iteration.BlockMap)));
                 }
                 else
                 {
@@ -135,35 +165,62 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        private IImmutableDictionary<string, ActivityCache> AppendSourceBlock(
-            BlockRowItem item)
+        private IImmutableDictionary<string, ActivityCache> AppendTempTable(TempTableRowItem item)
         {
             var activityName = item.ActivityName;
 
             if (_activityMap.ContainsKey(activityName))
             {
-                var sourceTable = _activityMap[activityName];
+                var activity = _activityMap[activityName];
 
-                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                if (activity.IterationMap.ContainsKey(item.IterationId))
                 {
-                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+                    var iteration = activity.IterationMap[item.IterationId];
 
-                    if (sourceIteration.BlockMap.ContainsKey(item.BlockId))
+                    return _activityMap.SetItem(
+                        activityName,
+                        activity.AppendIteration(
+                            new IterationCache(iteration.RowItem, item, iteration.BlockMap)));
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Activity should come before block in logs");
+            }
+        }
+
+        private IImmutableDictionary<string, ActivityCache> AppendBlock(BlockRowItem item)
+        {
+            var activityName = item.ActivityName;
+
+            if (_activityMap.ContainsKey(activityName))
+            {
+                var activity = _activityMap[activityName];
+
+                if (activity.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var iteration = activity.IterationMap[item.IterationId];
+
+                    if (iteration.BlockMap.ContainsKey(item.BlockId))
                     {
-                        var sourceBlock = sourceIteration.BlockMap[item.BlockId];
+                        var sourceBlock = iteration.BlockMap[item.BlockId];
 
                         return _activityMap.SetItem(
                             activityName,
-                            sourceTable.AppendIteration(
-                                sourceIteration.AppendBlock(
+                            activity.AppendIteration(
+                                iteration.AppendBlock(
                                     new BlockCache(item, sourceBlock.UrlMap))));
                     }
                     else
                     {
                         return _activityMap.SetItem(
                             activityName,
-                            sourceTable.AppendIteration(
-                                sourceIteration.AppendBlock(new BlockCache(item))));
+                            activity.AppendIteration(
+                                iteration.AppendBlock(new BlockCache(item))));
                     }
                 }
                 else
@@ -177,26 +234,26 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        private IImmutableDictionary<string, ActivityCache> AppendSourceUrl(UrlRowItem item)
+        private IImmutableDictionary<string, ActivityCache> AppendUrl(UrlRowItem item)
         {
             var activityName = item.ActivityName;
 
             if (_activityMap.ContainsKey(activityName))
             {
-                var sourceTable = _activityMap[activityName];
+                var activity = _activityMap[activityName];
 
-                if (sourceTable.IterationMap.ContainsKey(item.IterationId))
+                if (activity.IterationMap.ContainsKey(item.IterationId))
                 {
-                    var sourceIteration = sourceTable.IterationMap[item.IterationId];
+                    var iteration = activity.IterationMap[item.IterationId];
 
-                    if (sourceIteration.BlockMap.ContainsKey(item.BlockId))
+                    if (iteration.BlockMap.ContainsKey(item.BlockId))
                     {
-                        var block = sourceIteration.BlockMap[item.BlockId];
+                        var block = iteration.BlockMap[item.BlockId];
 
                         return _activityMap.SetItem(
                             activityName,
-                            sourceTable.AppendIteration(
-                                sourceIteration.AppendBlock(
+                            activity.AppendIteration(
+                                iteration.AppendBlock(
                                     block.AppendUrl(new UrlCache(item)))));
                     }
                     else

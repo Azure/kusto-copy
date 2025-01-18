@@ -1,6 +1,5 @@
-﻿using Azure.Storage.Blobs.Models;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -17,7 +16,7 @@ namespace KustoCopyConsole.Runner
             DateTime IngestionTime,
             string ExtentId,
             long RowCount,
-            DateTime? MinCreatedOn);
+            DateTime MinCreatedOn);
 
         private record BatchExportBlock(
             IEnumerable<Task> exportingTasks,
@@ -32,23 +31,59 @@ namespace KustoCopyConsole.Runner
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory)
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromMinutes(1))
         {
         }
 
-        public async Task<IterationRowItem> RunAsync(
-            IterationRowItem tableRowItem,
-            CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            if (tableRowItem.State == IterationState.Planning)
+            var taskMap = new Dictionary<IterationKey, Task>();
+
+            while (taskMap.Any() || !AllActivitiesCompleted())
             {
-                tableRowItem = await PlanBlocksAsync(tableRowItem, ct);
-            }
+                var newIterations = RowItemGateway.InMemoryCache.ActivityMap
+                     .Values
+                     .SelectMany(a => a.IterationMap.Values)
+                     .Select(i => i.RowItem)
+                     .Where(i => i.State <= IterationState.Planning)
+                     .Select(i => new
+                     {
+                         Key = i.GetIterationKey(),
+                         Iteration = i
+                     })
+                     .Where(o => !taskMap.ContainsKey(o.Key));
 
-            return tableRowItem;
+                foreach (var o in newIterations)
+                {
+                    taskMap.Add(o.Key, PlanIterationAsync(o.Iteration, ct));
+                }
+                await CleanTaskMapAsync(taskMap);
+                //  Sleep
+                await SleepAsync(ct);
+            }
         }
 
-        private async Task<IterationRowItem> PlanBlocksAsync(
+        protected override bool IsWakeUpRelevant(RowItemBase item)
+        {
+            return item is IterationRowItem i
+                && i.State == IterationState.Starting;
+        }
+
+        private async Task CleanTaskMapAsync(IDictionary<IterationKey, Task> taskMap)
+        {
+            foreach (var taskKey in taskMap.Keys.ToImmutableArray())
+            {
+                var task = taskMap[taskKey];
+
+                if (task.IsCompleted)
+                {
+                    await task;
+                    taskMap.Remove(taskKey);
+                }
+            }
+        }
+
+        private async Task PlanIterationAsync(
             IterationRowItem iterationItem,
             CancellationToken ct)
         {
@@ -62,6 +97,25 @@ namespace KustoCopyConsole.Runner
                 activity.SourceTable.ClusterUri,
                 activity.SourceTable.DatabaseName);
 
+            if (iterationItem.State == IterationState.Starting)
+            {
+                var cursor = await queryClient.GetCurrentCursorAsync(
+                    new KustoPriority(iterationItem.GetIterationKey()),
+                    ct);
+
+                iterationItem = iterationItem.ChangeState(IterationState.Planning);
+                iterationItem.CursorEnd = cursor;
+                RowItemGateway.Append(iterationItem);
+            }
+            await PlanBlocksAsync(queryClient, dbCommandClient, iterationItem, ct);
+        }
+
+        private async Task PlanBlocksAsync(
+            DbQueryClient queryClient,
+            DbCommandClient dbCommandClient,
+            IterationRowItem iterationItem,
+            CancellationToken ct)
+        {
             //  Loop on block batches
             while (iterationItem.State == IterationState.Planning)
             {
@@ -105,8 +159,6 @@ namespace KustoCopyConsole.Runner
                     RowItemGateway.Append(iterationItem);
                 }
             }
-
-            return iterationItem;
         }
 
         private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(
@@ -136,7 +188,8 @@ namespace KustoCopyConsole.Runner
                         IterationId = iterationItem.IterationId,
                         BlockId = nextBlockId++,
                         IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
-                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime)
+                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime),
+                        ExtentCreationTime = cummulativeDistributions.Min(d => d.MinCreatedOn)
                     };
 
                     return (blockItem, remainingDistributions);
@@ -179,20 +232,19 @@ namespace KustoCopyConsole.Runner
                     activityItem.SourceTable.TableName,
                     extentIds,
                     ct);
+                var extentDateMap = extentDates
+                    .ToImmutableDictionary(e => e.ExtentId, e => e.MinCreatedOn);
 
                 //  Check for racing condition where extents got merged and extent ids don't exist
                 //  between 2 queries
                 if (extentDates.Count == extentIds.Count())
                 {
                     var distributionInExtents = distributions
-                        .GroupJoin(
-                        extentDates,
-                        d => d.ExtentId, e => e.ExtentId,
-                        (left, rightGroup) => new RecordDistributionInExtent(
-                            left.IngestionTime,
-                            left.ExtentId,
-                            left.RowCount,
-                            rightGroup.FirstOrDefault()?.MinCreatedOn))
+                        .Select(d => new RecordDistributionInExtent(
+                            d.IngestionTime,
+                            d.ExtentId,
+                            d.RowCount,
+                            extentDateMap[d.ExtentId]))
                         .ToImmutableArray();
 
                     return distributionInExtents;

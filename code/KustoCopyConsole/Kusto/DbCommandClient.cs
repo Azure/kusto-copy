@@ -26,6 +26,30 @@ namespace KustoCopyConsole.Kusto
 
         public string DatabaseName { get; }
 
+        public async Task<int> ShowExportCapacityAsync(
+            KustoPriority priority,
+            CancellationToken ct)
+        {
+            return await _commandQueue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var commandText = @$"
+.show capacity
+| where Resource == 'DataExport'
+| project Total";
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText);
+                    var result = reader.ToDataSet().Tables[0].Rows
+                        .Cast<DataRow>()
+                        .Select(r => (long)r[0])
+                        .First();
+
+                    return (int)result;
+                });
+        }
+
         public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
             KustoPriority priority,
             IEnumerable<string> operationIds,

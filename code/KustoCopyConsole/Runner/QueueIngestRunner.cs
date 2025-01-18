@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Kusto.Ingest;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -10,62 +11,68 @@ namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : RunnerBase
     {
+
         public QueueIngestRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory)
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(5))
         {
         }
 
-        public async Task<BlockRowItem> RunAsync(
-            IStagingBlobUriProvider blobPathProvider,
-            BlockRowItem blockItem,
-            CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            if (blockItem.State == BlockState.Exported)
+            while (!AllActivitiesCompleted())
             {
-                blockItem = await QueueIngestBlockAsync(blobPathProvider, blockItem, ct);
-            }
+                var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                    a => a.RowItem.State != ActivityState.Completed,
+                    i => i.RowItem.State != IterationState.Completed);
+                var exportedBlocks = allBlocks
+                    .Where(h => h.Block.State == BlockState.Exported);
+                var ingestionTasks = exportedBlocks
+                    .Select(h => QueueIngestBlockAsync(h, ct))
+                    .ToImmutableArray();
 
-            return blockItem;
+                await Task.WhenAll(ingestionTasks);
+
+                //  Sleep
+                await SleepAsync(ct);
+            }
         }
 
-        private async Task<BlockRowItem> QueueIngestBlockAsync(
-            IStagingBlobUriProvider blobPathProvider,
-            BlockRowItem blockItem,
-            CancellationToken ct)
+        private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
         {
-            var activityCache = RowItemGateway.InMemoryCache.ActivityMap[blockItem.ActivityName];
-            var iterationItem = activityCache.IterationMap[blockItem.IterationId];
-            var urlItems = iterationItem
-                .BlockMap[blockItem.BlockId]
-                .UrlMap
-                .Values
-                .Select(u => u.RowItem);
-            var tempTableName = iterationItem.RowItem.TempTableName;
-            var ingestClient = DbClientFactory.GetIngestClient(
-                activityCache.RowItem.DestinationTable.ClusterUri,
-                activityCache.RowItem.DestinationTable.DatabaseName,
-                tempTableName);
-            var blockTag = $"kusto-copy:{Guid.NewGuid()}";
-            var uriTasks = urlItems
-                .Select(u => blobPathProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
-                .ToImmutableArray();
+            //  It's possible, although unlikely, the temp table hasn't been created yet
+            //  If so, we'll process this block later
+            if (item.TempTable != null)
+            {
+                var ingestClient = DbClientFactory.GetIngestClient(
+                    item.Activity.DestinationTable.ClusterUri,
+                    item.Activity.DestinationTable.DatabaseName,
+                    item.TempTable!.TempTableName);
+                var blockTag = $"kusto-copy:{Guid.NewGuid()}";
+                var uriTasks = item
+                    .Urls
+                    .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
+                    .ToImmutableArray();
 
-            await Task.WhenAll(uriTasks);
+                await Task.WhenAll(uriTasks);
 
-            var queueTasks = uriTasks
-                .Select(t => ingestClient.QueueBlobAsync(t.Result, blockTag, ct))
-                .ToImmutableArray();
+                var queueTasks = uriTasks
+                    .Select(t => ingestClient.QueueBlobAsync(
+                        t.Result,
+                        blockTag,
+                        item.Block.ExtentCreationTime,
+                        ct))
+                    .ToImmutableArray();
 
-            await Task.WhenAll(queueTasks);
+                await Task.WhenAll(queueTasks);
 
-            blockItem = blockItem.ChangeState(BlockState.Queued);
-            blockItem.BlockTag = blockTag;
-            RowItemGateway.Append(blockItem);
+                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
-            return blockItem;
+                newBlockItem.BlockTag = blockTag;
+                RowItemGateway.Append(newBlockItem);
+            }
         }
     }
 }

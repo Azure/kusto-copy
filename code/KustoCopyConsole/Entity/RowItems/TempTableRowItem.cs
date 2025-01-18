@@ -8,17 +8,15 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
-    internal class IterationRowItem : RowItemBase
+    internal class TempTableRowItem : RowItemBase
     {
-        public IterationState State { get; set; }
+        public TempTableState State { get; set; }
 
         public string ActivityName { get; set; } = string.Empty;
 
         public long IterationId { get; set; }
 
-        public string CursorStart { get; set; } = string.Empty;
-
-        public string CursorEnd { get; set; } = string.Empty;
+        public string TempTableName { get; set; } = string.Empty;
 
         public override void Validate()
         {
@@ -31,9 +29,9 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IterationId)} should be positive but is {IterationId}");
             }
-            if (State != IterationState.Starting && string.IsNullOrWhiteSpace(CursorEnd))
+            if (string.IsNullOrWhiteSpace(TempTableName))
             {
-                throw new InvalidDataException($"{nameof(CursorEnd)} should have a value");
+                throw new InvalidDataException($"{nameof(TempTableName)} should have a value");
             }
         }
 
@@ -42,9 +40,9 @@ namespace KustoCopyConsole.Entity.RowItems
             return new IterationKey(ActivityName, IterationId);
         }
 
-        public IterationRowItem ChangeState(IterationState newState)
+        public TempTableRowItem ChangeState(TempTableState newState)
         {
-            var clone = (IterationRowItem)Clone();
+            var clone = (TempTableRowItem)Clone();
 
             clone.State = newState;
 

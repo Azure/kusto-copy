@@ -1,74 +1,70 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
     internal class AwaitIngestRunner : RunnerBase
     {
-        private static readonly TimeSpan REFRESH_PERIOD = TimeSpan.FromSeconds(5);
-
         public AwaitIngestRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory)
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(10))
         {
         }
 
-        public async Task<BlockRowItem> RunAsync(BlockRowItem blockItem, CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            if (blockItem.State == BlockState.Queued)
+            while (!AllActivitiesCompleted())
             {
-                blockItem = await AwaitIngestionAsync(blockItem, ct);
-            }
+                var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                    a => a.RowItem.State != ActivityState.Completed,
+                    i => i.RowItem.State != IterationState.Completed);
+                var queuedBlocks = allBlocks
+                    .Where(h => h.Block.State == BlockState.Queued);
+                var ingestionTasks = queuedBlocks
+                    .Select(h => UpdateQueuedBlockAsync(h, ct))
+                    .ToImmutableArray();
 
-            return blockItem;
+                await Task.WhenAll(ingestionTasks);
+
+                //  Sleep
+                await SleepAsync(ct);
+            }
         }
 
-        private async Task<BlockRowItem> AwaitIngestionAsync(
-            BlockRowItem blockItem,
+        private async Task UpdateQueuedBlockAsync(
+            ActivityFlatHierarchy item,
             CancellationToken ct)
         {
-            var activityCache = RowItemGateway.InMemoryCache.ActivityMap[blockItem.ActivityName];
-            var iterationCache = activityCache.IterationMap[blockItem.IterationId];
-            var tempTableName = iterationCache.RowItem.TempTableName;
-            var targetRowCount = iterationCache.BlockMap[blockItem.BlockId].UrlMap.Values
-                .Sum(u => u.RowItem.RowCount);
-            var commandClient = DbClientFactory.GetDbCommandClient(
-                activityCache.RowItem.DestinationTable.ClusterUri,
-                activityCache.RowItem.DestinationTable.DatabaseName);
+            var targetRowCount = item
+                .Urls
+                .Sum(u => u.RowCount);
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                item.Activity.DestinationTable.ClusterUri,
+                item.Activity.DestinationTable.DatabaseName);
+            var rowCount = await dbClient.GetExtentRowCountAsync(
+                new KustoPriority(item.Block.GetIterationKey()),
+                item.TempTable!.TempTableName,
+                item.Block.BlockTag,
+                ct);
 
-            while (true)
+            if (rowCount > targetRowCount)
             {
-                var rowCount = await commandClient.GetExtentRowCountAsync(
-                    new KustoPriority(
-                        blockItem.ActivityName,
-                        blockItem.IterationId,
-                        blockItem.BlockId),
-                    tempTableName,
-                    blockItem.BlockTag,
-                    ct);
+                throw new CopyException(
+                    $"Target row count is {targetRowCount} while we observe {rowCount}",
+                    false);
+            }
+            if (rowCount == targetRowCount)
+            {
+                var newBlockItem = item.Block.ChangeState(BlockState.Ingested);
 
-                if (rowCount > targetRowCount)
-                {
-                    throw new CopyException(
-                        $"Target row count is {targetRowCount} while we observe {rowCount}",
-                        false);
-                }
-                if (rowCount == targetRowCount)
-                {
-                    blockItem = blockItem.ChangeState(BlockState.Ingested);
-                    RowItemGateway.Append(blockItem);
-
-                    return blockItem;
-                }
-                else
-                {
-                    await Task.Delay(REFRESH_PERIOD, ct);
-                }
+                RowItemGateway.Append(newBlockItem);
             }
         }
     }

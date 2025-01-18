@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Orchestrations
+namespace KustoCopyConsole.Entity.RowItems.Keys
 {
-    public record TimeWindow(DateTime StartTime, DateTime EndTime);
+    internal record IterationKey(string ActivityName, long IterationId);
 }

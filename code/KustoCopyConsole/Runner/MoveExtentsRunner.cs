@@ -1,8 +1,10 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
@@ -12,53 +14,50 @@ namespace KustoCopyConsole.Runner
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
            DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory)
+           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(10))
         {
         }
 
-        public async Task<BlockRowItem> RunAsync(BlockRowItem blockItem, CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            if (blockItem.State == BlockState.Ingested)
+            while (!AllActivitiesCompleted())
             {
-                blockItem = await MoveExtentsAsync(blockItem, ct);
-            }
+                var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                    a => a.RowItem.State != ActivityState.Completed,
+                    i => i.RowItem.State != IterationState.Completed);
+                var ingestedBlocks = allBlocks
+                    .Where(h => h.Block.State == BlockState.Ingested);
+                var moveTasks = ingestedBlocks
+                    .Select(h => UpdateIngestedBlockAsync(h, ct))
+                    .ToImmutableArray();
 
-            return blockItem;
+                await Task.WhenAll(moveTasks);
+
+                //  Sleep
+                await SleepAsync(ct);
+            }
         }
 
-        private async Task<BlockRowItem> MoveExtentsAsync(
-            BlockRowItem blockItem,
-            CancellationToken ct)
+        private async Task UpdateIngestedBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
         {
-            if (blockItem.State == BlockState.Ingested)
-            {
-                var activityCache = RowItemGateway.InMemoryCache
-                    .ActivityMap[blockItem.ActivityName];
-                var iterationItem = activityCache
-                    .IterationMap[blockItem.IterationId]
-                    .RowItem;
-                var commandClient = DbClientFactory.GetDbCommandClient(
-                    activityCache.RowItem.DestinationTable.ClusterUri,
-                    activityCache.RowItem.DestinationTable.DatabaseName);
-                var priority = new KustoPriority(
-                    blockItem.ActivityName, blockItem.IterationId, blockItem.BlockId);
-                var extentCount = await commandClient.MoveExtentsAsync(
-                    priority,
-                    iterationItem.TempTableName,
-                    activityCache.RowItem.DestinationTable.TableName,
-                    blockItem.BlockTag,
-                    ct);
-                var cleanCount = await commandClient.CleanExtentTagsAsync(
-                    priority,
-                    activityCache.RowItem.DestinationTable.TableName,
-                    blockItem.BlockTag,
-                    ct);
+            var commandClient = DbClientFactory.GetDbCommandClient(
+                item.Activity.DestinationTable.ClusterUri,
+                item.Activity.DestinationTable.DatabaseName);
+            var priority = new KustoPriority(item.Block.GetIterationKey());
+            var extentCount = await commandClient.MoveExtentsAsync(
+                priority,
+                item.TempTable!.TempTableName,
+                item.Activity.DestinationTable.TableName,
+                item.Block.BlockTag,
+                ct);
+            var cleanCount = await commandClient.CleanExtentTagsAsync(
+                priority,
+                item.Activity.DestinationTable.TableName,
+                item.Block.BlockTag,
+                ct);
+            var newBlockItem = item.Block.ChangeState(BlockState.ExtentMoved);
 
-                blockItem = blockItem.ChangeState(BlockState.ExtentMoved);
-                RowItemGateway.Append(blockItem);
-            }
-
-            return blockItem;
+            RowItemGateway.Append(newBlockItem);
         }
     }
 }
