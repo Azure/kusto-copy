@@ -181,7 +181,8 @@ namespace KustoCopyConsole.Runner
 
             //  We sort descending since the stack serves them upside-down
             var stack = new Stack<RecordDistributionInExtent>(distributionInExtents
-                .OrderByDescending(d => d.IngestionTimeStart));
+                .OrderByDescending(d => d.IngestionTimeStart)
+                .ThenByDescending(d => d.IngestionTimeEnd));
 
             while (stack.Any())
             {
