@@ -72,7 +72,7 @@ namespace KustoCopyConsole.Kusto
                     : $"| where cursor_after({CURSOR_START_PARAM})";
                     var ingestionTimeStartFilter = ingestionTimeStart==null
                     ? string.Empty
-                    : $"| where IngestionTime>todatetime({INGESTION_TIME_START_PARAM})";
+                    : $"| where ingestion_time()>todatetime({INGESTION_TIME_START_PARAM})";
                     var query = @$"
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
@@ -99,7 +99,7 @@ BaseData
     ExtentId=take_any(ExtentId), RowCount=sum(RowCount)
     by Rank
 | project-away Rank
-| extend ExtentId=iif(ExtentId==guid('00000000-0000-0000-0000-000000000000'), "", tostring(ExtentId))
+| extend ExtentId=iif(ExtentId==guid('00000000-0000-0000-0000-000000000000'), '', tostring(ExtentId))
 ";
                     var properties = new ClientRequestProperties();
 
