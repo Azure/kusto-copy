@@ -67,6 +67,12 @@ namespace KustoCopyConsole.Kusto
                     const string CURSOR_END_PARAM = "CursorEnd";
                     const string INGESTION_TIME_START_PARAM = "IngestionTimeStart";
 
+                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    ? string.Empty
+                    : $"| where cursor_after({CURSOR_START_PARAM})";
+                    var ingestionTimeStartFilter = ingestionTimeStart==null
+                    ? string.Empty
+                    : $"| where ingestion_time()>todatetime({INGESTION_TIME_START_PARAM})";
                     var query = @$"
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
@@ -74,21 +80,26 @@ declare query_parameters(
     {INGESTION_TIME_START_PARAM}:datetime=datetime(null));
 let MaxStatCount = {maxStatCount};
 let BaseData = ['{tableName}']
-    | project IngestionTime = ingestion_time()
-    | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
-    | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
-    | where iif(isnull({INGESTION_TIME_START_PARAM}), true, IngestionTime>todatetime({INGESTION_TIME_START_PARAM}));
-let MinIngestionTime = toscalar(BaseData
-    | summarize min(IngestionTime));
-let ProfileData = BaseData
-    | where IngestionTime < MinIngestionTime + 1d
-    | summarize RowCount=count() by IngestionTime, ExtentId=tostring(extent_id());
-let MaxIngestionTime = toscalar(ProfileData
-    | top MaxStatCount by IngestionTime asc
+    {cursorStartFilter}
+    | where cursor_before_or_at({CURSOR_END_PARAM})
+    {ingestionTimeStartFilter};
+//  Cut the ingestion time away
+let MaxIngestionTime = toscalar(
+    BaseData
+    | summarize by IngestionTime=ingestion_time(), ExtentId=tostring(extent_id())
+    | top {maxStatCount} by IngestionTime asc
     | summarize max(IngestionTime));
-//  Recompute in case we did split an ingestion time in two
-ProfileData
+//  Reuse the cut-away value in case the maxStatCount cut in the middle of a constant ingestion time sequence
+BaseData
+| summarize RowCount=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
 | where IngestionTime <= MaxIngestionTime
+| order by IngestionTime asc
+| extend Rank=row_rank_dense(ExtentId)
+| summarize IngestionTimeStart=min(IngestionTime), IngestionTimeEnd=max(IngestionTime),
+    ExtentId=take_any(ExtentId), RowCount=sum(RowCount)
+    by Rank
+| project-away Rank
+| extend ExtentId=iif(ExtentId==guid('00000000-0000-0000-0000-000000000000'), '', tostring(ExtentId))
 ";
                     var properties = new ClientRequestProperties();
 
@@ -107,9 +118,10 @@ ProfileData
                     var result = reader.ToDataSet().Tables[0].Rows
                         .Cast<DataRow>()
                         .Select(r => new RecordDistribution(
-                            (DateTime)(r[0]),
-                            (string)(r[1]),
-                            (long)r[2]))
+                            (DateTime)(r["IngestionTimeStart"]),
+                            (DateTime)(r["IngestionTimeEnd"]),
+                            (string)(r["ExtentId"]),
+                            (long)r["RowCount"]))
                         .ToImmutableArray();
 
                     return result;

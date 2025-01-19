@@ -13,10 +13,11 @@ namespace KustoCopyConsole.Runner
     {
         #region Inner Types
         private record RecordDistributionInExtent(
-            DateTime IngestionTime,
+            DateTime IngestionTimeStart,
+            DateTime IngestionTimeEnd,
             string ExtentId,
             long RowCount,
-            DateTime MinCreatedOn);
+            DateTime? MinCreatedOn);
 
         private record BatchExportBlock(
             IEnumerable<Task> exportingTasks,
@@ -135,69 +136,87 @@ namespace KustoCopyConsole.Runner
 
                 if (distributionInExtents.Any())
                 {
-                    var orderedDistributionInExtents = distributionInExtents
-                        .OrderBy(d => d.IngestionTime)
-                        .ThenBy(d => d.MinCreatedOn)
-                        .ToImmutableArray();
-
-                    while (orderedDistributionInExtents.Any())
-                    {
-                        (var newBlockItem, var remainingDistributionInExtents) = PlanSingleBlock(
-                            iterationItem,
-                            lastBlock,
-                            orderedDistributionInExtents);
-
-                        orderedDistributionInExtents = remainingDistributionInExtents
-                            .ToImmutableArray();
-                        RowItemGateway.Append(newBlockItem);
-                        lastBlock = newBlockItem;
-                    }
+                    PlanBlockBatch(
+                        distributionInExtents,
+                        iterationItem.ActivityName,
+                        iterationItem.IterationId,
+                        lastBlock?.BlockId ?? 0);
                 }
                 else
                 {
-                    iterationItem = iterationItem.ChangeState(IterationState.Planned);
+                    iterationItem = blockMap.Any()
+                        ? iterationItem.ChangeState(IterationState.Planned)
+                        : iterationItem.ChangeState(IterationState.Completed);
                     RowItemGateway.Append(iterationItem);
                 }
             }
         }
 
-        private (BlockRowItem, IEnumerable<RecordDistributionInExtent>) PlanSingleBlock(
-            IterationRowItem iterationItem,
-            BlockRowItem? lastBlock,
-            IImmutableList<RecordDistributionInExtent> distributionInExtents)
+        private void PlanBlockBatch(
+            IEnumerable<RecordDistributionInExtent> distributionInExtents,
+            string activityName,
+            long iterationId,
+            long lastBlockId)
         {
-            var nextBlockId = (lastBlock?.BlockId ?? 0) + 1;
-            var nextIngestionTimeStart = lastBlock?.IngestionTimeEnd;
-            long cummulativeRowCount = 0;
-
-            for (var i = 0; i != distributionInExtents.Count; ++i)
+            void CreateBlock(
+                RecordDistributionInExtent distribution,
+                string activityName,
+                long iterationId,
+                long blockId)
             {
-                var distribution = distributionInExtents[i];
-
-                cummulativeRowCount += distribution.RowCount;
-                if (i + 1 == distributionInExtents.Count
-                    || cummulativeRowCount + distributionInExtents[i + 1].RowCount > RECORDS_PER_BLOCK
-                    || distribution.MinCreatedOn != distributionInExtents[i + 1].MinCreatedOn)
+                var block = new BlockRowItem
                 {
-                    var cummulativeDistributions = distributionInExtents.Take(i + 1);
-                    var remainingDistributions = distributionInExtents.Skip(i + 1);
-                    var blockItem = new BlockRowItem
-                    {
-                        State = BlockState.Planned,
-                        ActivityName = iterationItem.ActivityName,
-                        IterationId = iterationItem.IterationId,
-                        BlockId = nextBlockId++,
-                        IngestionTimeStart = cummulativeDistributions.Min(d => d.IngestionTime),
-                        IngestionTimeEnd = cummulativeDistributions.Max(d => d.IngestionTime),
-                        ExtentCreationTime = cummulativeDistributions.Min(d => d.MinCreatedOn),
-                        PlannedRowCount = cummulativeDistributions.Sum(d => d.RowCount)
-                    };
+                    State = BlockState.Planned,
+                    ActivityName = activityName,
+                    IterationId = iterationId,
+                    BlockId = blockId,
+                    IngestionTimeStart = distribution.IngestionTimeStart,
+                    IngestionTimeEnd = distribution.IngestionTimeEnd,
+                    ExtentCreationTime = distribution.MinCreatedOn,
+                    PlannedRowCount = distribution.RowCount
+                };
 
-                    return (blockItem, remainingDistributions);
-                }
+                RowItemGateway.Append(block);
             }
 
-            throw new InvalidOperationException("We should never reach this code");
+            //  We sort descending since the stack serves them upside-down
+            var stack = new Stack<RecordDistributionInExtent>(distributionInExtents
+                .OrderByDescending(d => d.IngestionTimeStart)
+                .ThenByDescending(d => d.IngestionTimeEnd));
+
+            while (stack.Any())
+            {
+                var first = stack.Pop();
+
+                if (stack.Any())
+                {
+                    var second = stack.Pop();
+
+                    if (first.IngestionTimeEnd == second.IngestionTimeStart
+                        || (first.ExtentId == second.ExtentId && first.RowCount + second.RowCount <= RECORDS_PER_BLOCK))
+                    {   //  Merge first and second together
+                        var merge = new RecordDistributionInExtent(
+                            first.IngestionTimeStart,
+                            second.IngestionTimeEnd,
+                            second.ExtentId,
+                            first.RowCount + second.RowCount,
+                            first.MinCreatedOn == null || second.MinCreatedOn == null
+                            ? null
+                            : (first.MinCreatedOn < second.MinCreatedOn ? first.MinCreatedOn : second.MinCreatedOn));
+
+                        stack.Push(merge);
+                    }
+                    else
+                    {
+                        CreateBlock(first, activityName, iterationId, ++lastBlockId);
+                        stack.Push(second);
+                    }
+                }
+                else
+                {
+                    CreateBlock(first, activityName, iterationId, ++lastBlockId);
+                }
+            }
         }
 
         //  Merge results from query + show extents command
@@ -213,7 +232,7 @@ namespace KustoCopyConsole.Runner
                 .RowItem;
             var activityParam = Parameterization.Activities[iterationItem.ActivityName];
             var distributions = await queryClient.GetRecordDistributionAsync(
-                new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                new KustoPriority(iterationItem.GetIterationKey()),
                 activityItem.SourceTable.TableName,
                 activityParam.KqlQuery,
                 iterationItem.CursorStart,
@@ -226,10 +245,11 @@ namespace KustoCopyConsole.Runner
             {
                 var extentIds = distributions
                     .Select(d => d.ExtentId)
+                    //  Exclude the empty extent-id (for row-store rows)
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Distinct();
                 var extentDates = await dbCommandClient.GetExtentDatesAsync(
-                    new KustoPriority(iterationItem.ActivityName, iterationItem.IterationId),
+                    new KustoPriority(iterationItem.GetIterationKey()),
                     activityItem.SourceTable.TableName,
                     extentIds,
                     ct);
@@ -242,10 +262,13 @@ namespace KustoCopyConsole.Runner
                 {
                     var distributionInExtents = distributions
                         .Select(d => new RecordDistributionInExtent(
-                            d.IngestionTime,
+                            d.IngestionTimeStart,
+                            d.IngestionTimeEnd,
                             d.ExtentId,
                             d.RowCount,
-                            extentDateMap[d.ExtentId]))
+                            extentDateMap.ContainsKey(d.ExtentId)
+                            ? extentDateMap[d.ExtentId]
+                            : null))
                         .ToImmutableArray();
 
                     return distributionInExtents;

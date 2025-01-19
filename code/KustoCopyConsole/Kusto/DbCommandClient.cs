@@ -1,11 +1,9 @@
-﻿using Azure;
-using Kusto.Cloud.Platform.Data;
+﻿using Kusto.Cloud.Platform.Data;
 using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 using System.Data;
-using System.Diagnostics;
 
 namespace KustoCopyConsole.Kusto
 {
@@ -107,6 +105,9 @@ namespace KustoCopyConsole.Kusto
                     const string INGESTION_TIME_END_PARAM = "IngestionTimeEnd";
 
                     var rootListText = string.Join(", ", storageRootUris.Select(u => $"h'{u}'"));
+                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    ? string.Empty
+                    : $"| where cursor_after({CURSOR_START_PARAM})";
                     var commandText = @$"
 .export async compressed to parquet (
     {rootListText}
@@ -122,10 +123,9 @@ declare query_parameters(
     {INGESTION_TIME_START_PARAM}:datetime,
     {INGESTION_TIME_END_PARAM}:datetime);
 let BlockData = ['{kqlQuery}']
-    | where iif(isempty({CURSOR_START_PARAM}), true, cursor_after({CURSOR_START_PARAM}))
-    | where iif(isempty({CURSOR_END_PARAM}), true, cursor_before_or_at({CURSOR_END_PARAM}))
-    | where iif(isnull({INGESTION_TIME_START_PARAM}), true, ingestion_time()>=todatetime({INGESTION_TIME_START_PARAM}))
-    | where iif(isnull({INGESTION_TIME_END_PARAM}), true, ingestion_time()<=todatetime({INGESTION_TIME_END_PARAM}));
+    {cursorStartFilter}
+    | where cursor_before_or_at({CURSOR_END_PARAM})
+    | where ingestion_time() between ({INGESTION_TIME_START_PARAM}.. {INGESTION_TIME_END_PARAM});
 BlockData
 ";
                     var properties = new ClientRequestProperties();

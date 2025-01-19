@@ -22,7 +22,7 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public DateTime IngestionTimeEnd { get; set; } = DateTime.MinValue;
 
-        public DateTime ExtentCreationTime { get; set; } = DateTime.MinValue;
+        public DateTime? ExtentCreationTime { get; set; } = DateTime.MinValue;
 
         public long PlannedRowCount { get; set; } = 0;
 
