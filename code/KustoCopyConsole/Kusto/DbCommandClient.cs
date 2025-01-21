@@ -88,7 +88,8 @@ namespace KustoCopyConsole.Kusto
         public async Task<string> ExportBlockAsync(
             KustoPriority priority,
             IEnumerable<Uri> storageRootUris,
-            string kqlQuery,
+            string tableName,
+            string? kqlQuery,
             string cursorStart,
             string cursorEnd,
             DateTime ingestionTimeStart,
@@ -122,10 +123,12 @@ declare query_parameters(
     {CURSOR_END_PARAM}:string,
     {INGESTION_TIME_START_PARAM}:datetime,
     {INGESTION_TIME_END_PARAM}:datetime);
-let BlockData = ['{kqlQuery}']
+let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at({CURSOR_END_PARAM})
     | where ingestion_time() between ({INGESTION_TIME_START_PARAM}.. {INGESTION_TIME_END_PARAM});
+let BlockData = ['{{tableName}}']}}
+['{{kqlQuery}}'];
 BlockData
 ";
                     var properties = new ClientRequestProperties();
