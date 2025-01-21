@@ -45,6 +45,9 @@ namespace KustoCopyConsole.Kusto
             var ingestionResult = await _ingestProvider.IngestFromStorageAsync(
                 blobPath.ToString(),
                 properties);
+            //var q = ingestionResult.GetIngestionStatusCollection();
+
+            //IngestionResultSerializer.Serialize(ingestionResult);
         }
     }
 }
