@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
+            //  Clean half-queued URLs
+            CleanQueuingUrls();
             while (!AllActivitiesCompleted())
             {
                 var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
@@ -30,7 +32,6 @@ namespace KustoCopyConsole.Runner
                     i => i.RowItem.State != IterationState.Completed);
                 var exportedBlocks = allBlocks
                     .Where(h => h.Block.State == BlockState.Exported);
-                var s = new Stopwatch(); s.Start();
                 var ingestionTasks = exportedBlocks
                     .Select(h => QueueIngestBlockAsync(h, ct))
                     .ToImmutableArray();
@@ -42,6 +43,31 @@ namespace KustoCopyConsole.Runner
                     //  Sleep
                     await SleepAsync(ct);
                 }
+            }
+        }
+
+        private void CleanQueuingUrls()
+        {
+            var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                a => a.RowItem.State != ActivityState.Completed,
+                i => i.RowItem.State != IterationState.Completed);
+            var queuingBlocks = allBlocks
+                .Where(h => h.Block.State == BlockState.Queuing);
+            var queuingUrls = queuingBlocks
+                .SelectMany(h => h.Urls);
+
+            foreach (var block in queuingBlocks)
+            {
+                var newBlockItem = block.Block.ChangeState(BlockState.Exported);
+
+                foreach (var url in block.Urls)
+                {
+                    var newUrlItem = url.ChangeState(UrlState.Deleted);
+
+                    RowItemGateway.Append(newUrlItem);
+                }
+                newBlockItem.BlockTag = string.Empty;
+                RowItemGateway.Append(newBlockItem);
             }
         }
 
@@ -57,33 +83,52 @@ namespace KustoCopyConsole.Runner
             //  If so, we'll process this block later
             if (item.TempTable != null)
             {
+                var newBlockItem = item.Block.ChangeState(BlockState.Queuing);
+
+                RowItemGateway.Append(newBlockItem);
+
                 var ingestClient = DbClientFactory.GetIngestClient(
                     item.Activity.DestinationTable.ClusterUri,
                     item.Activity.DestinationTable.DatabaseName,
                     item.TempTable!.TempTableName);
                 var blockTag = $"kusto-copy:{Guid.NewGuid()}";
-                var uriTasks = item
+                var queueTasks = item
                     .Urls
-                    .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(new Uri(u.Url), ct))
-                    .ToImmutableArray();
-
-                await Task.WhenAll(uriTasks);
-
-                var queueTasks = uriTasks
-                    .Select(t => ingestClient.QueueBlobAsync(
-                        t.Result,
+                    .Select(u => QueueIngestUrlAsync(
+                        ingestClient,
                         blockTag,
                         item.Block.ExtentCreationTime,
+                        u,
                         ct))
                     .ToImmutableArray();
 
                 await Task.WhenAll(queueTasks);
 
-                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
+                newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
                 newBlockItem.BlockTag = blockTag;
                 RowItemGateway.Append(newBlockItem);
             }
+        }
+
+        private async Task QueueIngestUrlAsync(
+            IngestClient ingestClient,
+            string blockTag,
+            DateTime? extentCreationTime,
+            UrlRowItem urlItem,
+            CancellationToken ct)
+        {
+            var uri = await StagingBlobUriProvider.AuthorizeUriAsync(new Uri(urlItem.Url), ct);
+            var serializedQueueResult = await ingestClient.QueueBlobAsync(
+                    uri,
+                    blockTag,
+                    extentCreationTime,
+                    ct);
+
+            urlItem = urlItem.ChangeState(UrlState.Queued);
+            urlItem.SerializedQueuedResult = serializedQueueResult;
+
+            RowItemGateway.Append(urlItem);
         }
     }
 }

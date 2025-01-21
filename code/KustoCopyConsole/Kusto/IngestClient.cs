@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Kusto
             _table = table;
         }
 
-        public async Task QueueBlobAsync(
+        public async Task<string> QueueBlobAsync(
             Uri blobPath,
             string extentTag,
             DateTime? creationTime,
@@ -45,9 +45,9 @@ namespace KustoCopyConsole.Kusto
             var ingestionResult = await _ingestProvider.IngestFromStorageAsync(
                 blobPath.ToString(),
                 properties);
-            //var q = ingestionResult.GetIngestionStatusCollection();
+            var serializedResult = IngestionResultSerializer.Serialize(ingestionResult);
 
-            //IngestionResultSerializer.Serialize(ingestionResult);
+            return serializedResult;
         }
     }
 }

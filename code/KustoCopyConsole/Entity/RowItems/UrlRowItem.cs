@@ -21,6 +21,8 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long RowCount { get; set; }
 
+        public string SerializedQueuedResult { get; set; } = string.Empty;
+
         public override void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))
@@ -40,6 +42,10 @@ namespace KustoCopyConsole.Entity.RowItems
             if (!Uri.TryCreate(Url, UriKind.Absolute, out _))
             {
                 throw new InvalidDataException($"{nameof(Url)} is invalid:  {Url}");
+            }
+            if (State >= UrlState.Queued && string.IsNullOrWhiteSpace(SerializedQueuedResult))
+            {
+                throw new InvalidDataException($"{nameof(SerializedQueuedResult)} should not be empty");
             }
         }
 

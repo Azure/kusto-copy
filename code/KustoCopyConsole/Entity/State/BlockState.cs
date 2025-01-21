@@ -6,6 +6,7 @@
         Exporting,
         CompletingExport,
         Exported,
+        Queuing,
         Queued,
         Ingested,
         ExtentMoved
