@@ -85,7 +85,7 @@ namespace KustoCopyConsole.Runner
 
                     if (failure != null)
                     {
-                        Trace.TraceWarning(
+                        TraceWarning(
                             $"Warning!  Ingestion failed with status '{failure.Status}'" +
                             $"and detail '{failure.Details}' for blob {urlItem.Url} in block " +
                             $"{oldestBlock.RowItem.BlockId}, iteration " +

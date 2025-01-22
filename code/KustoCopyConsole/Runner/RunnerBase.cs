@@ -4,11 +4,14 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
     internal class RunnerBase
     {
+        private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
+
         private readonly TimeSpan _wakePeriod;
         private volatile TaskCompletionSource _wakeUpSource = new TaskCompletionSource();
 
@@ -72,6 +75,11 @@ namespace KustoCopyConsole.Runner
             return Task.WhenAny(
                 Task.Delay(_wakePeriod, ct),
                 WakeUpTask);
+        }
+
+        protected void TraceWarning(string text)
+        {
+            _traceSource.TraceEvent(TraceEventType.Warning, 0, text);
         }
     }
 }

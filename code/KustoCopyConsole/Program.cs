@@ -181,11 +181,11 @@ namespace KustoCopyConsole
             var consoleListener = new TextWriterTraceListener(Console.Out)
             {
                 Filter = new MultiFilter(
-                    new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning))
+                    new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning),
+                    new SourceFilter(TraceConstants.TRACE_SOURCE))
             };
 
             Trace.Listeners.Add(consoleListener);
-
             if (isVerbose)
             {
                 Trace.TraceInformation("Verbose output enabled");
