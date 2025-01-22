@@ -99,7 +99,11 @@ namespace KustoCopyConsole.Runner
 
         private void ReturnToPlanned(BlockCache oldestBlock)
         {
-            RowItemGateway.Append(oldestBlock.RowItem.ChangeState(BlockState.Planned));
+            var newBlock = oldestBlock.RowItem.ChangeState(BlockState.Planned);
+
+            newBlock.OperationId = string.Empty;
+            newBlock.BlockTag = string.Empty;
+            RowItemGateway.Append(newBlock);
             foreach (var url in oldestBlock.UrlMap.Values.Select(u => u.RowItem))
             {
                 RowItemGateway.Append(url.ChangeState(UrlState.Deleted));
