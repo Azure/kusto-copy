@@ -28,10 +28,6 @@ namespace KustoCopyConsole.JobParameter
             }
             Destination.Validate();
             TableOption.Validate();
-            if (string.IsNullOrWhiteSpace(KqlQuery))
-            {
-                throw new CopyException($"{nameof(KqlQuery)} is required", false);
-            }
         }
 
         public TableIdentity GetEffectiveDestinationTableIdentity()
