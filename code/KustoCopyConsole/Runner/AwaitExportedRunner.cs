@@ -39,8 +39,6 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            //  Clean half-exported URLs
-            CleanCompletingExports();
             while (!AllActivitiesCompleted())
             {
                 var clusterBlocks = GetClusterBlocks();
@@ -172,7 +170,6 @@ namespace KustoCopyConsole.Runner
                         RowCount = d.RecordCount
                     });
 
-                RowItemGateway.Append(block.ChangeState(BlockState.CompletingExport));
                 foreach (var url in urls)
                 {
                     RowItemGateway.Append(url);
@@ -206,26 +203,5 @@ namespace KustoCopyConsole.Runner
             }
         }
         #endregion
-
-        private void CleanCompletingExports()
-        {
-            var completingBlocks = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed)
-                .SelectMany(i => i.BlockMap.Values)
-                .Where(b => b.RowItem.State == BlockState.CompletingExport);
-
-            foreach (var block in completingBlocks)
-            {
-                foreach (var url in block.UrlMap.Values)
-                {
-                    RowItemGateway.Append(url.RowItem.ChangeState(UrlState.Deleted));
-                }
-                RowItemGateway.Append(block.RowItem.ChangeState(BlockState.Exporting));
-            }
-        }
     }
 }

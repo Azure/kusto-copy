@@ -170,24 +170,5 @@ namespace KustoCopyConsole.Runner
 
             return capacity;
         }
-
-        private BlockRowItem CleanUrls(BlockRowItem blockItem)
-        {
-            var existingUrls = RowItemGateway.InMemoryCache
-                .ActivityMap[blockItem.ActivityName]
-                .IterationMap[blockItem.IterationId]
-                .BlockMap[blockItem.BlockId]
-                .UrlMap
-                .Values;
-
-            foreach (var url in existingUrls)
-            {
-                RowItemGateway.Append(url.RowItem.ChangeState(UrlState.Deleted));
-            }
-            blockItem = blockItem.ChangeState(BlockState.Exporting);
-            RowItemGateway.Append(blockItem);
-
-            return blockItem;
-        }
     }
 }
