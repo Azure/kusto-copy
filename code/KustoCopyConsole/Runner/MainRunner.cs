@@ -43,7 +43,14 @@ namespace KustoCopyConsole.Runner
 
         private static IAppendStorage CreateAppendStorage(string logFilePath)
         {
-            return new LocalAppendStorage(GetLocalLogFilePath(logFilePath));
+            if (string.IsNullOrWhiteSpace(logFilePath))
+            {
+                throw new NotImplementedException();
+            }
+            else
+            {
+                return new LocalAppendStorage(GetLocalLogFilePath(logFilePath));
+            }
         }
 
         private static string GetLocalLogFilePath(string logFilePath)
