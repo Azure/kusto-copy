@@ -73,6 +73,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
+            CleanUrls();
             await using (var progressBar = new ProgressBar(RowItemGateway.InMemoryCache, ct))
             {
                 foreach (var a in Parameterization.Activities.Values)
@@ -106,6 +107,48 @@ namespace KustoCopyConsole.Runner
                     Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                     Task.Run(() => moveExtentsRunner.RunAsync(ct)),
                     Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
+            }
+        }
+
+        private void CleanUrls()
+        {
+            foreach (var activity in RowItemGateway.InMemoryCache
+                .ActivityMap
+                .Values
+                .Where(a => a.RowItem.State != ActivityState.Completed))
+            {
+                foreach (var iteration in activity
+                    .IterationMap
+                    .Values
+                    .Where(a => a.RowItem.State != IterationState.Completed))
+                {
+                    foreach (var block in iteration.BlockMap.Values)
+                    {
+                        //  A block was sent back to export
+                        if (block.RowItem.State == BlockState.Planned
+                            //  A block was in the process of exporting
+                            || block.RowItem.State == BlockState.Exporting)
+                        {
+                            UpdateUrls(block.UrlMap.Values, u => u.ChangeState(UrlState.Deleted));
+                        }
+                        if (block.RowItem.State == BlockState.Exported)
+                        {
+                            UpdateUrls(
+                                block.UrlMap.Values.Where(b => b.RowItem.State == UrlState.Queued),
+                                u => u.ChangeState(UrlState.Exported));
+                        }
+                    }
+                }
+            }
+        }
+
+        private void UpdateUrls(
+            IEnumerable<UrlCache> values,
+            Func<UrlRowItem, UrlRowItem> updateFunction)
+        {
+            foreach (var item in values.Select(c => c.RowItem))
+            {
+                RowItemGateway.Append(updateFunction(item));
             }
         }
 

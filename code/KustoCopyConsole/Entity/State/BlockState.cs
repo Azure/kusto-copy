@@ -4,7 +4,6 @@
     {
         Planned,
         Exporting,
-        CompletingExport,
         Exported,
         Queued,
         Ingested,

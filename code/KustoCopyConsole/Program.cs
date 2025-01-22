@@ -1,16 +1,13 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Runner;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 
 // See https://aka.ms/new-console-template for more information
@@ -185,7 +182,7 @@ namespace KustoCopyConsole
             {
                 Filter = new MultiFilter(
                     new EventTypeFilter(isVerbose ? SourceLevels.Information : SourceLevels.Warning),
-                    new SourceFilter("kusto-copy"))
+                    new SourceFilter(TraceConstants.TRACE_SOURCE))
             };
 
             Trace.Listeners.Add(consoleListener);

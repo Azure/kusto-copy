@@ -39,8 +39,6 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            //  Clean half-exported URLs
-            CleanCompletingExports();
             while (!AllActivitiesCompleted())
             {
                 var clusterBlocks = GetClusterBlocks();
@@ -101,7 +99,7 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    Trace.TraceWarning($"Warning!  Operation ID lost:  '{id}' for " +
+                    TraceWarning($"Warning!  Operation ID lost:  '{id}' for " +
                         $"block {block.BlockId} (Iteration={block.IterationId}, " +
                         $"Activity='{block.ActivityName}') ; block marked for reprocessing");
                     block.OperationId = string.Empty;
@@ -129,7 +127,7 @@ namespace KustoCopyConsole.Runner
                     $"block {block.BlockId} (Iteration={block.IterationId}, " +
                     $"Activity='{block.ActivityName}') ; {message}";
 
-                Trace.TraceWarning(warning);
+                TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
                     block.OperationId = string.Empty;
@@ -138,7 +136,7 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    throw new CopyException(warning, false);
+                    throw new CopyException($"Permanent export error", false);
                 }
             }
         }
@@ -172,7 +170,6 @@ namespace KustoCopyConsole.Runner
                         RowCount = d.RecordCount
                     });
 
-                RowItemGateway.Append(block.ChangeState(BlockState.CompletingExport));
                 foreach (var url in urls)
                 {
                     RowItemGateway.Append(url);
@@ -199,33 +196,12 @@ namespace KustoCopyConsole.Runner
 
             if (cachedBlock.RowItem.PlannedRowCount != exportedRowCount)
             {
-                Trace.TraceWarning($"Warning!  For block ID {block.BlockId} " +
+                TraceWarning($"Warning!  For block ID {block.BlockId} " +
                     $"(activity '{block.ActivityName}', iteration {block.IterationId}) " +
                     $"had planned row count of {cachedBlock.RowItem.PlannedRowCount} but " +
                     $"exported {exportedRowCount} rows");
             }
         }
         #endregion
-
-        private void CleanCompletingExports()
-        {
-            var completingBlocks = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed)
-                .SelectMany(i => i.BlockMap.Values)
-                .Where(b => b.RowItem.State == BlockState.CompletingExport);
-
-            foreach (var block in completingBlocks)
-            {
-                foreach (var url in block.UrlMap.Values)
-                {
-                    RowItemGateway.Append(url.RowItem.ChangeState(UrlState.Deleted));
-                }
-                RowItemGateway.Append(block.RowItem.ChangeState(BlockState.Exporting));
-            }
-        }
     }
 }
