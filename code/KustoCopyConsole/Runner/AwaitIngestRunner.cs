@@ -5,6 +5,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
@@ -34,9 +35,74 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableArray();
 
                 await Task.WhenAll(ingestionTasks);
+                await FailureDetectionAsync(ct);
 
                 //  Sleep
                 await SleepAsync(ct);
+            }
+        }
+
+        private async Task FailureDetectionAsync(CancellationToken ct)
+        {
+            var activeIterations = RowItemGateway.InMemoryCache
+                .ActivityMap
+                .Values
+                .Where(a => a.RowItem.State != ActivityState.Completed)
+                .SelectMany(a => a.IterationMap.Values)
+                .Where(i => i.RowItem.State != IterationState.Completed);
+            var iterationTasks = activeIterations
+                .Select(i => IterationFailureDetectionAsync(i, ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(iterationTasks);
+        }
+
+        private async Task IterationFailureDetectionAsync(
+            IterationCache iterationCache,
+            CancellationToken ct)
+        {
+            var queuedBlocks = iterationCache
+                .BlockMap
+                .Values
+                .Where(b => b.RowItem.State == BlockState.Queued);
+
+            if (queuedBlocks.Any())
+            {
+                var activityItem = RowItemGateway.InMemoryCache
+                    .ActivityMap[iterationCache.RowItem.ActivityName]
+                    .RowItem;
+                var ingestClient = DbClientFactory.GetIngestClient(
+                    activityItem.DestinationTable.ClusterUri,
+                    activityItem.DestinationTable.DatabaseName,
+                    iterationCache.TempTable!.TempTableName);
+                var oldestBlock = queuedBlocks
+                    .ArgMin(b => b.RowItem.Updated);
+
+                foreach (var urlItem in oldestBlock.UrlMap.Values.Select(u => u.RowItem))
+                {
+                    var failure = await ingestClient.FetchIngestionFailureAsync(
+                        urlItem.SerializedQueuedResult);
+
+                    if (failure != null)
+                    {
+                        Trace.TraceWarning(
+                            $"Warning!  Ingestion failed with status '{failure.Status}'" +
+                            $"and detail '{failure.Details}' for blob {urlItem.Url} in block " +
+                            $"{oldestBlock.RowItem.BlockId}, iteration " +
+                            $"{oldestBlock.RowItem.IterationId}, activity " +
+                            $"{oldestBlock.RowItem.ActivityName} ; block will be re-exported");
+                        ReturnToPlanned(oldestBlock);
+                    }
+                }
+            }
+        }
+
+        private void ReturnToPlanned(BlockCache oldestBlock)
+        {
+            RowItemGateway.Append(oldestBlock.RowItem.ChangeState(BlockState.Planned));
+            foreach (var url in oldestBlock.UrlMap.Values.Select(u => u.RowItem))
+            {
+                RowItemGateway.Append(url.ChangeState(UrlState.Deleted));
             }
         }
 

@@ -8,48 +8,51 @@ namespace KustoCopyConsole
 {
     internal static class EnumerableHelper
     {
-        public static T ArgMax<T>(this IEnumerable<T> enumerable, Func<T, long> selector)
+        public static T ArgExtremum<T, C>(
+            this IEnumerable<T> enumerable,
+            Func<C, C, int> comparer,
+            Func<T, C> selector)
         {
-            T? maxItem = default;
-            long maxValue = 0;
+            T? extremumItem = default;
+            C? extremumValue = default;
 
             foreach (var item in enumerable)
             {
-                if (maxItem == null
-                    || selector(item) > maxValue)
+                if (extremumItem == null
+                    || extremumValue == null
+                    || comparer(selector(item), extremumValue) > 0)
                 {
-                    maxItem = item;
+                    extremumItem = item;
+                    extremumValue = selector(item);
                 }
             }
 
-            if (maxItem == null)
+            if (extremumItem == null)
             {
                 throw new InvalidOperationException("Enumerable is empty");
             }
 
-            return maxItem;
+            return extremumItem;
+        }
+
+        public static T ArgMin<T>(this IEnumerable<T> enumerable, Func<T, long> selector)
+        {
+            return ArgExtremum(enumerable, (i1, i2) => -i1.CompareTo(i2), selector);
+        }
+
+        public static T ArgMax<T>(this IEnumerable<T> enumerable, Func<T, long> selector)
+        {
+            return ArgExtremum(enumerable, (i1, i2) => i1.CompareTo(i2), selector);
+        }
+
+        public static T ArgMin<T>(this IEnumerable<T> enumerable, Func<T, DateTime> selector)
+        {
+            return ArgExtremum(enumerable, (d1, d2) => -d1.CompareTo(d2), selector);
         }
 
         public static T ArgMax<T>(this IEnumerable<T> enumerable, Func<T, DateTime> selector)
         {
-            T? maxItem = default;
-            DateTime maxValue = DateTime.MinValue;
-
-            foreach (var item in enumerable)
-            {
-                if (maxItem == null
-                    || selector(item) > maxValue)
-                {
-                    maxItem = item;
-                }
-            }
-
-            if (maxItem == null)
-            {
-                throw new InvalidOperationException("Enumerable is empty");
-            }
-
-            return maxItem;
+            return ArgExtremum(enumerable, (d1, d2) => d1.CompareTo(d2), selector);
         }
     }
 }

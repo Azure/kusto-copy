@@ -52,22 +52,19 @@ namespace KustoCopyConsole.Runner
                 a => a.RowItem.State != ActivityState.Completed,
                 i => i.RowItem.State != IterationState.Completed);
             var queuingBlocks = allBlocks
-                .Where(h => h.Block.State == BlockState.Queuing);
+                .Where(h => h.Block.State == BlockState.Exported)
+                .Where(h => h.Urls.Any(u => u.State == UrlState.Queued));
             var queuingUrls = queuingBlocks
                 .SelectMany(h => h.Urls);
 
             foreach (var block in queuingBlocks)
             {
-                var newBlockItem = block.Block.ChangeState(BlockState.Exported);
-
-                foreach (var url in block.Urls)
+                foreach (var url in block.Urls.Where(u => u.State == UrlState.Queued))
                 {
-                    var newUrlItem = url.ChangeState(UrlState.Deleted);
+                    var newUrlItem = url.ChangeState(UrlState.Exported);
 
                     RowItemGateway.Append(newUrlItem);
                 }
-                newBlockItem.BlockTag = string.Empty;
-                RowItemGateway.Append(newBlockItem);
             }
         }
 
@@ -83,10 +80,6 @@ namespace KustoCopyConsole.Runner
             //  If so, we'll process this block later
             if (item.TempTable != null)
             {
-                var newBlockItem = item.Block.ChangeState(BlockState.Queuing);
-
-                RowItemGateway.Append(newBlockItem);
-
                 var ingestClient = DbClientFactory.GetIngestClient(
                     item.Activity.DestinationTable.ClusterUri,
                     item.Activity.DestinationTable.DatabaseName,
@@ -104,7 +97,7 @@ namespace KustoCopyConsole.Runner
 
                 await Task.WhenAll(queueTasks);
 
-                newBlockItem = item.Block.ChangeState(BlockState.Queued);
+                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
                 newBlockItem.BlockTag = blockTag;
                 RowItemGateway.Append(newBlockItem);

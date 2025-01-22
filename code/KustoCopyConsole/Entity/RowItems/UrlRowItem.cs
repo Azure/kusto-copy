@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 throw new InvalidDataException($"{nameof(Url)} is invalid:  {Url}");
             }
-            if (State >= UrlState.Queued && string.IsNullOrWhiteSpace(SerializedQueuedResult))
+            if (State == UrlState.Queued && string.IsNullOrWhiteSpace(SerializedQueuedResult))
             {
                 throw new InvalidDataException($"{nameof(SerializedQueuedResult)} should not be empty");
             }
