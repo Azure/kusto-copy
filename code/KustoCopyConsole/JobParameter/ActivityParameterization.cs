@@ -32,13 +32,6 @@ namespace KustoCopyConsole.JobParameter
             {
                 throw new CopyException($"{nameof(KqlQuery)} is required", false);
             }
-            if (!KqlQuery.Contains(Source.TableName))
-            {
-                throw new CopyException(
-                    $"{nameof(KqlQuery)} must contain source table name " +
-                    $"('{Source.TableName}'):  {KqlQuery}",
-                    false);
-            }
         }
 
         public TableIdentity GetEffectiveDestinationTableIdentity()

@@ -127,9 +127,8 @@ let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at({CURSOR_END_PARAM})
     | where ingestion_time() between ({INGESTION_TIME_START_PARAM}.. {INGESTION_TIME_END_PARAM});
-let BlockData = ['{{tableName}}']}}
-['{{kqlQuery}}'];
-BlockData
+['{tableName}']
+{kqlQuery}
 ";
                     var properties = new ClientRequestProperties();
 
