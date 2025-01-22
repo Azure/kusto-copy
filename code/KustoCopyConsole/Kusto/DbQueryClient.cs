@@ -52,7 +52,7 @@ namespace KustoCopyConsole.Kusto
         public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
             KustoPriority priority,
             string tableName,
-            string kqlQuery,
+            string? kqlQuery,
             string cursorStart,
             string cursorEnd,
             DateTime? ingestionTimeStart,
@@ -78,11 +78,13 @@ declare query_parameters(
     {CURSOR_START_PARAM}:string,
     {CURSOR_END_PARAM}:string,
     {INGESTION_TIME_START_PARAM}:datetime=datetime(null));
-let MaxStatCount = {maxStatCount};
-let BaseData = ['{tableName}']
+let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at({CURSOR_END_PARAM})
     {ingestionTimeStartFilter};
+let BaseData = ['{tableName}']
+{kqlQuery}
+;
 //  Cut the ingestion time away
 let MaxIngestionTime = toscalar(
     BaseData

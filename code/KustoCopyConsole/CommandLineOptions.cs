@@ -34,7 +34,7 @@ namespace KustoCopyConsole
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;
 
-        [Option('q', "query", Required = true, HelpText = "Set query, e.g. nyc_taxi.")]
+        [Option('q', "query", Required = false, HelpText = "Set query, e.g. nyc_taxi.")]
         public string Query { get; set; } = string.Empty;
 
         [Option(

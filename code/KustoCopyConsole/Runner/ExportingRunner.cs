@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Runner
                 var dbClient = DbClientFactory.GetDbCommandClient(
                     item.Activity.SourceTable.ClusterUri,
                     item.Activity.SourceTable.DatabaseName);
-                var folderPath = $"activities/{item.Activity.ActivityName}" +
+                var folderPath = $"activities/{item.Activity.ActivityName}/" +
                     $"iterations/{item.Iteration.IterationId:D20}" +
                     $"/blocks/{item.Block.BlockId:D20}";
                 var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
@@ -72,6 +72,7 @@ namespace KustoCopyConsole.Runner
                 var operationId = await dbClient.ExportBlockAsync(
                     new KustoPriority(item.Block.GetIterationKey()),
                     writableUris,
+                    item.Activity.SourceTable.TableName,
                     query,
                     item.Iteration.CursorStart,
                     item.Iteration.CursorEnd,

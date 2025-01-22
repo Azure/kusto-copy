@@ -15,9 +15,46 @@ namespace KustoCopyConsole.Runner
         private record RecordDistributionInExtent(
             DateTime IngestionTimeStart,
             DateTime IngestionTimeEnd,
-            string ExtentId,
             long RowCount,
-            DateTime? MinCreatedOn);
+            DateTime? MinCreationTime,
+            DateTime? MaxCreationTime)
+        {
+            public RecordDistributionInExtent Merge(RecordDistributionInExtent other)
+            {
+                return new RecordDistributionInExtent(
+                    Min(IngestionTimeStart, other.IngestionTimeStart),
+                    Max(IngestionTimeEnd, other.IngestionTimeEnd),
+                    RowCount + other.RowCount,
+                    MinWithNull(MinCreationTime, MaxCreationTime),
+                    MaxWithNull(MinCreationTime, MaxCreationTime));
+            }
+
+            public TimeSpan? CreationTimeDelta => MaxCreationTime - MinCreationTime;
+
+            private static DateTime? MinWithNull(DateTime? a, DateTime? b)
+            {
+                return a == null || b == null
+                    ? null
+                    : Min(a.Value, b.Value);
+            }
+
+            private static DateTime Min(DateTime a, DateTime b)
+            {
+                return a < b ? a : b;
+            }
+
+            private static DateTime? MaxWithNull(DateTime? a, DateTime? b)
+            {
+                return a == null || b == null
+                    ? null
+                    : Max(a.Value, b.Value);
+            }
+
+            private static DateTime Max(DateTime a, DateTime b)
+            {
+                return a > b ? a : b;
+            }
+        }
 
         private record BatchExportBlock(
             IEnumerable<Task> exportingTasks,
@@ -172,7 +209,7 @@ namespace KustoCopyConsole.Runner
                     BlockId = blockId,
                     IngestionTimeStart = distribution.IngestionTimeStart,
                     IngestionTimeEnd = distribution.IngestionTimeEnd,
-                    ExtentCreationTime = distribution.MinCreatedOn,
+                    ExtentCreationTime = distribution.MinCreationTime,
                     PlannedRowCount = distribution.RowCount
                 };
 
@@ -191,23 +228,17 @@ namespace KustoCopyConsole.Runner
                 if (stack.Any())
                 {
                     var second = stack.Pop();
+                    var merge = first.Merge(second);
 
                     if (first.IngestionTimeEnd == second.IngestionTimeStart
-                        || (first.ExtentId == second.ExtentId && first.RowCount + second.RowCount <= RECORDS_PER_BLOCK))
-                    {   //  Merge first and second together
-                        var merge = new RecordDistributionInExtent(
-                            first.IngestionTimeStart,
-                            second.IngestionTimeEnd,
-                            second.ExtentId,
-                            first.RowCount + second.RowCount,
-                            first.MinCreatedOn == null || second.MinCreatedOn == null
-                            ? null
-                            : (first.MinCreatedOn < second.MinCreatedOn ? first.MinCreatedOn : second.MinCreatedOn));
-
+                        || (merge.RowCount <= RECORDS_PER_BLOCK
+                        && (merge.CreationTimeDelta < TimeSpan.FromDays(1)
+                        || second.MinCreationTime == null && first.MinCreationTime == null)))
+                    {   //  We merge
                         stack.Push(merge);
                     }
                     else
-                    {
+                    {   //  We don't merge
                         CreateBlock(first, activityName, iterationId, ++lastBlockId);
                         stack.Push(second);
                     }
@@ -261,14 +292,17 @@ namespace KustoCopyConsole.Runner
                 if (extentDates.Count == extentIds.Count())
                 {
                     var distributionInExtents = distributions
-                        .Select(d => new RecordDistributionInExtent(
-                            d.IngestionTimeStart,
-                            d.IngestionTimeEnd,
-                            d.ExtentId,
-                            d.RowCount,
-                            extentDateMap.ContainsKey(d.ExtentId)
-                            ? extentDateMap[d.ExtentId]
-                            : null))
+                        .Select(d =>
+                        {
+                            extentDateMap.TryGetValue(d.ExtentId, out DateTime creationTime);
+
+                            return new RecordDistributionInExtent(
+                                d.IngestionTimeStart,
+                                d.IngestionTimeEnd,
+                                d.RowCount,
+                                creationTime,
+                                creationTime);
+                        })
                         .ToImmutableArray();
 
                     return distributionInExtents;

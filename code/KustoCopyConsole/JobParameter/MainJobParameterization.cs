@@ -55,16 +55,21 @@ namespace KustoCopyConsole.JobParameter
                         $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
                         false);
                 }
-                if (destinationPathParts.Length != 2)
+                if (destinationPathParts.Length < 2 || destinationPathParts.Length > 3)
                 {
                     throw new CopyException(
-                        $"Destination ('{options.Destination}') should be of the form 'https://mycluster.eastus.kusto.windows.net/mydb'",
+                        $"Destination ('{options.Destination}') should be of the form " +
+                        $"'https://mycluster.eastus.kusto.windows.net/mydb' or " +
+                        $"'https://mycluster.eastus.kusto.windows.net/mydb/mytable'",
                         false);
                 }
 
                 var sourceDb = sourcePathParts[1];
                 var sourceTable = sourcePathParts[2];
                 var destinationDb = destinationPathParts[1];
+                var destinationTable = destinationPathParts.Length == 3
+                    ? destinationPathParts[2]
+                    : string.Empty;
 
                 sourceBuilder.Path = string.Empty;
                 destinationBuilder.Path = string.Empty;
@@ -85,9 +90,10 @@ namespace KustoCopyConsole.JobParameter
                             Destination = new TableParameterization
                             {
                                 ClusterUri = destinationBuilder.ToString(),
-                                DatabaseName = destinationDb
+                                DatabaseName = destinationDb,
+                                TableName = destinationTable
                             },
-                            KqlQuery = options.Query,
+                            KqlQuery = options.Query.Trim(),
                             TableOption = new TableOption()
                         })
                     .ToImmutableDictionary(a => a.ActivityName, a => a),

@@ -133,7 +133,7 @@ namespace KustoCopyConsole.Runner
                 if (status.ShouldRetry)
                 {
                     block.OperationId = string.Empty;
-                    block.ChangeState(BlockState.Planned);
+                    block = block.ChangeState(BlockState.Planned);
                     RowItemGateway.Append(block);
                 }
                 else
