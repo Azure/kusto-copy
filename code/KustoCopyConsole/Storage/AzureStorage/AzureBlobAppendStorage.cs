@@ -11,15 +11,14 @@ namespace KustoCopyConsole.Storage.AzureStorage
 {
     internal class AzureBlobAppendStorage : IAppendStorage
     {
-        private static readonly AsyncPolicy _writeBlockRetryPolicy = Policy.Handle<RequestFailedException>(
-            ex => ex.ErrorCode == "ConditionNotMet")
+        private static readonly AsyncPolicy _writeBlockRetryPolicy =
+            Policy.Handle<RequestFailedException>()
             .RetryAsync(3);
 
         private readonly DataLakeFileClient _fileClient;
         private readonly AppendBlobClient _blobClient;
         private readonly BlobLock _blobLock;
         private int _writeCount = 0;
-
 
         #region Constructors
         private AzureBlobAppendStorage(

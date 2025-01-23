@@ -40,7 +40,7 @@ namespace KustoCopyConsole.Storage
             CancellationToken ct)
         {
             _appendStorage = appendStorage;
-            _backgroundTask = BackgroundPersistanceAsync(ct);
+            _backgroundTask = Task.Run(() => BackgroundPersistanceAsync(ct));
             InMemoryCache = cache;
         }
 

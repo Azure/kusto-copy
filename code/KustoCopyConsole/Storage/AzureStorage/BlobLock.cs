@@ -21,7 +21,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
         private BlobLock(BlobLeaseClient leaseClient, CancellationToken ct)
         {
             LeaseClient = leaseClient;
-            _backgroundTask = BackGroundRenewLockAsync(ct);
+            _backgroundTask = Task.Run(() => BackGroundRenewLockAsync(ct));
         }
 
         internal static async Task<BlobLock> CreateAsync(
