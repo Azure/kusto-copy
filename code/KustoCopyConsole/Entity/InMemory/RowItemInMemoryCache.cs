@@ -1,36 +1,32 @@
 ﻿using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
 
 namespace KustoCopyConsole.Entity.InMemory
 {
     internal class RowItemInMemoryCache
     {
-        private readonly object _lock = new object();
-        private volatile IImmutableDictionary<string, ActivityCache> _activityMap =
-            ImmutableDictionary<string, ActivityCache>.Empty;
-
-        public event EventHandler<RowItemBase>? RowItemAppended;
-
-        public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
+        #region Constructors
+        private RowItemInMemoryCache(IImmutableDictionary<string, ActivityCache> activityMap)
         {
-            lock (_lock)
-            {
-                foreach (var item in items)
-                {
-                    AppendItem(item);
-                }
-            }
+            ActivityMap = activityMap;
         }
 
-        public IImmutableDictionary<string, ActivityCache> ActivityMap
-            => _activityMap;
+        public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
+            : this(ImmutableDictionary<string, ActivityCache>.Empty)
+        {
+            foreach (var item in items)
+            {
+                ActivityMap = AppendItemToActivityCache(item);
+            }
+        }
+        #endregion
+
+        public IImmutableDictionary<string, ActivityCache> ActivityMap { get; }
 
         public IEnumerable<ActivityFlatHierarchy> GetActivityFlatHierarchy(
             Func<ActivityCache, bool> activityPredicate,
@@ -77,24 +73,12 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
-        public void AppendItem(RowItemBase item)
+        public RowItemInMemoryCache AppendItem(RowItemBase item)
         {
-            lock (_lock)
-            {
-                Interlocked.Exchange(ref _activityMap, AppendItemToCache(item));
-            }
-            OnRowItemAppended(item);
+            return new RowItemInMemoryCache(AppendItemToActivityCache(item));
         }
 
-        private void OnRowItemAppended(RowItemBase item)
-        {
-            if (RowItemAppended != null)
-            {
-                RowItemAppended(this, item);
-            }
-        }
-
-        private IImmutableDictionary<string, ActivityCache> AppendItemToCache(
+        private IImmutableDictionary<string, ActivityCache> AppendItemToActivityCache(
             RowItemBase item)
         {
             switch (item)
@@ -120,17 +104,17 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var activityName = item.ActivityName;
 
-            if (_activityMap.ContainsKey(activityName))
+            if (ActivityMap.ContainsKey(activityName))
             {
-                var activity = _activityMap[activityName];
+                var activity = ActivityMap[activityName];
 
-                return _activityMap.SetItem(
+                return ActivityMap.SetItem(
                     activityName,
                     new ActivityCache(item, activity.IterationMap));
             }
             else
             {
-                return _activityMap.Add(activityName, new ActivityCache(item));
+                return ActivityMap.Add(activityName, new ActivityCache(item));
             }
         }
 
@@ -139,22 +123,22 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var activityName = item.ActivityName;
 
-            if (_activityMap.ContainsKey(activityName))
+            if (ActivityMap.ContainsKey(activityName))
             {
-                var table = _activityMap[activityName];
+                var table = ActivityMap[activityName];
 
                 if (table.IterationMap.ContainsKey(item.IterationId))
                 {
                     var iteration = table.IterationMap[item.IterationId];
 
-                    return _activityMap.SetItem(
+                    return ActivityMap.SetItem(
                         activityName,
                         table.AppendIteration(
                             new IterationCache(item, iteration.TempTable, iteration.BlockMap)));
                 }
                 else
                 {
-                    return _activityMap.SetItem(
+                    return ActivityMap.SetItem(
                         activityName,
                         table.AppendIteration(new IterationCache(item)));
                 }
@@ -169,15 +153,15 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var activityName = item.ActivityName;
 
-            if (_activityMap.ContainsKey(activityName))
+            if (ActivityMap.ContainsKey(activityName))
             {
-                var activity = _activityMap[activityName];
+                var activity = ActivityMap[activityName];
 
                 if (activity.IterationMap.ContainsKey(item.IterationId))
                 {
                     var iteration = activity.IterationMap[item.IterationId];
 
-                    return _activityMap.SetItem(
+                    return ActivityMap.SetItem(
                         activityName,
                         activity.AppendIteration(
                             new IterationCache(iteration.RowItem, item, iteration.BlockMap)));
@@ -197,9 +181,9 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var activityName = item.ActivityName;
 
-            if (_activityMap.ContainsKey(activityName))
+            if (ActivityMap.ContainsKey(activityName))
             {
-                var activity = _activityMap[activityName];
+                var activity = ActivityMap[activityName];
 
                 if (activity.IterationMap.ContainsKey(item.IterationId))
                 {
@@ -209,7 +193,7 @@ namespace KustoCopyConsole.Entity.InMemory
                     {
                         var sourceBlock = iteration.BlockMap[item.BlockId];
 
-                        return _activityMap.SetItem(
+                        return ActivityMap.SetItem(
                             activityName,
                             activity.AppendIteration(
                                 iteration.AppendBlock(
@@ -217,7 +201,7 @@ namespace KustoCopyConsole.Entity.InMemory
                     }
                     else
                     {
-                        return _activityMap.SetItem(
+                        return ActivityMap.SetItem(
                             activityName,
                             activity.AppendIteration(
                                 iteration.AppendBlock(new BlockCache(item))));
@@ -238,9 +222,9 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var activityName = item.ActivityName;
 
-            if (_activityMap.ContainsKey(activityName))
+            if (ActivityMap.ContainsKey(activityName))
             {
-                var activity = _activityMap[activityName];
+                var activity = ActivityMap[activityName];
 
                 if (activity.IterationMap.ContainsKey(item.IterationId))
                 {
@@ -250,7 +234,7 @@ namespace KustoCopyConsole.Entity.InMemory
                     {
                         var block = iteration.BlockMap[item.BlockId];
 
-                        return _activityMap.SetItem(
+                        return ActivityMap.SetItem(
                             activityName,
                             activity.AppendIteration(
                                 iteration.AppendBlock(

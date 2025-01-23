@@ -28,7 +28,7 @@ namespace KustoCopyConsole.Runner
                 Parameterization.StagingStorageContainers.Select(s => new Uri(s)),
                 Parameterization.GetCredentials());
             _wakePeriod = wakePeriod;
-            rowItemGateway.InMemoryCache.RowItemAppended += (sender, e) =>
+            rowItemGateway.RowItemAppended += (sender, e) =>
             {
                 if (IsWakeUpRelevant(e))
                 {

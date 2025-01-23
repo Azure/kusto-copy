@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
         private readonly DataLakeFileClient _fileClient;
         private readonly AppendBlobClient _blobClient;
         private readonly BlobLock _blobLock;
-        private int _writeCount = 0;
+        private int _writeCount;
 
         #region Constructors
         private AzureBlobAppendStorage(
@@ -29,6 +29,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             _fileClient = fileClient;
             _blobClient = blobClient;
             _blobLock = blobLock;
+            _writeCount = _blobClient.AppendBlobMaxBlocks;
         }
 
         public async static Task<AzureBlobAppendStorage> CreateAsync(
@@ -62,24 +63,17 @@ namespace KustoCopyConsole.Storage.AzureStorage
 
         int IAppendStorage.MaxBufferSize => _blobClient.AppendBlobMaxAppendBlockBytes;
 
-        async Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
-        {
-            if (++_writeCount >= _blobClient.AppendBlobMaxBlocks)
-            {
-                return false;
-            }
-            else
-            {
-                await _writeBlockRetryPolicy.ExecuteAsync(async () =>
-                {
-                    using (var stream = new MemoryStream(buffer.ToArray()))
-                    {
-                        await _blobClient.AppendBlockAsync(stream, null, ct);
-                    }
-                });
+        bool IAppendStorage.IsCompactionRequired => _writeCount >= _blobClient.AppendBlobMaxBlocks;
 
-                return true;
-            }
+        async Task IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
+        {
+            await _writeBlockRetryPolicy.ExecuteAsync(async () =>
+            {
+                using (var stream = new MemoryStream(buffer.ToArray()))
+                {
+                    await _blobClient.AppendBlockAsync(stream, null, ct);
+                }
+            });
         }
 
         async Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)

@@ -13,6 +13,12 @@ namespace KustoCopyConsole.Storage
         /// <summary>Maximum size of buffer that can be written.</summary>
         int MaxBufferSize { get; }
 
+        /// <summary>
+        /// Returns <c>true</c> iif compaction is required before invoking
+        /// <see cref="AtomicAppendAsync(byte[], CancellationToken)"/>.
+        /// </summary>
+        bool IsCompactionRequired { get; }
+
         /// <summary>Returns the full content of the storage.</summary>
         /// <param name="ct"></param>
         /// <returns></returns>
@@ -27,10 +33,6 @@ namespace KustoCopyConsole.Storage
         /// <summary>Attempt to append the buffer to storage.</summary>
         /// <param name="buffer"></param>
         /// <param name="ct"></param>
-        /// <returns>
-        /// <c>true</c> if append succeeds.
-        /// <c>false</c> if storage requires compaction.
-        /// </returns>
-        Task<bool> AtomicAppendAsync(byte[] buffer, CancellationToken ct);
+        Task AtomicAppendAsync(byte[] buffer, CancellationToken ct);
     }
 }
