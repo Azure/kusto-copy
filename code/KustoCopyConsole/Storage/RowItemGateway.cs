@@ -196,7 +196,10 @@ namespace KustoCopyConsole.Storage
                         {
                             throw new InvalidDataException("No buffer to append");
                         }
-                        await _appendStorage.AtomicAppendAsync(bufferStream.ToArray(), ct);
+                        if (!await _appendStorage.AtomicAppendAsync(bufferStream.ToArray(), ct))
+                        {
+                            throw new NotImplementedException("Log require compaction");
+                        }
                         //  Release tasks
                         foreach (var source in sources)
                         {
