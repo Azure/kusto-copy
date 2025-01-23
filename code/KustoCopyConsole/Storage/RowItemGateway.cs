@@ -113,6 +113,7 @@ namespace KustoCopyConsole.Storage
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             _backgroundCompletedSource.SetResult();
+            await _backgroundTask;
             await _appendStorage.DisposeAsync();
         }
 

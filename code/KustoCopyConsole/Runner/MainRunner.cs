@@ -27,10 +27,11 @@ namespace KustoCopyConsole.Runner
             string logFilePath,
             CancellationToken ct)
         {
-            var appendStorage = CreateAppendStorage(
+            var appendStorage = await CreateAppendStorageAsync(
                 logFilePath,
                 parameterization.StagingStorageContainers.First(),
-                parameterization.GetCredentials());
+                parameterization.GetCredentials(),
+                ct);
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
@@ -48,17 +49,19 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        private static IAppendStorage CreateAppendStorage(
+        private static async Task<IAppendStorage> CreateAppendStorageAsync(
             string logFilePath,
             string storageDirectoryUri,
-            TokenCredential credential)
+            TokenCredential credential,
+            CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(logFilePath))
             {
-                return new AzureBlobAppendStorage(
+                return await AzureBlobAppendStorage.CreateAsync(
                     new Uri(storageDirectoryUri),
                     DEFAULT_LOG_FILE_NAME,
-                    credential);
+                    credential,
+                    ct);
             }
             else
             {
