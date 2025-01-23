@@ -45,21 +45,44 @@ namespace KustoCopyConsole.Storage.AzureStorage
             return ValueTask.CompletedTask;
         }
 
-        int IAppendStorage.MaxBufferSize => 4194304;
+        int IAppendStorage.MaxBufferSize => _blobClient.AppendBlobMaxAppendBlockBytes;
 
         Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
         {
             throw new NotImplementedException();
         }
 
-        Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)
+        async Task IAppendStorage.AtomicReplaceAsync(byte[] buffer, CancellationToken ct)
         {
+            var tempBlobClient = _blobClient
+                .GetParentBlobContainerClient()
+                .GetAppendBlobClient($"{_blobClient.Name}.tmp");
+
+            await tempBlobClient.DeleteIfExistsAsync();
+            await tempBlobClient.CreateIfNotExistsAsync();
+
+            var remainingBuffer = buffer.Skip(0);
+
+            while (remainingBuffer.Any())
+            {
+                var currentBuffer = remainingBuffer.Take(tempBlobClient.AppendBlobMaxAppendBlockBytes);
+
+                using (var stream = new MemoryStream(currentBuffer.ToArray()))
+                {
+                    await tempBlobClient.AppendBlockAsync(stream, null, ct);
+                }
+                remainingBuffer = remainingBuffer.Skip(tempBlobClient.AppendBlobMaxAppendBlockBytes);
+            }
+
             throw new NotImplementedException();
         }
 
-        Task<byte[]> IAppendStorage.LoadAllAsync(CancellationToken ct)
+        async Task<byte[]> IAppendStorage.LoadAllAsync(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            var result = await _blobClient.DownloadContentAsync(ct);
+            var buffer = result.Value.Content.ToMemory().ToArray();
+
+            return buffer;
         }
     }
 }
