@@ -12,18 +12,25 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Kusto.Cloud.Platform.Utils;
+using KustoCopyConsole.Storage.AzureStorage;
+using Azure.Core;
 
 namespace KustoCopyConsole.Runner
 {
     internal class MainRunner : RunnerBase, IAsyncDisposable
     {
+        const string DEFAULT_LOG_FILE_NAME = "kusto-copy.log";
+
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
             MainJobParameterization parameterization,
             string logFilePath,
             CancellationToken ct)
         {
-            var appendStorage = CreateAppendStorage(logFilePath);
+            var appendStorage = CreateAppendStorage(
+                logFilePath,
+                parameterization.StagingStorageContainers.First(),
+                parameterization.GetCredentials());
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
@@ -41,11 +48,17 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        private static IAppendStorage CreateAppendStorage(string logFilePath)
+        private static IAppendStorage CreateAppendStorage(
+            string logFilePath,
+            string storageDirectoryUri,
+            TokenCredential credential)
         {
             if (string.IsNullOrWhiteSpace(logFilePath))
             {
-                throw new NotImplementedException();
+                return new AzureBlobAppendStorage(
+                    new Uri(storageDirectoryUri),
+                    DEFAULT_LOG_FILE_NAME,
+                    credential);
             }
             else
             {
@@ -55,15 +68,13 @@ namespace KustoCopyConsole.Runner
 
         private static string GetLocalLogFilePath(string logFilePath)
         {
-            const string DEFAULT_FILE_NAME = "kusto-copy.log";
-
             if (string.IsNullOrWhiteSpace(logFilePath))
             {
-                return DEFAULT_FILE_NAME;
+                return DEFAULT_LOG_FILE_NAME;
             }
             else if (Directory.Exists(logFilePath))
             {
-                return Path.Combine(logFilePath, DEFAULT_FILE_NAME);
+                return Path.Combine(logFilePath, DEFAULT_LOG_FILE_NAME);
             }
             else
             {

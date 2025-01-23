@@ -43,7 +43,7 @@ namespace KustoCopyConsole
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool IsContinuousRun { get; set; } = false;
 
-        [Option("log-path", Required = false, HelpText = "Set log file local path.")]
+        [Option("log-path", Required = false, HelpText = "Set log file local path ; if omitted, logs are persisted on the first storage account.")]
         public string LogFilePath { get; set; } = string.Empty;
     }
 }
