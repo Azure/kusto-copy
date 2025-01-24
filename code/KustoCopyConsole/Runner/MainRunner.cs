@@ -108,7 +108,7 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(CancellationToken ct)
         {
             CleanUrls();
-            await using (var progressBar = new ProgressBar(RowItemGateway.InMemoryCache, ct))
+            await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
                 foreach (var a in Parameterization.Activities.Values)
                 {

@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,14 +15,14 @@ namespace KustoCopyConsole.Runner
     {
         private static readonly TimeSpan WAKE_PERIOD = TimeSpan.FromSeconds(5);
 
-        private readonly RowItemInMemoryCache _inMemoryCache;
+        private readonly RowItemGateway _rowItemGateway;
         private readonly Task _backgroundTask;
         private readonly TaskCompletionSource _completionSource = new TaskCompletionSource();
 
-        public ProgressBar(RowItemInMemoryCache inMemoryCache, CancellationToken ct)
+        public ProgressBar(RowItemGateway rowItemGateway, CancellationToken ct)
         {
-            _inMemoryCache = inMemoryCache;
-            _backgroundTask = BackgroundRunAsync(ct);
+            _rowItemGateway = rowItemGateway;
+            _backgroundTask = Task.Run(() => BackgroundRunAsync(ct));
         }
 
         async ValueTask IAsyncDisposable.DisposeAsync()
@@ -49,7 +48,7 @@ namespace KustoCopyConsole.Runner
         private IImmutableSet<IterationKey> ReportProgress(
             IImmutableSet<IterationKey> iterationBag)
         {
-            var activeIterations = _inMemoryCache
+            var activeIterations = _rowItemGateway.InMemoryCache
                 .ActivityMap
                 .Values
                 .Where(a => a.RowItem.State == ActivityState.Active)
@@ -73,7 +72,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReportIterationProgress(IterationKey key)
         {
-            var iterationCache = _inMemoryCache
+            var iterationCache = _rowItemGateway.InMemoryCache
                 .ActivityMap[key.ActivityName]
                 .IterationMap[key.IterationId];
             var blockMap = iterationCache.BlockMap;
