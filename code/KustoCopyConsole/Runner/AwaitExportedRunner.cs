@@ -165,7 +165,7 @@ namespace KustoCopyConsole.Runner
                     activity.SourceTable.ClusterUri,
                     activity.SourceTable.DatabaseName);
                 var details = await dbClient.ShowExportDetailsAsync(
-                    new KustoPriority(block.GetIterationKey()),
+                    new KustoPriority(block.GetBlockKey()),
                     status.OperationId,
                     ct);
                 var urls = details

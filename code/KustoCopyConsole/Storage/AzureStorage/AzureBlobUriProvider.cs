@@ -5,6 +5,7 @@ using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using Azure.Storage.Sas;
 using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -83,6 +84,13 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 return uriBuilder.Uri;
             }
 
+            public async Task DeleteStagingDirectoryAsync(string subDirectory, CancellationToken ct)
+            {
+                var subDirectoryClient = _directoryClient.GetSubDirectoryClient(subDirectory);
+
+                await subDirectoryClient.DeleteAsync();
+            }
+
             private async Task<(TimeSpan, UserDelegationKey)> FetchUserDelegationKey()
             {
                 var refreshPeriod = READ_TIME_OUT;
@@ -111,11 +119,12 @@ namespace KustoCopyConsole.Storage.AzureStorage
         }
 
         async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(
-            string path,
+            BlockKey blockKey,
             CancellationToken ct)
         {
+            var subDirectory = GetSubDirectory(blockKey);
             var tasks = _providerMap.Values
-                .Select(c => c.GetWritableFolderUrisAsync(path, ct))
+                .Select(c => c.GetWritableFolderUrisAsync(subDirectory, ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(tasks);
@@ -143,6 +152,35 @@ namespace KustoCopyConsole.Storage.AzureStorage
             {
                 throw new CopyException($"Uri isn't from staging directories:  '{uri}'", false);
             }
+        }
+
+        async Task IStagingBlobUriProvider.DeleteStagingDirectoryAsync(
+            IterationKey iterationKey,
+            CancellationToken ct)
+        {
+            var subDirectory = GetSubDirectory(iterationKey);
+            var tasks = _providerMap.Values
+                .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
+                .ToImmutableArray();
+
+            await Task.WhenAll(tasks);
+        }
+
+        private string GetSubDirectory(IterationKey iterationKey)
+        {
+            var subDirectoryPath = $"activities/{iterationKey.ActivityName}/" +
+                $"iterations/{iterationKey.IterationId:D20}";
+
+            return subDirectoryPath;
+        }
+
+        private string GetSubDirectory(BlockKey blockKey)
+        {
+            var iterationKey = new IterationKey(blockKey.ActivityName, blockKey.IterationId);
+            var subDirectoryPath =
+                $"{GetSubDirectory(iterationKey)}/blocks/{blockKey.BlockId:D20}";
+
+            return subDirectoryPath;
         }
     }
 }

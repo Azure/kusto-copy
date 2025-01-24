@@ -71,15 +71,12 @@ namespace KustoCopyConsole.Runner
                 var dbClient = DbClientFactory.GetDbCommandClient(
                     item.Activity.SourceTable.ClusterUri,
                     item.Activity.SourceTable.DatabaseName);
-                var folderPath = $"activities/{item.Activity.ActivityName}/" +
-                    $"iterations/{item.Iteration.IterationId:D20}" +
-                    $"/blocks/{item.Block.BlockId:D20}";
                 var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                    folderPath,
+                    item.Block.GetBlockKey(),
                     ct);
                 var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
                 var operationId = await dbClient.ExportBlockAsync(
-                    new KustoPriority(item.Block.GetIterationKey()),
+                    new KustoPriority(item.Block.GetBlockKey()),
                     writableUris,
                     item.Activity.SourceTable.TableName,
                     query,
@@ -139,7 +136,7 @@ namespace KustoCopyConsole.Runner
                 .Where(o => o.ExportingAvailability > 0)
                 //  Select candidates by priority
                 .SelectMany(o => o.Candidates
-                .OrderBy(c => new KustoPriority(c.Block.GetIterationKey()))
+                .OrderBy(c => new KustoPriority(c.Block.GetBlockKey()))
                 .Take(o.ExportingAvailability))
                 .ToImmutableArray();
 

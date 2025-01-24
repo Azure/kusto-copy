@@ -85,7 +85,7 @@ namespace KustoCopyConsole.Entity.RowItems
             }
         }
 
-        public BlockKey GetIterationKey()
+        public BlockKey GetBlockKey()
         {
             return new BlockKey(ActivityName, IterationId, BlockId);
         }

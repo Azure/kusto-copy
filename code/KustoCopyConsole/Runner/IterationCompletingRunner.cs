@@ -1,4 +1,6 @@
 ﻿using Azure.Core;
+using Azure.Storage.Files.DataLake;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -64,24 +66,18 @@ namespace KustoCopyConsole.Runner
                     var dbClient = DbClientFactory.GetDbCommandClient(
                         tableId.ClusterUri,
                         tableId.DatabaseName);
+                    var iterationKey = iteration.RowItem.GetIterationKey();
 
                     await dbClient.DropTableIfExistsAsync(
-                        new KustoPriority(iteration.RowItem.GetIterationKey()),
+                        new KustoPriority(iterationKey),
                         iteration.TempTable.TempTableName,
                         ct);
-                    await DeleteStorageAsync(ct);
+                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(iterationKey, ct);
                 }
                 var newIteration = iteration.RowItem.ChangeState(IterationState.Completed);
 
                 RowItemGateway.Append(newIteration);
             }
-        }
-
-        private async Task DeleteStorageAsync(CancellationToken ct)
-        {
-            await Task.CompletedTask;
-            //Parameterization.GetCredentials();
-            throw new NotImplementedException();
         }
 
         private void CompleteActivities()

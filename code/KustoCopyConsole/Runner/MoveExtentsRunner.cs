@@ -54,7 +54,7 @@ namespace KustoCopyConsole.Runner
             var commandClient = DbClientFactory.GetDbCommandClient(
                 item.Activity.DestinationTable.ClusterUri,
                 item.Activity.DestinationTable.DatabaseName);
-            var priority = new KustoPriority(item.Block.GetIterationKey());
+            var priority = new KustoPriority(item.Block.GetBlockKey());
             var extentCount = await commandClient.MoveExtentsAsync(
                 priority,
                 item.TempTable!.TempTableName,
