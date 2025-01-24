@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.InMemory;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -21,12 +22,14 @@ namespace KustoCopyConsole.Runner
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
 
         public ExportingRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory,
-           IStagingBlobUriProvider stagingBlobUriProvider)
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
+                 credential,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,

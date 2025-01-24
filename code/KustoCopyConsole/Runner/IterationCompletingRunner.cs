@@ -1,12 +1,10 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using Azure.Core;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -14,12 +12,14 @@ namespace KustoCopyConsole.Runner
     internal class IterationCompletingRunner : RunnerBase
     {
         public IterationCompletingRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory,
-           IStagingBlobUriProvider stagingBlobUriProvider)
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
+                 credential,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,
@@ -69,11 +69,19 @@ namespace KustoCopyConsole.Runner
                         new KustoPriority(iteration.RowItem.GetIterationKey()),
                         iteration.TempTable.TempTableName,
                         ct);
+                    await DeleteStorageAsync(ct);
                 }
                 var newIteration = iteration.RowItem.ChangeState(IterationState.Completed);
 
                 RowItemGateway.Append(newIteration);
             }
+        }
+
+        private async Task DeleteStorageAsync(CancellationToken ct)
+        {
+            await Task.CompletedTask;
+            //Parameterization.GetCredentials();
+            throw new NotImplementedException();
         }
 
         private void CompleteActivities()

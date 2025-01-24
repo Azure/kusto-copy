@@ -1,5 +1,5 @@
-﻿using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -11,12 +11,14 @@ namespace KustoCopyConsole.Runner
     internal class MoveExtentsRunner : RunnerBase
     {
         public MoveExtentsRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory,
-           IStagingBlobUriProvider stagingBlobUriProvider)
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
+                 credential,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,

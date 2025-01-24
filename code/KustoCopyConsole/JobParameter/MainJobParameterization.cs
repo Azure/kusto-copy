@@ -124,7 +124,7 @@ namespace KustoCopyConsole.JobParameter
             }
         }
 
-        internal TokenCredential GetCredentials()
+        internal TokenCredential CreateCredentials()
         {
             if (string.IsNullOrWhiteSpace(Authentication))
             {

@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.RowItems;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -17,12 +18,14 @@ namespace KustoCopyConsole.Runner
 
         public RunnerBase(
             MainJobParameterization parameterization,
+            TokenCredential credential,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
             IStagingBlobUriProvider stagingBlobUriProvider,
             TimeSpan wakePeriod)
         {
             Parameterization = parameterization;
+            Credential = credential;
             RowItemGateway = rowItemGateway;
             DbClientFactory = dbClientFactory;
             StagingBlobUriProvider = stagingBlobUriProvider;
@@ -41,6 +44,8 @@ namespace KustoCopyConsole.Runner
         }
 
         protected MainJobParameterization Parameterization { get; }
+
+        protected TokenCredential Credential { get; }
 
         protected RowItemGateway RowItemGateway { get; }
 
