@@ -21,6 +21,8 @@ namespace KustoCopyConsole.Storage.LocalDisk
 
         int IAppendStorage.MaxBufferSize => 4096;
 
+        bool IAppendStorage.IsCompactionRequired => false;
+
         async Task<byte[]> IAppendStorage.LoadAllAsync(CancellationToken ct)
         {
             await _fileStream.DisposeAsync();
@@ -42,11 +44,9 @@ namespace KustoCopyConsole.Storage.LocalDisk
             _fileStream = OpenFile(_path);
         }
 
-        async Task<bool> IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
+        async Task IAppendStorage.AtomicAppendAsync(byte[] buffer, CancellationToken ct)
         {
             await _fileStream.WriteAsync(buffer);
-
-            return true;
         }
 
         private Stream OpenFile(string path)

@@ -1,11 +1,11 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Azure.Storage.Queues.Models;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,6 +19,7 @@ namespace KustoCopyConsole.Storage
         private record QueueItem(
             DateTime enqueueTime,
             byte[] Buffer,
+            RowItemInMemoryCache SnapshotCache,
             TaskCompletionSource? TaskSource);
         #endregion
 
@@ -28,10 +29,12 @@ namespace KustoCopyConsole.Storage
 
         private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
 
+        private readonly object _lock = new object();
         private readonly IAppendStorage _appendStorage;
         private readonly ConcurrentQueue<QueueItem> _queue = new();
         private readonly Task _backgroundTask;
         private readonly TaskCompletionSource _backgroundCompletedSource = new();
+        private volatile RowItemInMemoryCache _inMemoryCache;
 
         #region Construction
         private RowItemGateway(
@@ -40,8 +43,8 @@ namespace KustoCopyConsole.Storage
             CancellationToken ct)
         {
             _appendStorage = appendStorage;
-            _backgroundTask = BackgroundPersistanceAsync(ct);
-            InMemoryCache = cache;
+            _backgroundTask = Task.Run(() => BackgroundPersistanceAsync(ct));
+            _inMemoryCache = cache;
         }
 
         private static RowItemSerializer CreateRowItemSerializer()
@@ -108,11 +111,14 @@ namespace KustoCopyConsole.Storage
         }
         #endregion
 
-        public RowItemInMemoryCache InMemoryCache { get; }
+        public event EventHandler<RowItemBase>? RowItemAppended;
+
+        public RowItemInMemoryCache InMemoryCache => _inMemoryCache;
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             _backgroundCompletedSource.SetResult();
+            await _backgroundTask;
             await _appendStorage.DisposeAsync();
         }
 
@@ -136,8 +142,22 @@ namespace KustoCopyConsole.Storage
 
             var binaryItem = GetBytes(item);
 
-            _queue.Enqueue(new QueueItem(DateTime.Now, binaryItem, TaskSource));
-            InMemoryCache.AppendItem(item);
+            lock (_lock)
+            {
+                var newCache = _inMemoryCache.AppendItem(item);
+
+                Interlocked.Exchange(ref _inMemoryCache, newCache);
+                _queue.Enqueue(new QueueItem(DateTime.Now, binaryItem, newCache, TaskSource));
+            }
+            OnRowItemAppended(item);
+        }
+
+        private void OnRowItemAppended(RowItemBase item)
+        {
+            if (RowItemAppended != null)
+            {
+                RowItemAppended(this, item);
+            }
         }
 
         private static byte[] GetBytes(RowItemBase item)
@@ -161,7 +181,14 @@ namespace KustoCopyConsole.Storage
 
                     if (waitTime < MIN_WAIT_PERIOD)
                     {
-                        await PersistBatchAsync(ct);
+                        if (_appendStorage.IsCompactionRequired)
+                        {
+                            await CompactAsync(ct);
+                        }
+                        else
+                        {
+                            await PersistBatchAsync(ct);
+                        }
                     }
                     else
                     {   //  Wait for first item to age to about FLUSH_PERIOD
@@ -176,6 +203,44 @@ namespace KustoCopyConsole.Storage
                         Task.Delay(FLUSH_PERIOD, ct),
                         _backgroundCompletedSource.Task);
                 }
+            }
+        }
+
+        private async Task CompactAsync(CancellationToken ct)
+        {
+            var sources = new List<TaskCompletionSource>();
+            RowItemInMemoryCache? latestSnapshotCache = null;
+
+            while (_queue.TryDequeue(out var queueItem))
+            {
+                latestSnapshotCache = queueItem.SnapshotCache;
+            }
+            if (latestSnapshotCache == null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(latestSnapshotCache)} should be set here");
+            }
+            using (var tempMemoryStream = new MemoryStream())
+            {
+                var newVersionItem = new FileVersionRowItem
+                {
+                    FileVersion = CURRENT_FILE_VERSION
+                };
+
+                _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
+                foreach (var item in latestSnapshotCache.GetItems())
+                {
+                    _rowItemSerializer.Serialize(item, tempMemoryStream);
+                }
+
+                var writeBuffer = tempMemoryStream.ToArray();
+
+                await _appendStorage.AtomicReplaceAsync(writeBuffer, ct);
+            }
+            //  Release tasks
+            foreach (var source in sources)
+            {
+                source.SetResult();
             }
         }
 

@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public KustoPriority(BlockKey key)
-            : this(key.ActivityName, key.IterationId, key.blockId)
+            : this(key.ActivityName, key.IterationId, key.BlockId)
         {
         }
 

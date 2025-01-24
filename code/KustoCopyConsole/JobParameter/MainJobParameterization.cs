@@ -17,7 +17,7 @@ namespace KustoCopyConsole.JobParameter
 
         public bool IsContinuousRun { get; set; } = false;
 
-        public IImmutableList<string> StagingStorageContainers { get; set; } =
+        public IImmutableList<string> StagingStorageDirectories { get; set; } =
             ImmutableArray<string>.Empty;
 
         public string Authentication { get; set; } = string.Empty;
@@ -98,7 +98,7 @@ namespace KustoCopyConsole.JobParameter
                         })
                     .ToImmutableDictionary(a => a.ActivityName, a => a),
                     Authentication = options.Authentication,
-                    StagingStorageContainers = options.StagingStorage.ToImmutableArray()
+                    StagingStorageDirectories = options.StagingStorageDirectories.ToImmutableArray()
                 };
 
                 parameterization.Validate();
@@ -118,13 +118,13 @@ namespace KustoCopyConsole.JobParameter
             {
                 a.Validate();
             }
-            foreach (var uri in StagingStorageContainers)
+            foreach (var uri in StagingStorageDirectories)
             {
                 ValidateStagingUri(uri);
             }
         }
 
-        internal TokenCredential GetCredentials()
+        internal TokenCredential CreateCredentials()
         {
             if (string.IsNullOrWhiteSpace(Authentication))
             {
@@ -156,13 +156,14 @@ namespace KustoCopyConsole.JobParameter
                 if (!string.IsNullOrWhiteSpace(uri.Query))
                 {
                     throw new CopyException(
-                        $"{nameof(StagingStorageContainers)} can't contain query string:  '{uri}'",
+                        $"{nameof(StagingStorageDirectories)} can't contain query string:  '{uri}'",
                         false);
                 }
-                if (uri.Segments.Length != 2)
+                if (uri.Segments.Length < 2)
                 {
                     throw new CopyException(
-                        $"{nameof(StagingStorageContainers)} should point to a container:  '{uri}'",
+                        $"{nameof(StagingStorageDirectories)} should point at " +
+                        $"least to a container:  '{uri}'",
                         false);
                 }
             }

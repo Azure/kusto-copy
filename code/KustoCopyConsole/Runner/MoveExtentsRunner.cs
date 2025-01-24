@@ -1,5 +1,5 @@
-﻿using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -11,10 +11,18 @@ namespace KustoCopyConsole.Runner
     internal class MoveExtentsRunner : RunnerBase
     {
         public MoveExtentsRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(10))
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
+           : base(
+                 parameterization,
+                 credential,
+                 rowItemGateway,
+                 dbClientFactory,
+                 stagingBlobUriProvider,
+                 TimeSpan.FromSeconds(10))
         {
         }
 
@@ -46,7 +54,7 @@ namespace KustoCopyConsole.Runner
             var commandClient = DbClientFactory.GetDbCommandClient(
                 item.Activity.DestinationTable.ClusterUri,
                 item.Activity.DestinationTable.DatabaseName);
-            var priority = new KustoPriority(item.Block.GetIterationKey());
+            var priority = new KustoPriority(item.Block.GetBlockKey());
             var extentCount = await commandClient.MoveExtentsAsync(
                 priority,
                 item.TempTable!.TempTableName,

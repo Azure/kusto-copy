@@ -153,6 +153,11 @@ namespace KustoCopyConsole
                 cancellationTokenSource.Cancel();
                 taskCompletionSource.Task.Wait();
             };
+            Trace.WriteLine("");
+            Trace.WriteLine("Parameterization:");
+            Trace.WriteLine("");
+            Trace.WriteLine(parameterization.ToYaml());
+            Trace.WriteLine("");
             try
             {
                 await using (var mainRunner = await MainRunner.CreateAsync(
@@ -160,11 +165,6 @@ namespace KustoCopyConsole
                     options.LogFilePath,
                     cancellationTokenSource.Token))
                 {
-                    Trace.WriteLine("");
-                    Trace.WriteLine("Parameterization:");
-                    Trace.WriteLine("");
-                    Trace.WriteLine(parameterization.ToYaml());
-                    Trace.WriteLine("");
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");
                     await mainRunner.RunAsync(cancellationTokenSource.Token);

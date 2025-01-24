@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.InMemory;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
@@ -12,10 +13,18 @@ namespace KustoCopyConsole.Runner
     internal class TempTableCreatingRunner : RunnerBase
     {
         public TempTableCreatingRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(10))
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
+           : base(
+                 parameterization,
+                 credential,
+                 rowItemGateway,
+                 dbClientFactory,
+                 stagingBlobUriProvider,
+                 TimeSpan.FromSeconds(10))
         {
         }
 

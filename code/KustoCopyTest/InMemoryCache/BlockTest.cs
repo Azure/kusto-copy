@@ -23,28 +23,28 @@ namespace KustoCopyTest.InMemoryCache
                 BlockId = blockId
             };
 
-            cache.AppendItem(new ActivityRowItem
+            cache = cache.AppendItem(new ActivityRowItem
             {
                 State = ActivityState.Active,
                 ActivityName = ACTIVITY_NAME,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY
             });
-            cache.AppendItem(new IterationRowItem
+            cache = cache.AppendItem(new IterationRowItem
             {
                 State = IterationState.Starting,
                 ActivityName = ACTIVITY_NAME,
                 IterationId = iterationId,
                 CursorEnd = "ABC"
             });
-            cache.AppendItem(item);
+            cache = cache.AppendItem(item);
 
             Assert.Equal(
                 state1,
                 cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].RowItem.State);
 
             //  Update
-            cache.AppendItem(item.ChangeState(state2));
+            cache = cache.AppendItem(item.ChangeState(state2));
 
             Assert.Equal(
                 state2,
@@ -67,22 +67,22 @@ namespace KustoCopyTest.InMemoryCache
                 BlockId = blockId
             };
 
-            cache.AppendItem(new ActivityRowItem
+            cache = cache.AppendItem(new ActivityRowItem
             {
                 State = ActivityState.Active,
                 ActivityName = ACTIVITY_NAME,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY
             });
-            cache.AppendItem(new IterationRowItem
+            cache = cache.AppendItem(new IterationRowItem
             {
                 State = IterationState.Starting,
                 ActivityName = ACTIVITY_NAME,
                 IterationId = iterationId,
                 CursorEnd = "ABC"
             });
-            cache.AppendItem(item);
-            cache.AppendItem(new UrlRowItem
+            cache = cache.AppendItem(item);
+            cache = cache.AppendItem(new UrlRowItem
             {
                 State = UrlState.Exported,
                 ActivityName = ACTIVITY_NAME,
@@ -97,7 +97,7 @@ namespace KustoCopyTest.InMemoryCache
                 cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].RowItem.State);
 
             //  Update
-            cache.AppendItem(item.ChangeState(state2));
+            cache = cache.AppendItem(item.ChangeState(state2));
 
             Assert.Equal(
                 state2,

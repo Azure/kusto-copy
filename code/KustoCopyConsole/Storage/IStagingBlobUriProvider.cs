@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -7,12 +8,14 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage
 {
-    public interface IStagingBlobUriProvider
+    internal interface IStagingBlobUriProvider
     {
         Task<IEnumerable<Uri>> GetWritableFolderUrisAsync(
-            string folderPath,
+            BlockKey blockKey,
             CancellationToken ct);
 
         Task<Uri> AuthorizeUriAsync(Uri uri, CancellationToken ct);
+
+        Task DeleteStagingDirectoryAsync(IterationKey iterationKey, CancellationToken ct);
     }
 }

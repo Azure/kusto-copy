@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.InMemory;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -21,10 +22,18 @@ namespace KustoCopyConsole.Runner
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
 
         public ExportingRunner(
-           MainJobParameterization parameterization,
-           RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(5))
+            MainJobParameterization parameterization,
+            TokenCredential credential,
+            RowItemGateway rowItemGateway,
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
+           : base(
+                 parameterization,
+                 credential,
+                 rowItemGateway,
+                 dbClientFactory,
+                 stagingBlobUriProvider,
+                 TimeSpan.FromSeconds(5))
         {
         }
 
@@ -62,15 +71,12 @@ namespace KustoCopyConsole.Runner
                 var dbClient = DbClientFactory.GetDbCommandClient(
                     item.Activity.SourceTable.ClusterUri,
                     item.Activity.SourceTable.DatabaseName);
-                var folderPath = $"activities/{item.Activity.ActivityName}/" +
-                    $"iterations/{item.Iteration.IterationId:D20}" +
-                    $"/blocks/{item.Block.BlockId:D20}";
                 var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                    folderPath,
+                    item.Block.GetBlockKey(),
                     ct);
                 var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
                 var operationId = await dbClient.ExportBlockAsync(
-                    new KustoPriority(item.Block.GetIterationKey()),
+                    new KustoPriority(item.Block.GetBlockKey()),
                     writableUris,
                     item.Activity.SourceTable.TableName,
                     query,
@@ -130,7 +136,7 @@ namespace KustoCopyConsole.Runner
                 .Where(o => o.ExportingAvailability > 0)
                 //  Select candidates by priority
                 .SelectMany(o => o.Candidates
-                .OrderBy(c => new KustoPriority(c.Block.GetIterationKey()))
+                .OrderBy(c => new KustoPriority(c.Block.GetBlockKey()))
                 .Take(o.ExportingAvailability))
                 .ToImmutableArray();
 
