@@ -32,8 +32,14 @@ namespace KustoCopyConsole.Runner
         public AwaitExportedRunner(
            MainJobParameterization parameterization,
            RowItemGateway rowItemGateway,
-           DbClientFactory dbClientFactory)
-           : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.FromSeconds(3))
+           DbClientFactory dbClientFactory,
+           IStagingBlobUriProvider stagingBlobUriProvider)
+           : base(
+                 parameterization,
+                 rowItemGateway,
+                 dbClientFactory,
+                 stagingBlobUriProvider,
+                 TimeSpan.FromSeconds(3))
         {
         }
 

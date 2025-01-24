@@ -28,8 +28,8 @@ namespace KustoCopyConsole
             't',
             "staging-storage",
             Required = false,
-            HelpText = "Set the staging storage in the form of storage container uris")]
-        public IEnumerable<string> StagingStorage { get; set; } = Array.Empty<string>();
+            HelpText = "Set the staging storage directories in the form of storage container uris")]
+        public IEnumerable<string> StagingStorageDirectories { get; set; } = Array.Empty<string>();
 
         [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
         public string Authentication { get; set; } = string.Empty;

@@ -19,14 +19,13 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider,
             TimeSpan wakePeriod)
         {
             Parameterization = parameterization;
             RowItemGateway = rowItemGateway;
             DbClientFactory = dbClientFactory;
-            StagingBlobUriProvider = new AzureBlobUriProvider(
-                Parameterization.StagingStorageContainers.Select(s => new Uri(s)),
-                Parameterization.GetCredentials());
+            StagingBlobUriProvider = stagingBlobUriProvider;
             _wakePeriod = wakePeriod;
             rowItemGateway.RowItemAppended += (sender, e) =>
             {

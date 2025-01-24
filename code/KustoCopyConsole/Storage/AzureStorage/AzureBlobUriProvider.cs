@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Files.DataLake;
 using Azure.Storage.Sas;
 using KustoCopyConsole.Concurrency;
 using System;
@@ -16,25 +17,27 @@ namespace KustoCopyConsole.Storage.AzureStorage
     internal class AzureBlobUriProvider : IStagingBlobUriProvider
     {
         #region Inner Types
-        private class ContainerProvider
+        private class DirectoryProvider
         {
-            private readonly BlobContainerClient _client;
+            private readonly DataLakeDirectoryClient _directoryClient;
+            private readonly BlobContainerClient _containerClient;
             private readonly AsyncCache<UserDelegationKey> _keyCache;
 
-            public ContainerProvider(Uri containerUri, TokenCredential credential)
+            public DirectoryProvider(Uri rootFolderUri, TokenCredential credential)
             {
-                _client = new BlobContainerClient(containerUri, credential);
+                _directoryClient = new DataLakeDirectoryClient(rootFolderUri, credential);
+                _containerClient = new BlobContainerClient(rootFolderUri, credential);
                 _keyCache = new(FetchUserDelegationKey);
             }
 
-            public Uri ContainerUri => _client.Uri;
+            public Uri RootDirectoryUri => _directoryClient.Uri;
 
-            public async Task<Uri> GetWritableFolderUrisAsync(string path, CancellationToken ct)
+            public async Task<Uri> GetWritableFolderUrisAsync(string subPath, CancellationToken ct)
             {
                 var userDelegationKey = await _keyCache.GetCacheItemAsync(ct);
                 var sasBuilder = new BlobSasBuilder
                 {
-                    BlobContainerName = _client.Name,
+                    BlobContainerName = _containerClient.Name,
                     Resource = "c", // "b" for blob, "c" for container
                     ExpiresOn = DateTimeOffset.UtcNow.Add(WRITE_TIME_OUT)
                 };
@@ -45,23 +48,22 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 // Generate SAS token
                 var sasToken = sasBuilder.ToSasQueryParameters(
                     userDelegationKey,
-                    _client.AccountName).ToString();
-                var uriBuilder = new UriBuilder(ContainerUri.ToString())
+                    _containerClient.AccountName).ToString();
+                var subDirectoryClient = _directoryClient.GetSubDirectoryClient(subPath);
+                var uriBuilder = new UriBuilder(subDirectoryClient.Uri)
                 {
-                    Path = $"{_client.Name}/{path}",
                     Query = sasToken
                 };
-                var uri = uriBuilder.Uri;
 
-                return uri;
+                return uriBuilder.Uri;
             }
 
-            public async Task<Uri> AuthorizeUriAsync(string blobPath, CancellationToken ct)
+            public async Task<Uri> AuthorizeUriAsync(Uri uri, CancellationToken ct)
             {
                 var userDelegationKey = await _keyCache.GetCacheItemAsync(ct);
                 var sasBuilder = new BlobSasBuilder
                 {
-                    BlobContainerName = _client.Name,
+                    BlobContainerName = _containerClient.Name,
                     Resource = "b", // "b" for blob, "c" for container
                     ExpiresOn = DateTimeOffset.UtcNow.Add(READ_TIME_OUT)
                 };
@@ -72,22 +74,20 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 // Generate SAS token
                 var sasToken = sasBuilder.ToSasQueryParameters(
                     userDelegationKey,
-                    _client.AccountName).ToString();
-                var uriBuilder = new UriBuilder(ContainerUri.ToString())
+                    _containerClient.AccountName).ToString();
+                var uriBuilder = new UriBuilder(uri)
                 {
-                    Path = $"{_client.Name}/{blobPath}",
                     Query = sasToken
                 };
-                var uri = uriBuilder.Uri;
 
-                return uri;
+                return uriBuilder.Uri;
             }
 
             private async Task<(TimeSpan, UserDelegationKey)> FetchUserDelegationKey()
             {
                 var refreshPeriod = READ_TIME_OUT;
                 var tolerance = TimeSpan.FromSeconds(30);
-                var key = await _client.GetParentBlobServiceClient().GetUserDelegationKeyAsync(
+                var key = await _containerClient.GetParentBlobServiceClient().GetUserDelegationKeyAsync(
                     DateTimeOffset.UtcNow,
                     DateTimeOffset.UtcNow.Add(refreshPeriod));
 
@@ -99,22 +99,22 @@ namespace KustoCopyConsole.Storage.AzureStorage
         private static readonly TimeSpan READ_TIME_OUT = TimeSpan.FromDays(5);
         private static readonly TimeSpan WRITE_TIME_OUT = TimeSpan.FromMinutes(90);
 
-        private readonly IImmutableDictionary<string, ContainerProvider> _containerMap;
+        private readonly IImmutableDictionary<string, DirectoryProvider> _providerMap;
 
         public AzureBlobUriProvider(
-            IEnumerable<Uri> stagingStorageContainers,
+            IEnumerable<Uri> stagingStorageDirectories,
             TokenCredential credential)
         {
-            _containerMap = stagingStorageContainers
-                .Select(u => new ContainerProvider(u, credential))
-                .ToImmutableDictionary(p => p.ContainerUri.ToString(), p => p);
+            _providerMap = stagingStorageDirectories
+                .Select(u => new DirectoryProvider(u, credential))
+                .ToImmutableDictionary(p => p.RootDirectoryUri.ToString(), p => p);
         }
 
         async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(
             string path,
             CancellationToken ct)
         {
-            var tasks = _containerMap.Values
+            var tasks = _providerMap.Values
                 .Select(c => c.GetWritableFolderUrisAsync(path, ct))
                 .ToImmutableArray();
 
@@ -129,22 +129,19 @@ namespace KustoCopyConsole.Storage.AzureStorage
 
         async Task<Uri> IStagingBlobUriProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
         {
-            var builder = new UriBuilder(uri);
+            var storageRoot = _providerMap.Keys
+                .Where(k => uri.ToString().StartsWith(k))
+                .FirstOrDefault();
 
-            builder.Path = string.Join('/', builder.Path.Split('/').Take(2));
-            builder.Path += '/';
-
-            var containerUri = builder.Uri.ToString();
-
-            if (_containerMap.TryGetValue(containerUri, out var provider))
+            if (storageRoot != null)
             {
-                var path = string.Join('/', uri.LocalPath.Split('/').Skip(2));
+                var provider = _providerMap[storageRoot];
 
-                return await provider.AuthorizeUriAsync(path, ct);
+                return await provider.AuthorizeUriAsync(uri, ct);
             }
             else
             {
-                throw new CopyException($"Uri isn't from staging containers:  '{uri}'", false);
+                throw new CopyException($"Uri isn't from staging directories:  '{uri}'", false);
             }
         }
     }

@@ -29,7 +29,7 @@ namespace KustoCopyConsole.Runner
         {
             var appendStorage = await CreateAppendStorageAsync(
                 logFilePath,
-                parameterization.StagingStorageContainers.First(),
+                parameterization.StagingStorageDirectories.First(),
                 parameterization.GetCredentials(),
                 ct);
             var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
@@ -37,15 +37,28 @@ namespace KustoCopyConsole.Runner
                 parameterization,
                 parameterization.GetCredentials(),
                 ct);
+            var stagingBlobUriProvider = new AzureBlobUriProvider(
+                parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
+                parameterization.GetCredentials());
 
-            return new MainRunner(parameterization, rowItemGateway, dbClientFactory);
+            return new MainRunner(
+                parameterization,
+                rowItemGateway,
+                dbClientFactory,
+                stagingBlobUriProvider);
         }
 
         private MainRunner(
             MainJobParameterization parameterization,
             RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory)
-            : base(parameterization, rowItemGateway, dbClientFactory, TimeSpan.Zero)
+            DbClientFactory dbClientFactory,
+            IStagingBlobUriProvider stagingBlobUriProvider)
+            : base(
+                  parameterization,
+                  rowItemGateway,
+                  dbClientFactory,
+                  stagingBlobUriProvider,
+                  TimeSpan.Zero)
         {
         }
 
@@ -102,22 +115,22 @@ namespace KustoCopyConsole.Runner
                     EnsureActivity(a);
                     EnsureIteration(a);
                 }
-                var iterationRunner =
-                    new PlanningRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var tempTableRunner =
-                    new TempTableCreatingRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var exportingRunner =
-                    new ExportingRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var awaitExportedRunner =
-                    new AwaitExportedRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var queueIngestRunner =
-                    new QueueIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var awaitIngestRunner =
-                    new AwaitIngestRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var moveExtentsRunner =
-                    new MoveExtentsRunner(Parameterization, RowItemGateway, DbClientFactory);
-                var iterationCompletingRunner =
-                    new IterationCompletingRunner(Parameterization, RowItemGateway, DbClientFactory);
+                var iterationRunner = new PlanningRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var tempTableRunner = new TempTableCreatingRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var exportingRunner = new ExportingRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var awaitExportedRunner = new AwaitExportedRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var queueIngestRunner = new QueueIngestRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var awaitIngestRunner = new AwaitIngestRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var moveExtentsRunner = new MoveExtentsRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var iterationCompletingRunner = new IterationCompletingRunner(
+                    Parameterization, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
 
                 await Task.WhenAll(
                     Task.Run(() => iterationRunner.RunAsync(ct)),
