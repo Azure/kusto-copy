@@ -32,36 +32,36 @@ namespace KustoCopyTest.InMemoryCache
                 RowCount = 125
             };
 
-            cache.AppendItem(new ActivityRowItem
+            cache = cache.AppendItem(new ActivityRowItem
             {
                 State = ActivityState.Active,
                 ActivityName = ACTIVITY_NAME,
                 SourceTable = SOURCE_TABLE_IDENTITY,
                 DestinationTable = DESTINATION_TABLE_IDENTITY
             });
-            cache.AppendItem(new IterationRowItem
+            cache = cache.AppendItem(new IterationRowItem
             {
                 State = IterationState.Starting,
                 ActivityName = ACTIVITY_NAME,
                 IterationId = iterationId,
                 CursorEnd = "ABC"
             });
-            cache.AppendItem(new BlockRowItem
+            cache = cache.AppendItem(new BlockRowItem
             {
                 State = BlockState.Planned,
                 ActivityName = ACTIVITY_NAME,
                 IterationId = iterationId,
                 BlockId = blockId
             });
-            cache.AppendItem(urlItem1);
-            cache.AppendItem(urlItem2);
+            cache = cache.AppendItem(urlItem1);
+            cache = cache.AppendItem(urlItem2);
 
             Assert.Equal(
                 2,
                 cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].UrlMap.Count);
 
             //  Remove item1
-            cache.AppendItem(urlItem1.ChangeState(UrlState.Deleted));
+            cache = cache.AppendItem(urlItem1.ChangeState(UrlState.Deleted));
 
             Assert.Single(
                 cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].UrlMap);
