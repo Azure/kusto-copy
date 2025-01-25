@@ -127,6 +127,14 @@ namespace KustoCopyConsole.Storage
             AppendInternal(item, null);
         }
 
+        public void Append(IEnumerable<RowItemBase> items)
+        {
+            foreach (var item in items)
+            {
+                Append(item);
+            }
+        }
+
         public Task AppendAndPersistAsync(RowItemBase item, CancellationToken ct)
         {
             var taskSource = new TaskCompletionSource();
@@ -134,6 +142,19 @@ namespace KustoCopyConsole.Storage
             AppendInternal(item, taskSource);
 
             return taskSource.Task;
+        }
+
+        public async Task AppendAndPersistAsync(
+            IEnumerable<RowItemBase> items,
+            CancellationToken ct)
+        {
+            var materializedItems = items.ToImmutableArray();
+
+            if (materializedItems.Any())
+            {
+                Append(materializedItems.Take(materializedItems.Count() - 1));
+                await AppendAndPersistAsync(materializedItems.Last(), ct);
+            }
         }
 
         private void AppendInternal(RowItemBase item, TaskCompletionSource? TaskSource)
