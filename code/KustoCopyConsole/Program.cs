@@ -163,6 +163,7 @@ namespace KustoCopyConsole
                 await using (var mainRunner = await MainRunner.CreateAsync(
                     parameterization,
                     options.LogFilePath,
+                    $"KUSTO-COPY;{AssemblyVersion}",
                     cancellationTokenSource.Token))
                 {
                     Trace.WriteLine("Processing...");

@@ -25,6 +25,7 @@ namespace KustoCopyConsole.Runner
         internal static async Task<MainRunner> CreateAsync(
             MainJobParameterization parameterization,
             string logFilePath,
+            string traceApplicationName,
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
@@ -37,6 +38,7 @@ namespace KustoCopyConsole.Runner
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
+                traceApplicationName,
                 ct);
             var stagingBlobUriProvider = new AzureBlobUriProvider(
                 parameterization.StagingStorageDirectories.Select(s => new Uri(s)),

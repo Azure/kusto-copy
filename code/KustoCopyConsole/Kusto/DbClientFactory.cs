@@ -27,9 +27,11 @@ namespace KustoCopyConsole.Kusto
         public static async Task<DbClientFactory> CreateAsync(
             MainJobParameterization parameterization,
             TokenCredential credentials,
+            string traceApplicationName,
             CancellationToken ct)
         {
-            var providerFactory = new ProviderFactory(parameterization, credentials);
+            var providerFactory =
+                new ProviderFactory(parameterization, credentials, traceApplicationName);
             var sourceClusterUris = parameterization.Activities
                 .Values
                 .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))

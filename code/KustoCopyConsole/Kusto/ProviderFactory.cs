@@ -18,7 +18,10 @@ namespace KustoCopyConsole.Kusto
         private readonly ImmutableDictionary<Uri, IKustoQueuedIngestClient> _ingestProviderMap;
 
         #region Constructor
-        public ProviderFactory(MainJobParameterization parameterization, TokenCredential credentials)
+        public ProviderFactory(
+            MainJobParameterization parameterization,
+            TokenCredential credentials,
+            string traceApplicationName)
         {
             var sourceClusterUris = parameterization.Activities
                 .Values
@@ -35,19 +38,19 @@ namespace KustoCopyConsole.Kusto
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = CreateBuilder(credentials, uri)
+                    Builder = CreateBuilder(credentials, uri, traceApplicationName)
                 });
             var destinationIngestionBuilders = destinationClusterUris
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = CreateBuilder(credentials, GetIngestUri(uri))
+                    Builder = CreateBuilder(credentials, GetIngestUri(uri), traceApplicationName)
                 });
             var allBuilders = allClusterUris
                 .Select(uri => new
                 {
                     Uri = uri,
-                    Builder = CreateBuilder(credentials, uri)
+                    Builder = CreateBuilder(credentials, uri, traceApplicationName)
                 });
 
             _queryProviderMap = allBuilders
@@ -70,12 +73,13 @@ namespace KustoCopyConsole.Kusto
 
         private static KustoConnectionStringBuilder CreateBuilder(
             TokenCredential credentials,
-            Uri uri)
+            Uri uri,
+            string traceApplicationName)
         {
             var builder = new KustoConnectionStringBuilder(uri.ToString())
                 .WithAadAzureTokenCredentialsAuthentication(credentials);
 
-            builder.ApplicationNameForTracing = "KUSTO-COPY";
+            builder.ApplicationNameForTracing = traceApplicationName;
 
             return builder;
         }
