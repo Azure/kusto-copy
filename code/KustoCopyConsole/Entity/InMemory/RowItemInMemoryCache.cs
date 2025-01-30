@@ -73,6 +73,15 @@ namespace KustoCopyConsole.Entity.InMemory
             }
         }
 
+        public RowItemInMemoryCache CleanOnRestart()
+        {
+            var newActivityMap = ActivityMap.Values
+                .Select(a => a.CleanOnRestart())
+                .ToImmutableDictionary(a => a.RowItem.ActivityName);
+
+            return new RowItemInMemoryCache(newActivityMap);
+        }
+
         public RowItemInMemoryCache AppendItem(RowItemBase item)
         {
             return new RowItemInMemoryCache(AppendItemToActivityCache(item));

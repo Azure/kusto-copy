@@ -24,6 +24,15 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IImmutableDictionary<long, BlockCache> BlockMap { get; }
 
+        public IterationCache CleanOnRestart()
+        {
+            var newBlockMap = BlockMap.Values
+                .Select(b => b.CleanOnRestart())
+                .ToImmutableDictionary(b => b.RowItem.BlockId);
+
+            return new IterationCache(RowItem, TempTable, newBlockMap);
+        }
+
         public IterationCache AppendBlock(BlockCache block)
         {
             var newBlockMap = BlockMap.SetItem(block.RowItem.BlockId, block);

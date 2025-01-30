@@ -20,6 +20,15 @@ namespace KustoCopyConsole.Entity.InMemory
 
         public IImmutableDictionary<long, IterationCache> IterationMap { get; }
 
+        public ActivityCache CleanOnRestart()
+        {
+            var newIterationMap = IterationMap.Values
+                .Select(i => i.CleanOnRestart())
+                .ToImmutableDictionary(i => i.RowItem.IterationId);
+
+            return new ActivityCache(RowItem, newIterationMap);
+        }
+
         public ActivityCache AppendIteration(IterationCache iteration)
         {
             var iterationId = iteration.RowItem.IterationId;

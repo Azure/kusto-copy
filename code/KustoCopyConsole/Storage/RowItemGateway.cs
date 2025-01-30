@@ -93,6 +93,7 @@ namespace KustoCopyConsole.Storage
             };
             var cache = new RowItemInMemoryCache(allItems);
 
+            cache = cache.CleanOnRestart();
             //  Re-write the logs by taking items "compressed" by the cache
             using (var tempMemoryStream = new MemoryStream())
             {

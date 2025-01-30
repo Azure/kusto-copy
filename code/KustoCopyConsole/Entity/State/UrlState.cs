@@ -3,7 +3,6 @@
     public enum UrlState
     {
         Exported,
-        Queued,
-        Deleted
+        Queued
     }
 }
