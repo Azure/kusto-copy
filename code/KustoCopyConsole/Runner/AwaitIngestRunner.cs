@@ -214,6 +214,9 @@ namespace KustoCopyConsole.Runner
             var ingestedBlocks = allBlocks
                 .Where(h => h.Block.State == BlockState.Ingested);
             var moveTasks = ingestedBlocks
+                .OrderBy(h => h.Activity.ActivityName)
+                .ThenBy(h => h.Block.IterationId)
+                .ThenBy(h => h.Block.BlockId)
                 .Select(h => UpdateIngestedBlockAsync(h, ct))
                 .ToImmutableArray();
 

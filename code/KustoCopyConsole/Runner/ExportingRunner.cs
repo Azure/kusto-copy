@@ -114,7 +114,11 @@ namespace KustoCopyConsole.Runner
                 {
                     ClusterUri = g.Key,
                     ExportingCount = g.Count(h => h.Block.State == BlockState.Exporting),
-                    Candidates = g.Where(h => h.Block.State == BlockState.Planned)
+                    Candidates = g
+                    .Where(h => h.Block.State == BlockState.Planned)
+                    .OrderBy(h => h.Activity.ActivityName)
+                    .ThenBy(h => h.Block.IterationId)
+                    .ThenBy(h => h.Block.BlockId)
                 })
                 //  Keep only clusters with candidates
                 .Where(o => o.Candidates.Any())
