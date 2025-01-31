@@ -56,8 +56,8 @@ namespace KustoCopyTest.InMemoryCache
         {
             var cache = new RowItemInMemoryCache(Array.Empty<RowItemBase>());
             var iterationId = 1;
-            var state1 = BlockState.Planned;
-            var state2 = BlockState.Exporting;
+            var state1 = BlockState.Exporting;
+            var state2 = BlockState.Exported;
             var blockId = 1;
             var item = new BlockRowItem
             {
@@ -95,6 +95,7 @@ namespace KustoCopyTest.InMemoryCache
             Assert.Equal(
                 state1,
                 cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].RowItem.State);
+            Assert.Single(cache.ActivityMap[ACTIVITY_NAME].IterationMap[iterationId].BlockMap[blockId].UrlMap);
 
             //  Update
             cache = cache.AppendItem(item.ChangeState(state2));

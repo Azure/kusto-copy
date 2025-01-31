@@ -8,8 +8,8 @@ namespace KustoCopyConsole.Entity.InMemory
     {
         public BlockCache(BlockRowItem item, IImmutableDictionary<string, UrlCache> urlMap)
             : base(item)
-        {   //  Removes urls when a block is sent back to prior state
-            UrlMap = item.State <= BlockState.Exporting
+        {   //  Removes urls when a block is sent back to planning
+            UrlMap = item.State == BlockState.Planned
                 ? ImmutableDictionary<string, UrlCache>.Empty
                 : urlMap;
         }

@@ -200,13 +200,13 @@ namespace KustoCopyConsole.Entity.InMemory
 
                     if (iteration.BlockMap.ContainsKey(item.BlockId))
                     {
-                        var sourceBlock = iteration.BlockMap[item.BlockId];
+                        var block = iteration.BlockMap[item.BlockId];
 
                         return ActivityMap.SetItem(
                             activityName,
                             activity.AppendIteration(
                                 iteration.AppendBlock(
-                                    new BlockCache(item, sourceBlock.UrlMap))));
+                                    new BlockCache(item, block.UrlMap))));
                     }
                     else
                     {
@@ -242,6 +242,16 @@ namespace KustoCopyConsole.Entity.InMemory
                     if (iteration.BlockMap.ContainsKey(item.BlockId))
                     {
                         var block = iteration.BlockMap[item.BlockId];
+                        var na = ActivityMap.SetItem(
+                            activityName,
+                            activity.AppendIteration(
+                                iteration.AppendBlock(
+                                    block.AppendUrl(new UrlCache(item)))));
+                        var ni = activity.AppendIteration(
+                                iteration.AppendBlock(
+                                    block.AppendUrl(new UrlCache(item))));
+                        var nii = iteration.AppendBlock(
+                                    block.AppendUrl(new UrlCache(item)));
 
                         return ActivityMap.SetItem(
                             activityName,
