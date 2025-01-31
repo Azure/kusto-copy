@@ -17,28 +17,28 @@ jobs:
           - os: linux
             platform: ubuntu-latest
             dotnetOs: linux-x64
-            assetsName: linux-assets
+            ASSETS_NAME: linux-assets
             assetSuffix: linux
             execName: kusto-copy
           
           - os: windows
             platform:  windows-latest
             dotnetOs:  win-x64
-            assetsName:  windows-assets
+            ASSETS_NAME:  windows-assets
             assetSuffix:  windows
             execName:  kusto-copy
           
           - os: macos
             platform:  macos-latest
             dotnetOs:  osx-x64
-            assetsName:  mac-assets
+            ASSETS_NAME:  mac-assets
             assetSuffix:  mac
             execName:  kusto-copy
           
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       DOTNET_OS: ${{ matrix.dotnetOs }}
-      ASSETS_NAME: ${{ matrix.assetsName }}
+      ASSETS_NAME: ${{ matrix.ASSETS_NAME }}
       ASSET_SUFFIX: ${{ matrix.assetSuffix }}
       EXEC_NAME: ${{ matrix.execName }}
     
@@ -58,8 +58,8 @@ jobs:
     - name: Create artefact directory
       shell:  bash
       run:  |
-        mkdir $assetsName
-        mkdir $assetsName/bin
+        mkdir $ASSETS_NAME
+        mkdir $ASSETS_NAME/bin
         mkdir bin
     # See https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-restore
     - name: Install dependencies
@@ -75,23 +75,23 @@ jobs:
     - name: Build single file executable
       shell:  bash
       run: |
-        dotnet publish code/KustoCopyConsole -c release -r $dotnetOs \
+        dotnet publish code/KustoCopyConsole -c release -r $DOTNET_OS \
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
           -p:PublishTrimmed=true -p:PublishReadyToRun=true \
           -o bin
     - name: Copy executable to assets
       shell:  bash
-      run:  cp bin/$execName $assetsName/bin/$execName
+      run:  cp bin/$EXEC_NAME $ASSETS_NAME/bin/$EXEC_NAME
     # Output variables can't be shared accross jobs, so we push it to artefacts
     - name: Push full version to file
       shell:  bash
-      run:  echo ${{ steps.patch-version.outputs.full-version }} >> $assetsName/full-version.txt
+      run:  echo ${{ steps.patch-version.outputs.full-version }} >> $ASSETS_NAME/full-version.txt
     # Push archive + version to a sharable artefact
     # See https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
     - uses: actions/upload-artifact@master
       with:
-        name: ${{ env.assetsName }}
-        path: ${{ env.assetsName }}
+        name: ${{ env.ASSETS_NAME }}
+        path: ${{ env.ASSETS_NAME }}
 
   # This is the release job, integrating work from windows + linux + mac job
   # see https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
