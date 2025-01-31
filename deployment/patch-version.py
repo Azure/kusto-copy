@@ -30,13 +30,13 @@ else:
     #   Add patch to the version
     version=document.getElementsByTagName('Version')[0]
     patchVersion = version.firstChild.nodeValue
-    version.firstChild.nodeValue = patchVersion + "." + patchNumber
     versionParts = patchVersion.split('.')
-    if len(versionParts)!=3:
-        print("The project version should have three parts, e.g. 1.2.3 but doesn't:  " % patchVersion)
+    if len(versionParts)!=4:
+        print("The project version should have four parts, e.g. 1.2.3.4 but doesn't:  " % patchVersion)
 
         exit(1)
     else:
+        version.firstChild.nodeValue = versionParts[0] + '.' + versionParts[1] + '.' + versionParts[2] + "." + patchNumber
         fullVersion = version.firstChild.nodeValue
 
         #   Partial versions

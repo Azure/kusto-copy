@@ -9,24 +9,27 @@ on:
 jobs:
   # Builds assets for each OS
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]  # Define platforms
+        os: [linux, windows, macos]  # Define platforms
         include:
-          - os: ubuntu-latest
+          - os: linux
+            platform: ubuntu-latest
             dotnetOs: linux-x64
             assetsName: linux-assets
             assetSuffix: linux
             execName: kusto-copy
           
-          - os: windows-latest
+          - os: windows
+            platform:  windows-latest
             dotnetOs:  win-x64
             assetsName:  windows-assets
             assetSuffix:  windows
             execName:  kusto-copy
           
-          - os: macos-latest
+          - os: macos
+            platform:  macos-latest
             dotnetOs:  osx-x64
             assetsName:  mac-assets
             assetSuffix:  mac
