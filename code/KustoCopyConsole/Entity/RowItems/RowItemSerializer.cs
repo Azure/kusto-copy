@@ -5,19 +5,11 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace KustoCopyConsole.Entity.RowItems
 {
     internal class RowItemSerializer
     {
-        private static readonly JsonSerializerOptions _serializerOptions = new()
-        {
-            Converters = { new JsonStringEnumConverter() },
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        };
         private readonly IImmutableDictionary<RowType, Type> _rowTypeIndex;
         private readonly IImmutableDictionary<Type, RowType> _typeIndex;
 
@@ -56,7 +48,10 @@ namespace KustoCopyConsole.Entity.RowItems
                 {
                     writer.Write(@$"{{ ""rowType"" : ""{rowType}"", ""row"" : ");
                     writer.Flush();
-                    JsonSerializer.Serialize(stream, item, item.GetType(), _serializerOptions);
+                    JsonSerializer.Serialize(
+                        stream,
+                        item,
+                        RowItemJsonContext.Default.GetTypeInfo(item.GetType())!);
                     writer.WriteLine(" }");
                 }
             }
@@ -115,8 +110,7 @@ namespace KustoCopyConsole.Entity.RowItems
                     var rowJson = JsonDocument.ParseValue(ref reader).RootElement.GetRawText();
                     var row = (RowItemBase?)JsonSerializer.Deserialize(
                         rowJson,
-                        rowItemType,
-                        _serializerOptions);
+                        RowItemJsonContext.Default.GetTypeInfo(rowItemType)!);
 
                     if (row == null)
                     {
