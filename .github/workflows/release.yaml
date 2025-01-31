@@ -121,10 +121,10 @@ jobs:
       run:  |
         ls -l linux-assets
         ls -l linux-assets/bin
-        # ls -l windows-assets
-        # ls -l windows-assets/bin
-        # ls -l mac-assets
-        # ls -l mac-assets/bin
+        ls -l windows-assets
+        ls -l windows-assets/bin
+        ls -l mac-assets
+        ls -l mac-assets/bin
     # Zip assets
     - name: Mkdir final assets
       run:  mkdir final-assets
@@ -152,6 +152,7 @@ jobs:
       run:  |
         # Retrieve content of full-version from artefact
         fullVersion=$(cat linux-assets/full-version.txt)
+        echo "Full version:  $fullVersion"
         # Create the release
         gh release create -d $fullVersion final-assets/*
 
