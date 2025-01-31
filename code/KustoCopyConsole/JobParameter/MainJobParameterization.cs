@@ -25,90 +25,85 @@ namespace KustoCopyConsole.JobParameter
         #region Constructors
         public static MainJobParameterization FromOptions(CommandLineOptions options)
         {
-            if (!string.IsNullOrWhiteSpace(options.Source))
+            if (string.IsNullOrWhiteSpace(options.Source))
             {
-                if (string.IsNullOrWhiteSpace(options.Destination))
-                {
-                    throw new CopyException(
-                        $"Source is specified ('options.Source'):  destination is expected",
-                        false);
-                }
+                throw new CopyException($"Source is expected", false);
+            }
+            if (string.IsNullOrWhiteSpace(options.Destination))
+            {
+                throw new CopyException($"Destination is expected", false);
+            }
 
-                if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
-                {
-                    throw new CopyException($"Can't parse source:  '{options.Source}'", false);
-                }
-                if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
-                {
-                    throw new CopyException(
-                        $"Can't parse destination:  '{options.Destination}'",
-                        false);
-                }
-                var sourceBuilder = new UriBuilder(source);
-                var sourcePathParts = sourceBuilder.Path.Split('/');
-                var destinationBuilder = new UriBuilder(destination);
-                var destinationPathParts = destinationBuilder.Path.Split('/');
+            if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
+            {
+                throw new CopyException($"Can't parse source:  '{options.Source}'", false);
+            }
+            if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
+            {
+                throw new CopyException(
+                    $"Can't parse destination:  '{options.Destination}'",
+                    false);
+            }
+            var sourceBuilder = new UriBuilder(source);
+            var sourcePathParts = sourceBuilder.Path.Split('/');
+            var destinationBuilder = new UriBuilder(destination);
+            var destinationPathParts = destinationBuilder.Path.Split('/');
 
-                if (sourcePathParts.Length != 3)
-                {
-                    throw new CopyException(
-                        $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
-                        false);
-                }
-                if (destinationPathParts.Length < 2 || destinationPathParts.Length > 3)
-                {
-                    throw new CopyException(
-                        $"Destination ('{options.Destination}') should be of the form " +
-                        $"'https://mycluster.eastus.kusto.windows.net/mydb' or " +
-                        $"'https://mycluster.eastus.kusto.windows.net/mydb/mytable'",
-                        false);
-                }
+            if (sourcePathParts.Length != 3)
+            {
+                throw new CopyException(
+                    $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
+                    false);
+            }
+            if (destinationPathParts.Length < 2 || destinationPathParts.Length > 3)
+            {
+                throw new CopyException(
+                    $"Destination ('{options.Destination}') should be of the form " +
+                    $"'https://mycluster.eastus.kusto.windows.net/mydb' or " +
+                    $"'https://mycluster.eastus.kusto.windows.net/mydb/mytable'",
+                    false);
+            }
 
-                var sourceDb = sourcePathParts[1];
-                var sourceTable = sourcePathParts[2];
-                var destinationDb = destinationPathParts[1];
-                var destinationTable = destinationPathParts.Length == 3
-                    ? destinationPathParts[2]
-                    : string.Empty;
+            var sourceDb = sourcePathParts[1];
+            var sourceTable = sourcePathParts[2];
+            var destinationDb = destinationPathParts[1];
+            var destinationTable = destinationPathParts.Length == 3
+                ? destinationPathParts[2]
+                : string.Empty;
 
-                sourceBuilder.Path = string.Empty;
-                destinationBuilder.Path = string.Empty;
+            sourceBuilder.Path = string.Empty;
+            destinationBuilder.Path = string.Empty;
 
-                var parameterization = new MainJobParameterization
-                {
-                    IsContinuousRun = options.IsContinuousRun,
-                    Activities = ImmutableList.Create(
-                        new ActivityParameterization
+            var parameterization = new MainJobParameterization
+            {
+                IsContinuousRun = options.IsContinuousRun,
+                Activities = ImmutableList.Create(
+                    new ActivityParameterization
+                    {
+                        ActivityName = "default",
+                        Source = new TableParameterization
                         {
-                            ActivityName = "default",
-                            Source = new TableParameterization
-                            {
-                                ClusterUri = sourceBuilder.ToString(),
-                                DatabaseName = sourceDb,
-                                TableName = sourceTable
-                            },
-                            Destination = new TableParameterization
-                            {
-                                ClusterUri = destinationBuilder.ToString(),
-                                DatabaseName = destinationDb,
-                                TableName = destinationTable
-                            },
-                            KqlQuery = options.Query.Trim(),
-                            TableOption = new TableOption()
-                        })
-                    .ToImmutableDictionary(a => a.ActivityName, a => a),
-                    Authentication = options.Authentication,
-                    StagingStorageDirectories = options.StagingStorageDirectories.ToImmutableArray()
-                };
+                            ClusterUri = sourceBuilder.ToString(),
+                            DatabaseName = sourceDb,
+                            TableName = sourceTable
+                        },
+                        Destination = new TableParameterization
+                        {
+                            ClusterUri = destinationBuilder.ToString(),
+                            DatabaseName = destinationDb,
+                            TableName = destinationTable
+                        },
+                        KqlQuery = options.Query.Trim(),
+                        TableOption = new TableOption()
+                    })
+                .ToImmutableDictionary(a => a.ActivityName, a => a),
+                Authentication = options.Authentication,
+                StagingStorageDirectories = options.StagingStorageDirectories.ToImmutableArray()
+            };
 
-                parameterization.Validate();
+            parameterization.Validate();
 
-                return parameterization;
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            return parameterization;
         }
         #endregion
 

@@ -28,7 +28,7 @@ namespace KustoCopyConsole
         [Option(
             't',
             "staging-storage",
-            Required = false,
+            Required = true,
             HelpText = "Set the staging storage directories in the form of storage container uris")]
         public IEnumerable<string> StagingStorageDirectories { get; set; } = Array.Empty<string>();
 
