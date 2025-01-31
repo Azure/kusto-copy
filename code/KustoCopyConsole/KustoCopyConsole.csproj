@@ -15,6 +15,7 @@
   <!--  Remove warnings for trimming  -->
   <PropertyGroup>
     <NoWarn>IL2024</NoWarn>
+    <NoWarn>IL2124</NoWarn>
     <NoWarn>IL2026</NoWarn>
   </PropertyGroup>
 

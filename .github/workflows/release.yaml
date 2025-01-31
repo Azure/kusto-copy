@@ -19,28 +19,25 @@ jobs:
             dotnetOs: linux-x64
             ASSETS_NAME: linux-assets
             assetSuffix: linux
-            execName: kusto-copy
           
           - os: windows
             platform:  windows-latest
             dotnetOs:  win-x64
             ASSETS_NAME:  windows-assets
             assetSuffix:  windows
-            execName:  kusto-copy
           
           - os: macos
             platform:  macos-latest
             dotnetOs:  osx-x64
             ASSETS_NAME:  mac-assets
             assetSuffix:  mac
-            execName:  kusto-copy
           
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
       DOTNET_OS: ${{ matrix.dotnetOs }}
       ASSETS_NAME: ${{ matrix.ASSETS_NAME }}
       ASSET_SUFFIX: ${{ matrix.assetSuffix }}
-      EXEC_NAME: ${{ matrix.execName }}
+      EXEC_NAME:  kc
     
     steps:
     - uses: actions/checkout@v2
