@@ -28,6 +28,7 @@ namespace KustoCopyConsole.Entity.RowItems
     [JsonSerializable(typeof(IterationRowItem))]
     [JsonSerializable(typeof(TempTableRowItem))]
     [JsonSerializable(typeof(UrlRowItem))]
+    [JsonSerializable(typeof(ExtentRowItem))]
     internal partial class RowItemJsonContext : JsonSerializerContext
     {
     }
