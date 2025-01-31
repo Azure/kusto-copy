@@ -146,7 +146,7 @@ jobs:
     # See https://cli.github.com/manual/gh_auth
     - name: Authentication gh CLI
       run:  |
-        echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+        echo "${{ secrets.RELEASE_TOKEN }}" | gh auth login --with-token
     # See https://cli.github.com/manual/gh_release
     - name: Create full version release
       run:  |
