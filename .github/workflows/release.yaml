@@ -153,7 +153,5 @@ jobs:
         # Retrieve content of full-version from artefact
         fullVersion=$(cat linux-assets/full-version.txt)
         echo "Full version:  $fullVersion"
-        # Create the release
-        gh release create -d $fullVersion final-assets/*
-
-
+        # Create the release draft
+        gh release create $fullVersion final-assets/*
