@@ -102,6 +102,8 @@ namespace KustoCopyConsole.Entity.InMemory
                     return AppendBlock(sb);
                 case UrlRowItem url:
                     return AppendUrl(url);
+                case ExtentRowItem extent:
+                    return AppendExtent(extent);
                 default:
                     throw new NotSupportedException(
                         $"Not supported row item type:  {item.GetType().Name}");
@@ -206,7 +208,7 @@ namespace KustoCopyConsole.Entity.InMemory
                             activityName,
                             activity.AppendIteration(
                                 iteration.AppendBlock(
-                                    new BlockCache(item, block.UrlMap))));
+                                    new BlockCache(item, block.UrlMap, block.ExtentMap))));
                     }
                     else
                     {
@@ -262,6 +264,54 @@ namespace KustoCopyConsole.Entity.InMemory
                     else
                     {
                         throw new NotSupportedException("Block should come before url in logs");
+                    }
+                }
+                else
+                {
+                    throw new NotSupportedException("Iteration should come before block in logs");
+                }
+            }
+            else
+            {
+                throw new NotSupportedException("Activity should come before iteration in logs");
+            }
+        }
+
+        private IImmutableDictionary<string, ActivityCache> AppendExtent(ExtentRowItem item)
+        {
+            var activityName = item.ActivityName;
+
+            if (ActivityMap.ContainsKey(activityName))
+            {
+                var activity = ActivityMap[activityName];
+
+                if (activity.IterationMap.ContainsKey(item.IterationId))
+                {
+                    var iteration = activity.IterationMap[item.IterationId];
+
+                    if (iteration.BlockMap.ContainsKey(item.BlockId))
+                    {
+                        var block = iteration.BlockMap[item.BlockId];
+                        var na = ActivityMap.SetItem(
+                            activityName,
+                            activity.AppendIteration(
+                                iteration.AppendBlock(
+                                    block.AppendExtent(new ExtentCache(item)))));
+                        var ni = activity.AppendIteration(
+                                iteration.AppendBlock(
+                                    block.AppendExtent(new ExtentCache(item))));
+                        var nii = iteration.AppendBlock(
+                                    block.AppendExtent(new ExtentCache(item)));
+
+                        return ActivityMap.SetItem(
+                            activityName,
+                            activity.AppendIteration(
+                                iteration.AppendBlock(
+                                    block.AppendExtent(new ExtentCache(item)))));
+                    }
+                    else
+                    {
+                        throw new NotSupportedException("Block should come before extent in logs");
                     }
                 }
                 else
