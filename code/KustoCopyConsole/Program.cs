@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -70,6 +71,9 @@ namespace KustoCopyConsole
             }
         }
 
+        //  This attributes is there to prevent an error when compiling with trimming
+        //  since CommandLineOptions is accessed by reflection
+        [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(CommandLineOptions))]
         internal static async Task<int> Main(string[] args)
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
