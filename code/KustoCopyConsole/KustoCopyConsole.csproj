@@ -12,10 +12,10 @@
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Remove Legacy files from being compiled -->
-    <Compile Remove="Runner\Legacy\**\*.cs" />
-  </ItemGroup>
+  <!--  Remove warnings for trimming  -->
+  <PropertyGroup>
+    <NoWarn>IL2026</NoWarn>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Files.DataLake" Version="12.21.0" />
