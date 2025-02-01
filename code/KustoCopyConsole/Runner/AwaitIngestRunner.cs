@@ -4,7 +4,6 @@ using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 
@@ -182,6 +181,8 @@ namespace KustoCopyConsole.Runner
                             $"{oldestBlock.RowItem.IterationId}, activity " +
                             $"{oldestBlock.RowItem.ActivityName} ; block will be re-exported");
                         ReturnToPlanned(oldestBlock);
+
+                        return;
                     }
                 }
             }
