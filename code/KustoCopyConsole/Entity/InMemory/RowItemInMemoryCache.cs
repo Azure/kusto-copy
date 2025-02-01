@@ -46,7 +46,8 @@ namespace KustoCopyConsole.Entity.InMemory
                     o.Iteration.RowItem,
                     o.TempTableItem,
                     b.RowItem,
-                    b.UrlMap.Values.Select(u => u.RowItem))));
+                    b.UrlMap.Values.Select(u => u.RowItem),
+                    b.ExtentMap.Values.Select(e => e.RowItem))));
         }
 
         public IEnumerable<RowItemBase> GetItems()
