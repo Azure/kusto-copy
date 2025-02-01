@@ -32,10 +32,6 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                //  We do wait for the ingested status to persist before moving
-                //  This is to avoid moving extents before the confirmation of
-                //  ingestion is persisted:  this would result in the block
-                //  staying in "queued" if the process would restart
                 await UpdateIngestedAsync(ct);
                 await FailureDetectionAsync(ct);
                 await MoveAsync(ct);
@@ -47,73 +43,93 @@ namespace KustoCopyConsole.Runner
 
         private async Task UpdateIngestedAsync(CancellationToken ct)
         {
-            async Task<IEnumerable<BlockRowItem>> ListNewlyIngestedBlocksAsync(
+            async Task<IEnumerable<RowItemBase>> GetIngestionItemsAsync(
+                ActivityRowItem activity,
+                IterationRowItem iteration,
                 IEnumerable<ActivityFlatHierarchy> items,
+                string tempTableName,
                 CancellationToken ct)
             {
-                IEnumerable<BlockRowItem> ListNewlyIngestedBlocks(
-                    IEnumerable<ActivityFlatHierarchy> items,
-                    IImmutableList<ExtentRowCount> extentRowCounts)
+                var dbClient = DbClientFactory.GetDbCommandClient(
+                    activity.DestinationTable.ClusterUri,
+                    activity.DestinationTable.DatabaseName);
+                var allExtentRowCounts = await dbClient.GetExtentRowCountsAsync(
+                    new KustoPriority(iteration.GetIterationKey()),
+                    tempTableName,
+                    ct);
+                var extentRowCountByTags = allExtentRowCounts
+                    .GroupBy(e => e.Tags)
+                    .ToImmutableDictionary(g => g.Key);
+                var ingestionItems = new List<RowItemBase>();
+
+                foreach (var item in items)
                 {
-                    foreach (var item in items)
+                    var extentRowCounts = extentRowCountByTags
+                        .Where(e => e.Key.Contains(item.Block.BlockTag))
+                        .Select(e => e.Value)
+                        .FirstOrDefault();
+
+                    if (extentRowCounts != null)
                     {
                         var targetRowCount = item
                             .Urls
                             .Sum(h => h.RowCount);
                         var blockExtentRowCount = extentRowCounts
-                            .Where(e => e.Tags.Contains(item.Block.BlockTag))
-                            .FirstOrDefault();
+                            .Sum(e => e.RecordCount);
 
-                        if (blockExtentRowCount != null)
+                        if (blockExtentRowCount > targetRowCount)
                         {
-                            if (blockExtentRowCount.RecordCount > targetRowCount)
-                            {
-                                throw new CopyException(
-                                    $"Target row count is {targetRowCount} while " +
-                                    $"we observe {blockExtentRowCount.RecordCount}",
-                                    false);
-                            }
-                            if (blockExtentRowCount.RecordCount == targetRowCount)
-                            {
-                                var newBlockItem = item.Block.ChangeState(BlockState.Ingested);
+                            throw new CopyException(
+                                $"Target row count is {targetRowCount} while " +
+                                $"we observe {blockExtentRowCount}",
+                                false);
+                        }
+                        if (blockExtentRowCount == targetRowCount)
+                        {
+                            var extentItems = extentRowCounts
+                                .Select(e => new ExtentRowItem
+                                {
+                                    ActivityName = activity.ActivityName,
+                                    IterationId = iteration.IterationId,
+                                    BlockId = item.Block.BlockId,
+                                    ExtentId = e.ExtentId,
+                                    RowCount = e.RecordCount
+                                });
 
-                                yield return newBlockItem;
-                            }
+                            ingestionItems.AddRange(extentItems);
+                            ingestionItems.Add(item.Block.ChangeState(BlockState.Ingested));
                         }
                     }
                 }
 
-                var activity = items.First().Activity;
-                var iteration = items.First().Iteration;
-                var tempTableName = items.First().TempTable!.TempTableName;
-                var dbClient = DbClientFactory.GetDbCommandClient(
-                    activity.DestinationTable.ClusterUri,
-                    activity.DestinationTable.DatabaseName);
-                var extentRowCounts = await dbClient.GetExtentRowCountsAsync(
-                    new KustoPriority(iteration.GetIterationKey()),
-                    tempTableName,
-                    ct);
-
-                return ListNewlyIngestedBlocks(items, extentRowCounts);
+                return ingestionItems;
             }
             var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                    a => a.RowItem.State != ActivityState.Completed,
-                    i => i.RowItem.State != IterationState.Completed);
+                        a => a.RowItem.State != ActivityState.Completed,
+                        i => i.RowItem.State != IterationState.Completed);
             var queuedBlocks = allBlocks
                 .Where(h => h.Block.State == BlockState.Queued);
             var detectIngestionTasks = queuedBlocks
                 .Where(h => h.TempTable != null)
                 .GroupBy(h => h.TempTable)
-                .Select(g => ListNewlyIngestedBlocksAsync(g, ct))
+                .Select(g => GetIngestionItemsAsync(
+                    g.First().Activity,
+                    g.First().Iteration,
+                    g,
+                    g.Key!.TempTableName,
+                    ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(detectIngestionTasks);
 
-            var ingestedBlocks = detectIngestionTasks
-                .SelectMany(t => t.Result)
-                .ToImmutableArray();
+            var ingestionItems = detectIngestionTasks
+                .SelectMany(t => t.Result);
 
-            await RowItemGateway.AppendAndPersistAsync(ingestedBlocks, ct);
+            //  We do wait for the ingested status to persist before moving
+            //  This is to avoid moving extents before the confirmation of
+            //  ingestion is persisted:  this would result in the block
+            //  staying in "queued" if the process would restart
+            await RowItemGateway.AppendAndPersistAsync(ingestionItems, ct);
         }
 
         private async Task FailureDetectionAsync(CancellationToken ct)

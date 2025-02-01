@@ -6,5 +6,5 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto.Data
 {
-    public record ExtentRowCount(string Tags, long RecordCount);
+    public record ExtentRowCount(string ExtentId, string Tags, long RecordCount);
 }

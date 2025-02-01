@@ -16,6 +16,8 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public string ExtentId { get; set; } = string.Empty;
 
+        public long RowCount { get; set; }
+
         public override void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))
@@ -35,6 +37,11 @@ namespace KustoCopyConsole.Entity.RowItems
             if (string.IsNullOrWhiteSpace(ExtentId))
             {
                 throw new InvalidDataException($"{nameof(ExtentId)} must have a value");
+            }
+            if (RowCount < 1)
+            {
+                throw new InvalidDataException(
+                    $"{nameof(RowCount)} should be positive but is {RowCount}");
             }
         }
     }

@@ -306,7 +306,7 @@ let ['{tableName}'] = ['{tableName}']
                {
                    var commandText = @$"
 .show table ['{tempTableName}'] extents
-| summarize RowCount=sum(RowCount) by Tags
+| project ExtentId, RowCount, Tags
 ";
                    var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
@@ -316,6 +316,7 @@ let ['{tableName}'] = ['{tableName}']
                    var result = reader.ToDataSet().Tables[0].Rows
                        .Cast<DataRow>()
                        .Select(r => new ExtentRowCount(
+                           ((Guid)r["ExtentId"]).ToString(),
                            (string)r["Tags"],
                            (long)r["RowCount"]))
                        .ToImmutableArray();
