@@ -239,20 +239,25 @@ namespace KustoCopyConsole.Runner
             while (sortedItems.Any())
             {
                 var movingItems = TakeMovingBlocks(sortedItems);
+                var movingExtentIds = movingItems
+                    .SelectMany(i => i.Extents.Select(e => e.ExtentId));
+                var tags = movingItems
+                    .Select(i => i.Block.BlockTag);
                 var extentCount = await commandClient.MoveExtentsAsync(
                     priority,
                     tempTableName,
                     activity.DestinationTable.TableName,
-                    movingItems.SelectMany(i => i.Extents.Select(e => e.ExtentId)),
+                    movingExtentIds,
                     ct);
                 var cleanCount = await commandClient.CleanExtentTagsAsync(
                     priority,
-                    item.Activity.DestinationTable.TableName,
-                    item.Block.BlockTag,
+                    activity.DestinationTable.TableName,
+                    tags,
                     ct);
-                var newBlockItem = item.Block.ChangeState(BlockState.ExtentMoved);
+                var newBlockItems = movingItems
+                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved));
 
-                RowItemGateway.Append(newBlockItem);
+                RowItemGateway.Append(newBlockItems);
                 sortedItems = sortedItems
                     .Skip(movingItems.Count())
                     .ToImmutableArray();
@@ -269,13 +274,13 @@ namespace KustoCopyConsole.Runner
             {
                 if (totalExtents + item.Extents.Count() > MAXIMUM_EXTENT_MOVING)
                 {
-                    return items.Take(Math.Min(1, i));
+                    return items.Take(Math.Max(1, i));
                 }
                 else
                 {
                     totalExtents += item.Extents.Count();
+                    ++i;
                 }
-                ++i;
             }
 
             return items;

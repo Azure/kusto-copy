@@ -329,16 +329,18 @@ let ['{tableName}'] = ['{tableName}']
             KustoPriority priority,
             string tempTableName,
             string tableName,
-            string blockTag,
+            IEnumerable<string> extentIds,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
                priority,
                async () =>
                {
+                   var extentIdTextList = string.Join(", ", extentIds);
                    var commandText = @$"
-.move extents to table {tableName} <|
-    .show table ['{tempTableName}'] extents where tags contains '{blockTag}'
+.move extents from table ['{tempTableName}'] to table ['{tableName}']
+    with (setNewIngestionTime=true)
+    ({extentIdTextList})
 ";
                    var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
@@ -371,16 +373,17 @@ let ['{tableName}'] = ['{tableName}']
         public async Task<int> CleanExtentTagsAsync(
             KustoPriority priority,
             string tableName,
-            string blockTag,
+            IEnumerable<string> tags,
             CancellationToken ct)
         {
             return await _commandQueue.RequestRunAsync(
                priority,
                async () =>
                {
+                   var tagListText = string.Join(", ", tags.Select(t => $"'{t}'"));
                    var commandText = @$"
-.drop table {tableName} extent tags <|
-    .show table ['{tableName}'] extents where tags contains '{blockTag}'
+.drop table ['{tableName}'] extent tags
+    ({tagListText})
 ";
                    var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(

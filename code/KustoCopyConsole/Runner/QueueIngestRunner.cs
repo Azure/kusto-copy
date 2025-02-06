@@ -94,7 +94,7 @@ namespace KustoCopyConsole.Runner
                     item.Activity.DestinationTable.ClusterUri,
                     item.Activity.DestinationTable.DatabaseName,
                     item.TempTable!.TempTableName);
-                var blockTag = $"kusto-copy:{Guid.NewGuid()}";
+                var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
                 var queueTasks = item
                     .Urls
                     .Select(u => QueueIngestUrlAsync(
