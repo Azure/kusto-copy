@@ -126,7 +126,7 @@ namespace KustoCopyConsole.JobParameter
                 return new DefaultAzureCredential(new DefaultAzureCredentialOptions
                 {
                     ExcludeManagedIdentityCredential = true,
-                    ExcludeInteractiveBrowserCredential = false
+                    ExcludeInteractiveBrowserCredential = true
                 });
                 //return new AzureCliCredential();
             }
