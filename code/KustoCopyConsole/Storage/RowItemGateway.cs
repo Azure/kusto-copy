@@ -55,7 +55,8 @@ namespace KustoCopyConsole.Storage
                 .AddType<IterationRowItem>(RowType.Iteration)
                 .AddType<TempTableRowItem>(RowType.TempTable)
                 .AddType<BlockRowItem>(RowType.Block)
-                .AddType<UrlRowItem>(RowType.Url);
+                .AddType<UrlRowItem>(RowType.Url)
+                .AddType<ExtentRowItem>(RowType.Extent);
         }
 
         public static async Task<RowItemGateway> CreateAsync(

@@ -36,7 +36,7 @@ namespace KustoCopyConsole.Kusto
             var properties = new KustoQueuedIngestionProperties(_database, _table)
             {
                 Format = DataSourceFormat.parquet,
-                DropByTags = tagList,
+                AdditionalTags = tagList,
                 ReportLevel = IngestionReportLevel.FailuresAndSuccesses,
                 ReportMethod = IngestionReportMethod.Table
             };

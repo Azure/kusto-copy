@@ -12,5 +12,6 @@ namespace KustoCopyConsole.Entity.InMemory
         IterationRowItem Iteration,
         TempTableRowItem? TempTable,
         BlockRowItem Block,
-        IEnumerable<UrlRowItem> Urls);
+        IEnumerable<UrlRowItem> Urls,
+        IEnumerable<ExtentRowItem> Extents);
 }

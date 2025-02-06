@@ -8,6 +8,7 @@
         Iteration,
         TempTable,
         Block,
-        Url
+        Url,
+        Extent
     }
 }
