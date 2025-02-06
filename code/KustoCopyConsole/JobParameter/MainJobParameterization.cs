@@ -123,8 +123,8 @@ namespace KustoCopyConsole.JobParameter
         {
             if (string.IsNullOrWhiteSpace(Authentication))
             {
-                //return new DefaultAzureCredential();
-                return new AzureCliCredential();
+                return new DefaultAzureCredential();
+                //return new AzureCliCredential();
             }
             else
             {
