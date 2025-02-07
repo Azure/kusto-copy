@@ -6,6 +6,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
@@ -65,14 +66,13 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableDictionary(g => g.Key);
                 var ingestionItems = new List<RowItemBase>();
 
+                Trace.TraceInformation($"AwaitIngest:  {allExtentRowCounts.Count} " +
+                    $"extents found with {extentRowCountByTags.Count} tags");
                 foreach (var item in items)
                 {
-                    var extentRowCounts = extentRowCountByTags
-                        .Where(e => e.Key.Contains(item.Block.BlockTag))
-                        .Select(e => e.Value)
-                        .FirstOrDefault();
-
-                    if (extentRowCounts != null)
+                    if(extentRowCountByTags.TryGetValue(
+                        item.Block.BlockTag,
+                        out var extentRowCounts))
                     {
                         var targetRowCount = item
                             .Urls
@@ -218,6 +218,7 @@ namespace KustoCopyConsole.Runner
                     ct))
                 .ToImmutableArray();
 
+            Trace.TraceInformation($"AwaitIngest:  {moveTasks.Count()} extent moving commands");
             await Task.WhenAll(moveTasks);
         }
 
