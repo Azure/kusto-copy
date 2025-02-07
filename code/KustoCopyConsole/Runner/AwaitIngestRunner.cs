@@ -196,7 +196,7 @@ namespace KustoCopyConsole.Runner
         {
             var newBlock = oldestBlock.RowItem.ChangeState(BlockState.Planned);
 
-            newBlock.OperationId = string.Empty;
+            newBlock.ExportOperationId = string.Empty;
             newBlock.BlockTag = string.Empty;
             RowItemGateway.Append(newBlock);
         }

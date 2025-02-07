@@ -87,7 +87,7 @@ namespace KustoCopyConsole.Runner
                     ct);
                 var blockItem = item.Block.ChangeState(BlockState.Exporting);
 
-                blockItem.OperationId = operationId;
+                blockItem.ExportOperationId = operationId;
                 RowItemGateway.Append(blockItem);
             }
 
