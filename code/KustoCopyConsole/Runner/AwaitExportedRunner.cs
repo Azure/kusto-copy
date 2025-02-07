@@ -84,7 +84,7 @@ namespace KustoCopyConsole.Runner
         {
             var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var operationIdMap = blockItems
-                .ToImmutableDictionary(b => b.OperationId);
+                .ToImmutableDictionary(b => b.ExportOperationId);
             var statuses = await dbClient.ShowOperationsAsync(
                 KustoPriority.HighestPriority,
                 operationIdMap.Keys,
@@ -111,7 +111,7 @@ namespace KustoCopyConsole.Runner
                     TraceWarning($"Warning!  Operation ID lost:  '{id}' for " +
                         $"block {block.BlockId} (Iteration={block.IterationId}, " +
                         $"Activity='{block.ActivityName}') ; block marked for reprocessing");
-                    block.OperationId = string.Empty;
+                    block.ExportOperationId = string.Empty;
                     block.ChangeState(BlockState.Planned);
                     RowItemGateway.Append(block);
                 }
@@ -139,7 +139,7 @@ namespace KustoCopyConsole.Runner
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    block.OperationId = string.Empty;
+                    block.ExportOperationId = string.Empty;
                     block = block.ChangeState(BlockState.Planned);
                     RowItemGateway.Append(block);
                 }
@@ -178,12 +178,14 @@ namespace KustoCopyConsole.Runner
                         Url = d.BlobUri.ToString(),
                         RowCount = d.RecordCount
                     });
+                var newBlock = block.ChangeState(BlockState.Exported);
 
+                newBlock.ExportDuration = status.Duration;
                 foreach (var url in urls)
                 {
                     RowItemGateway.Append(url);
                 }
-                RowItemGateway.Append(block.ChangeState(BlockState.Exported));
+                RowItemGateway.Append(newBlock);
                 ValidatePlannedRowCount(block);
             }
 

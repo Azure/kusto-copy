@@ -26,7 +26,9 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long PlannedRowCount { get; set; } = 0;
 
-        public string OperationId { get; set; } = string.Empty;
+        public string ExportOperationId { get; set; } = string.Empty;
+
+        public TimeSpan? ExportDuration { get; set; }
 
         public string BlockTag { get; set; } = string.Empty;
 
@@ -66,14 +68,14 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(PlannedRowCount)} should be superior to zero");
             }
-            if (State != BlockState.Planned && string.IsNullOrWhiteSpace(OperationId))
+            if (State != BlockState.Planned && string.IsNullOrWhiteSpace(ExportOperationId))
             {
-                throw new InvalidDataException($"{nameof(OperationId)} hasn't been populated");
+                throw new InvalidDataException($"{nameof(ExportOperationId)} hasn't been populated");
             }
-            if (State == BlockState.Planned && !string.IsNullOrWhiteSpace(OperationId))
+            if (State == BlockState.Planned && !string.IsNullOrWhiteSpace(ExportOperationId))
             {
                 throw new InvalidDataException(
-                    $"{nameof(OperationId)} should be empty but is '{OperationId}'");
+                    $"{nameof(ExportOperationId)} should be empty but is '{ExportOperationId}'");
             }
             if (State < BlockState.Queued && !string.IsNullOrWhiteSpace(BlockTag))
             {

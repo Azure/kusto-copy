@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Kusto
                     {
                         var operationIdsText = string.Join(", ", operationIds);
                         var commandText = @$".show operations({operationIdsText})
-| project OperationId, State, Status, ShouldRetry";
+| project OperationId, Duration, State, Status, ShouldRetry";
                         var reader = await _provider.ExecuteControlCommandAsync(
                             DatabaseName,
                             commandText);
@@ -70,6 +70,7 @@ namespace KustoCopyConsole.Kusto
                             .Cast<DataRow>()
                             .Select(r => new ExportOperationStatus(
                                 ((Guid)r["OperationId"]).ToString(),
+                                (TimeSpan)r["Duration"],
                                 (string)r["State"],
                                 (string)r["Status"],
                                 Convert.ToBoolean((SByte)r["ShouldRetry"])
