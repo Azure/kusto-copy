@@ -19,12 +19,11 @@
     <NoWarn>IL2026</NoWarn>
   </PropertyGroup>
 
-  <!--  Include metadata file, mostly to fine tune trimming  -->
-  <ItemGroup>
-    <RuntimeHostConfigurationOption Include="System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization" Value="true" />
-    <TrimmerRootAssembly Include="Kusto.Data" />
-    <EmbeddedResource Include="rd.xml" />
-  </ItemGroup>
+  <!--  Disable trimming on Kusto library  -->
+  <PropertyGroup>
+    <TrimmerRootAssembly>Microsoft.Azure.Kusto.Data</TrimmerRootAssembly>
+    <TrimmerRootAssembly>Microsoft.Azure.Kusto.Ingest</TrimmerRootAssembly>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Files.DataLake" Version="12.21.0" />

@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using CommandLine.Text;
+using Kusto.Ingest;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Runner;
 using System;
