@@ -56,9 +56,9 @@ namespace KustoCopyConsole.Storage.AzureStorage
         }
         #endregion
 
-        ValueTask IAsyncDisposable.DisposeAsync()
+        async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            return ValueTask.CompletedTask;
+            await ((IAsyncDisposable)_blobLock).DisposeAsync();
         }
 
         int IAppendStorage.MaxBufferSize => _blobClient.AppendBlobMaxAppendBlockBytes;
