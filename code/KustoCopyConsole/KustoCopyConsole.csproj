@@ -21,7 +21,10 @@
 
   <!--  Disable trimming on Kusto library  -->
   <ItemGroup>
-    <TrimmerRootDescriptor Include="rd.xml" />
+    <RuntimeHostConfigurationOption Include="System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization" Value="true" />
+    <TrimmerRootAssembly Include="Kusto.Data" />
+    <TrimmerRootAssembly Include="Kusto.Ingest" />
+    <EmbeddedResource Include="rd.xml" />
   </ItemGroup>
 
   <ItemGroup>
