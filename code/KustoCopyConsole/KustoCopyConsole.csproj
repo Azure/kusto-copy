@@ -21,8 +21,7 @@
 
   <!--  Disable trimming on Kusto library  -->
   <ItemGroup>
-    <AssemblyTrimMode Include="Microsoft.Azure.Kusto.Data" TrimMode="link" />
-    <AssemblyTrimMode Include="Microsoft.Azure.Kusto.Ingest" TrimMode="link" />
+    <TrimmerRootDescriptor Include="rd.xml" />
   </ItemGroup>
 
   <ItemGroup>

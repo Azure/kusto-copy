@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Directives xmlns="http://schemas.microsoft.com/netfx/2013/01/metadata">
+  <Library Name="Kusto.Data">
+    <Type Name="Kusto.Data.Common.KustoTrustedEndpoints" Dynamic="Required All" />
+  </Library>
+  <Library Name="Kusto.Ingest" Dynamic="Required All" />
+</Directives>
