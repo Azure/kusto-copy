@@ -102,44 +102,11 @@ namespace KustoCopyConsole
                     ? 0
                     : 1;
             }
-            catch (CopyException ex)
-            {
-                DisplayCopyException(ex);
-
-                return 1;
-            }
             catch (Exception ex)
             {
-                DisplayGenericException(ex);
+                ErrorHelper.DisplayException(ex);
 
                 return 1;
-            }
-        }
-
-        private static void DisplayCopyException(CopyException ex, string tab = "")
-        {
-            Trace.TraceError($"{tab}Error:  {ex.Message}");
-
-            var copyInnerException = ex.InnerException as CopyException;
-
-            if (copyInnerException != null)
-            {
-                DisplayCopyException(copyInnerException, tab + "  ");
-            }
-            if (ex.InnerException != null)
-            {
-                DisplayGenericException(ex.InnerException, tab + "  ");
-            }
-        }
-
-        private static void DisplayGenericException(Exception ex, string tab = "")
-        {
-            Console.Error.WriteLine(
-                $"{tab}Exception encountered:  {ex.GetType().FullName} ; {ex.Message}");
-            Console.Error.WriteLine($"{tab}Stack trace:  {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                DisplayGenericException(ex.InnerException, tab + "  ");
             }
         }
 
