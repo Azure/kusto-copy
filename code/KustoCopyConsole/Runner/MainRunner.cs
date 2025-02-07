@@ -11,9 +11,9 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Storage.AzureStorage;
 using Azure.Core;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
@@ -136,7 +136,7 @@ namespace KustoCopyConsole.Runner
                     Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
 
                 await Task.WhenAll(
-                    Task.Run(() => iterationRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => iterationRunner.RunAsync(ct)),
                     Task.Run(() => tempTableRunner.RunAsync(ct)),
                     Task.Run(() => exportingRunner.RunAsync(ct)),
                     Task.Run(() => awaitExportedRunner.RunAsync(ct)),
@@ -144,6 +144,21 @@ namespace KustoCopyConsole.Runner
                     Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                     Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
             }
+        }
+
+        private Task RunRunnerAsync(Func<Task> taskFactory)
+        {
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    await taskFactory();
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceError($"Error:  {ex.Message}");
+                }
+            });
         }
 
         private void EnsureIteration(ActivityParameterization activityParam)
