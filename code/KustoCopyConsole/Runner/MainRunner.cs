@@ -156,7 +156,7 @@ namespace KustoCopyConsole.Runner
                 }
                 catch (Exception ex)
                 {
-                    Trace.TraceError($"Error:  {ex.Message}");
+                    Trace.TraceError($"Error:  {ex.Message} ; Stack trace:  {ex.StackTrace}");
                 }
             });
         }
