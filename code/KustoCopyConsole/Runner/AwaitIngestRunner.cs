@@ -35,10 +35,8 @@ namespace KustoCopyConsole.Runner
             while (!AllActivitiesCompleted())
             {
                 await UpdateIngestedAsync(ct);
-                //  Run the next two tasks in parallel
-                await Task.WhenAll(
-                    FailureDetectionAsync(ct),
-                    MoveAsync(ct));
+                await FailureDetectionAsync(ct);
+                await MoveAsync(ct);
 
                 //  Sleep
                 await SleepAsync(ct);
