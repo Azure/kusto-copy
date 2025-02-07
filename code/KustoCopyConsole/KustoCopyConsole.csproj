@@ -20,10 +20,12 @@
   </PropertyGroup>
 
   <!--  Disable trimming on Kusto library  -->
-  <PropertyGroup>
-    <TrimmerRootAssembly>Microsoft.Azure.Kusto.Data</TrimmerRootAssembly>
-    <TrimmerRootAssembly>Microsoft.Azure.Kusto.Ingest</TrimmerRootAssembly>
-  </PropertyGroup>
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Microsoft.Azure.Kusto.Data" />
+    <TrimmerRootAssembly Include="Microsoft.Azure.Kusto.Ingest" />
+    <ManagedAssemblyToLink Include="Microsoft.Azure.Kusto.Data.dll" TrimMode="copyused" />
+    <ManagedAssemblyToLink Include="Microsoft.Azure.Kusto.Ingest.dll" TrimMode="copyused" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Files.DataLake" Version="12.21.0" />
