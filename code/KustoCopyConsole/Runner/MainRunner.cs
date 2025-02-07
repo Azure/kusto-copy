@@ -137,12 +137,12 @@ namespace KustoCopyConsole.Runner
 
                 await Task.WhenAll(
                     RunRunnerAsync(() => iterationRunner.RunAsync(ct)),
-                    Task.Run(() => tempTableRunner.RunAsync(ct)),
-                    Task.Run(() => exportingRunner.RunAsync(ct)),
-                    Task.Run(() => awaitExportedRunner.RunAsync(ct)),
-                    Task.Run(() => queueIngestRunner.RunAsync(ct)),
-                    Task.Run(() => awaitIngestRunner.RunAsync(ct)),
-                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
+                    RunRunnerAsync(() => tempTableRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => exportingRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => awaitExportedRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => queueIngestRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => awaitIngestRunner.RunAsync(ct)),
+                    RunRunnerAsync(() => iterationCompletingRunner.RunAsync(ct)));
             }
         }
 
