@@ -21,10 +21,8 @@
 
   <!--  Disable trimming on Kusto library  -->
   <ItemGroup>
-    <TrimmerRootAssembly Include="Microsoft.Azure.Kusto.Data" />
-    <TrimmerRootAssembly Include="Microsoft.Azure.Kusto.Ingest" />
-    <ManagedAssemblyToLink Include="Microsoft.Azure.Kusto.Data.dll" TrimMode="copyused" />
-    <ManagedAssemblyToLink Include="Microsoft.Azure.Kusto.Ingest.dll" TrimMode="copyused" />
+    <AssemblyTrimMode Include="Microsoft.Azure.Kusto.Data" TrimMode="copyused" />
+    <AssemblyTrimMode Include="Microsoft.Azure.Kusto.Ingest" TrimMode="copyused" />
   </ItemGroup>
 
   <ItemGroup>
