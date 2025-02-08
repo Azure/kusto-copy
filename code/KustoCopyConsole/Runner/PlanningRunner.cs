@@ -13,16 +13,16 @@ namespace KustoCopyConsole.Runner
     internal class PlanningRunner : RunnerBase
     {
         #region Inner Types
-        private record RecordDistributionInExtent(
+        private record ProtoBlock(
             DateTime IngestionTimeStart,
             DateTime IngestionTimeEnd,
             long RowCount,
             DateTime? MinCreationTime,
             DateTime? MaxCreationTime)
         {
-            public RecordDistributionInExtent Merge(RecordDistributionInExtent other)
+            public ProtoBlock Merge(ProtoBlock other)
             {
-                return new RecordDistributionInExtent(
+                return new ProtoBlock(
                     Min(IngestionTimeStart, other.IngestionTimeStart),
                     Max(IngestionTimeEnd, other.IngestionTimeEnd),
                     RowCount + other.RowCount,
@@ -57,13 +57,93 @@ namespace KustoCopyConsole.Runner
             }
         }
 
+        private class ProtoBlockCollection
+        {
+            private readonly IImmutableList<ProtoBlock> _completedBlocks;
+            private readonly ProtoBlock? _remainingBlock;
+
+            private ProtoBlockCollection(
+                IEnumerable<ProtoBlock> completedBlocks,
+                ProtoBlock? remainingBlock)
+            {
+                _completedBlocks = completedBlocks.ToImmutableArray();
+                _remainingBlock = remainingBlock;
+            }
+
+            public static ProtoBlockCollection Empty { get; }
+                = new(Array.Empty<ProtoBlock>(), null);
+
+            public ProtoBlockCollection Add(IEnumerable<ProtoBlock> blocks)
+            {
+                var remainingBlocks = _remainingBlock == null
+                    ? blocks
+                    : blocks.Prepend(_remainingBlock);
+
+                //  We sort descending since the stack serves them upside-down
+                var stack = new Stack<ProtoBlock>(remainingBlocks
+                    .OrderByDescending(d => d.IngestionTimeStart)
+                    .ThenByDescending(d => d.IngestionTimeEnd));
+                var completedBlocks = new List<ProtoBlock>(_completedBlocks);
+
+                while (stack.Any())
+                {
+                    var first = stack.Pop();
+
+                    if (stack.Any())
+                    {
+                        var second = stack.Pop();
+                        var merge = first.Merge(second);
+
+                        if (first.IngestionTimeEnd == second.IngestionTimeStart
+                            || (merge.RowCount <= RECORDS_PER_BLOCK
+                            && (merge.CreationTimeDelta < TimeSpan.FromDays(1)
+                            || second.MinCreationTime == null && first.MinCreationTime == null)))
+                        {   //  We merge
+                            stack.Push(merge);
+                        }
+                        else
+                        {   //  We don't merge
+                            completedBlocks.Add(first);
+                            stack.Push(second);
+                        }
+                    }
+                    else
+                    {   //  Only way to get out if you got into the while loop
+                        return new ProtoBlockCollection(completedBlocks, first);
+                    }
+                }
+
+                //  If you didn't get into the while loop, there was no remaining block
+                return new ProtoBlockCollection(completedBlocks, null);
+            }
+
+            public (IEnumerable<ProtoBlock> Blocks, ProtoBlockCollection Collection)
+                PopCompletedBlocks(bool includeIncompleteBlock)
+            {
+                if (includeIncompleteBlock)
+                {
+                    return (
+                        _remainingBlock == null
+                        ? _completedBlocks
+                        : _completedBlocks.Append(_remainingBlock),
+                        ProtoBlockCollection.Empty);
+                }
+                else
+                {
+                    return (
+                        _completedBlocks,
+                        new ProtoBlockCollection(Array.Empty<ProtoBlock>(), _remainingBlock));
+                }
+            }
+        }
+
         private record BatchExportBlock(
             IEnumerable<Task> exportingTasks,
             long nextBlockId,
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const int MAX_STATS_COUNT = 1000;
+        private const int MAX_STATS_COUNT = 500000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
         public PlanningRunner(
@@ -163,6 +243,8 @@ namespace KustoCopyConsole.Runner
             IterationRowItem iterationItem,
             CancellationToken ct)
         {
+            var protoBlocks = ProtoBlockCollection.Empty;
+
             //  Loop on block batches
             while (iterationItem.State == IterationState.Planning)
             {
@@ -173,24 +255,30 @@ namespace KustoCopyConsole.Runner
                 var lastBlock = blockMap.Any()
                     ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                     : null;
-                var distributionInExtents = await GetRecordDistributionInExtents(
+                var newProtoBlocks = await GetProtoBlockAsync(
                     iterationItem,
                     lastBlock?.IngestionTimeEnd,
                     queryClient,
                     dbCommandClient,
                     ct);
 
-                if (distributionInExtents.Any())
+                protoBlocks = protoBlocks.Add(newProtoBlocks);
+                protoBlocks = PlanBlockBatch(
+                    protoBlocks,
+                    !newProtoBlocks.Any(),
+                    iterationItem.ActivityName,
+                    iterationItem.IterationId,
+                    lastBlock?.BlockId ?? 0);
+
+                if (!newProtoBlocks.Any())
                 {
-                    PlanBlockBatch(
-                        distributionInExtents,
-                        iterationItem.ActivityName,
-                        iterationItem.IterationId,
-                        lastBlock?.BlockId ?? 0);
-                }
-                else
-                {
-                    iterationItem = blockMap.Any()
+                    var isAnyBlock = RowItemGateway.InMemoryCache
+                        .ActivityMap[iterationItem.ActivityName]
+                        .IterationMap[iterationItem.IterationId]
+                        .BlockMap
+                        .Any();
+
+                    iterationItem = isAnyBlock
                         ? iterationItem.ChangeState(IterationState.Planned)
                         : iterationItem.ChangeState(IterationState.Completed);
                     RowItemGateway.Append(iterationItem);
@@ -198,69 +286,38 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void PlanBlockBatch(
-            IEnumerable<RecordDistributionInExtent> distributionInExtents,
+        private ProtoBlockCollection PlanBlockBatch(
+            ProtoBlockCollection protoBlocks,
+            bool includeIncompleteBlock,
             string activityName,
             long iterationId,
             long lastBlockId)
         {
-            void CreateBlock(
-                RecordDistributionInExtent distribution,
-                string activityName,
-                long iterationId,
-                long blockId)
+            (var blocks, var newProtoBlocks) =
+                protoBlocks.PopCompletedBlocks(includeIncompleteBlock);
+
+            foreach (var block in blocks)
             {
-                var block = new BlockRowItem
+                var blockItem = new BlockRowItem
                 {
                     State = BlockState.Planned,
                     ActivityName = activityName,
                     IterationId = iterationId,
-                    BlockId = blockId,
-                    IngestionTimeStart = distribution.IngestionTimeStart,
-                    IngestionTimeEnd = distribution.IngestionTimeEnd,
-                    ExtentCreationTime = distribution.MinCreationTime,
-                    PlannedRowCount = distribution.RowCount
+                    BlockId = ++lastBlockId,
+                    IngestionTimeStart = block.IngestionTimeStart,
+                    IngestionTimeEnd = block.IngestionTimeEnd,
+                    ExtentCreationTime = block.MinCreationTime,
+                    PlannedRowCount = block.RowCount
                 };
 
-                RowItemGateway.Append(block);
+                RowItemGateway.Append(blockItem);
             }
 
-            //  We sort descending since the stack serves them upside-down
-            var stack = new Stack<RecordDistributionInExtent>(distributionInExtents
-                .OrderByDescending(d => d.IngestionTimeStart)
-                .ThenByDescending(d => d.IngestionTimeEnd));
-
-            while (stack.Any())
-            {
-                var first = stack.Pop();
-
-                if (stack.Any())
-                {
-                    var second = stack.Pop();
-                    var merge = first.Merge(second);
-
-                    if (first.IngestionTimeEnd == second.IngestionTimeStart
-                        || (merge.RowCount <= RECORDS_PER_BLOCK
-                        && (merge.CreationTimeDelta < TimeSpan.FromDays(1)
-                        || second.MinCreationTime == null && first.MinCreationTime == null)))
-                    {   //  We merge
-                        stack.Push(merge);
-                    }
-                    else
-                    {   //  We don't merge
-                        CreateBlock(first, activityName, iterationId, ++lastBlockId);
-                        stack.Push(second);
-                    }
-                }
-                else
-                {
-                    CreateBlock(first, activityName, iterationId, ++lastBlockId);
-                }
-            }
+            return newProtoBlocks;
         }
 
         //  Merge results from query + show extents command
-        private async Task<IImmutableList<RecordDistributionInExtent>> GetRecordDistributionInExtents(
+        private async Task<IImmutableList<ProtoBlock>> GetProtoBlockAsync(
             IterationRowItem iterationItem,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
@@ -300,12 +357,12 @@ namespace KustoCopyConsole.Runner
                 //  between 2 queries
                 if (extentDates.Count == extentIds.Count())
                 {
-                    var distributionInExtents = distributions
+                    var protoBlocks = distributions
                         .Select(d =>
                         {
                             extentDateMap.TryGetValue(d.ExtentId, out DateTime creationTime);
 
-                            return new RecordDistributionInExtent(
+                            return new ProtoBlock(
                                 d.IngestionTimeStart,
                                 d.IngestionTimeEnd,
                                 d.RowCount,
@@ -314,11 +371,11 @@ namespace KustoCopyConsole.Runner
                         })
                         .ToImmutableArray();
 
-                    return distributionInExtents;
+                    return protoBlocks;
                 }
                 else
                 {
-                    return await GetRecordDistributionInExtents(
+                    return await GetProtoBlockAsync(
                         iterationItem,
                         ingestionTimeStart,
                         queryClient,
@@ -328,7 +385,7 @@ namespace KustoCopyConsole.Runner
             }
             else
             {
-                return ImmutableArray<RecordDistributionInExtent>.Empty;
+                return ImmutableArray<ProtoBlock>.Empty;
             }
         }
     }
