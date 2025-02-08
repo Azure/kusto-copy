@@ -46,7 +46,7 @@ namespace KustoCopyConsole.Runner
                     .Select(h => QueueIngestBlockAsync(h, ct))
                     .ToImmutableArray();
 
-                await Task.WhenAll(ingestionTasks);
+                await TaskHelper.WhenAllWithErrors(ingestionTasks);
 
                 if (!ingestionTasks.Any())
                 {
@@ -105,7 +105,7 @@ namespace KustoCopyConsole.Runner
                         ct))
                     .ToImmutableArray();
 
-                await Task.WhenAll(queueTasks);
+                await TaskHelper.WhenAllWithErrors(queueTasks);
 
                 var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 

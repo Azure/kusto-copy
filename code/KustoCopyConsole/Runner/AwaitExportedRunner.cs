@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Runner
                     .Select(o => UpdateOperationsAsync(o.ClusterUri, o.BlockItems, ct))
                     .ToImmutableArray();
 
-                await Task.WhenAll(tasks);
+                await TaskHelper.WhenAllWithErrors(tasks);
                 //  Sleep
                 await SleepAsync(ct);
             }
@@ -194,7 +194,7 @@ namespace KustoCopyConsole.Runner
                 .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
         }
 
         private void ValidatePlannedRowCount(BlockRowItem block)

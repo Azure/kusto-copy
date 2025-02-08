@@ -121,7 +121,7 @@ namespace KustoCopyConsole.Runner
                     ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(detectIngestionTasks);
+            await TaskHelper.WhenAllWithErrors(detectIngestionTasks);
 
             var ingestionItems = detectIngestionTasks
                 .SelectMany(t => t.Result);
@@ -145,7 +145,7 @@ namespace KustoCopyConsole.Runner
                 .Select(i => IterationFailureDetectionAsync(i, ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(iterationTasks);
+            await TaskHelper.WhenAllWithErrors(iterationTasks);
         }
 
         private async Task IterationFailureDetectionAsync(
@@ -217,7 +217,7 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableArray();
 
             Trace.TraceInformation($"AwaitIngest:  {moveTasks.Count()} extent moving commands");
-            await Task.WhenAll(moveTasks);
+            await TaskHelper.WhenAllWithErrors(moveTasks);
         }
 
         private async Task MoveBlocksFromIterationAsync(

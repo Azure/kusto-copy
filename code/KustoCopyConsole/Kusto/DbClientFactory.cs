@@ -51,7 +51,7 @@ namespace KustoCopyConsole.Kusto
                 })
                 .ToImmutableArray();
 
-            await Task.WhenAll(queryCapacityTasks.Select(o => o.Task));
+            await TaskHelper.WhenAllWithErrors(queryCapacityTasks.Select(o => o.Task));
 
             var allClusterQueryCount = queryCapacityTasks
                 .Select(o => new
