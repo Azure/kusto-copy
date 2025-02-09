@@ -1,6 +1,5 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -144,7 +143,7 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const int MAX_STATS_COUNT = 10000;
+        private const int MAX_STATS_COUNT = 250000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
         public PlanningRunner(
