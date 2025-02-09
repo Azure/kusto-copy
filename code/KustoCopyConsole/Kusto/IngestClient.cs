@@ -1,5 +1,6 @@
 ﻿using Kusto.Data.Common;
 using Kusto.Ingest;
+using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 
@@ -13,20 +14,24 @@ namespace KustoCopyConsole.Kusto
             Status.PartiallySucceeded];
 
         private readonly IKustoQueuedIngestClient _ingestProvider;
+        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly string _database;
         private readonly string _table;
 
         public IngestClient(
             IKustoQueuedIngestClient ingestProvider,
+            PriorityExecutionQueue<KustoPriority> queue,
             string database,
             string table)
         {
             _ingestProvider = ingestProvider;
+            _queue = queue;
             _database = database;
             _table = table;
         }
 
         public async Task<string> QueueBlobAsync(
+            KustoPriority priority,
             Uri blobPath,
             string extentTag,
             DateTime? creationTime,
@@ -48,15 +53,21 @@ namespace KustoCopyConsole.Kusto
                     creationTime.Value.ToString("o"));
             }
 
-            var ingestionResult = await _ingestProvider.IngestFromStorageAsync(
-                blobPath.ToString(),
-                properties);
-            var serializedResult = IngestionResultSerializer.Serialize(ingestionResult);
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var ingestionResult = await _ingestProvider.IngestFromStorageAsync(
+                        blobPath.ToString(),
+                        properties);
+                    var serializedResult = IngestionResultSerializer.Serialize(ingestionResult);
 
-            return serializedResult;
+                    return serializedResult;
+                });
         }
 
-        public async Task<IngestionFailureDetail?> FetchIngestionFailureAsync(string serializedQueuedResult)
+        public async Task<IngestionFailureDetail?> FetchIngestionFailureAsync(
+            string serializedQueuedResult)
         {
             var ingestionResult = IngestionResultSerializer.Deserialize(serializedQueuedResult);
             var status = ingestionResult.GetIngestionStatusCollection();

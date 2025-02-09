@@ -7,6 +7,7 @@ using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
@@ -105,7 +106,9 @@ namespace KustoCopyConsole.Runner
                     item.Activity.DestinationTable.DatabaseName,
                     item.TempTable!.TempTableName);
                 var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
+                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
+                newBlockItem.BlockTag = blockTag;
                 Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  ingest " +
                     $"{item.Urls.Count()} urls");
 
@@ -116,8 +119,7 @@ namespace KustoCopyConsole.Runner
                         Url = u,
                         Task = QueueIngestUrlAsync(
                             ingestClient,
-                            blockTag,
-                            item.Block.ExtentCreationTime,
+                            newBlockItem,
                             new Uri(u.Url),
                             ct)
                     })
@@ -127,9 +129,7 @@ namespace KustoCopyConsole.Runner
 
                 var newUrlItems = queuingTasks
                     .Select(o => MarkUrlAsQueued(o.Url, o.Task.Result));
-                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
-                newBlockItem.BlockTag = blockTag;
                 RowItemGateway.Append(newUrlItems);
                 RowItemGateway.Append(newBlockItem);
                 Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  " +
@@ -139,17 +139,17 @@ namespace KustoCopyConsole.Runner
 
         private async Task<string> QueueIngestUrlAsync(
             IngestClient ingestClient,
-            string blockTag,
-            DateTime? extentCreationTime,
+            BlockRowItem block,
             Uri blobUrl,
             CancellationToken ct)
         {
             var uri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl, ct);
             var serializedQueueResult = await ingestClient.QueueBlobAsync(
-                    uri,
-                    blockTag,
-                    extentCreationTime,
-                    ct);
+                new KustoPriority(block.GetBlockKey()),
+                uri,
+                block.BlockTag,
+                block.ExtentCreationTime,
+                ct);
 
             return serializedQueueResult;
         }

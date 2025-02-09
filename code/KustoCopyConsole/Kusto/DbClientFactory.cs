@@ -1,27 +1,23 @@
 ﻿using Azure.Core;
-using Azure.Identity;
 using Kusto.Cloud.Platform.Data;
-using Kusto.Data;
 using Kusto.Data.Common;
-using Kusto.Data.Net.Client;
-using Kusto.Ingest;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.JobParameter;
 using System.Collections.Immutable;
 using System.Data;
-using System.Data.Common;
-using System.Runtime.InteropServices;
 
 namespace KustoCopyConsole.Kusto
 {
     internal class DbClientFactory : IDisposable
     {
         private const int MAX_CONCURRENT_DM_COMMAND = 2;
+        private const int MAX_CONCURRENT_INGEST_QUEUING = 25;
 
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _allClusterQueryQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _allClusterCommandQueueMap;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _destinationClusterDmCommandQueueMap;
+        private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _destinationClusterIngestCommandQueueMap;
 
         #region Constructor
         public static async Task<DbClientFactory> CreateAsync(
@@ -71,24 +67,31 @@ namespace KustoCopyConsole.Kusto
                 .ToImmutableDictionary(
                 u => u,
                 u => new PriorityExecutionQueue<KustoPriority>(MAX_CONCURRENT_DM_COMMAND));
+            var destinationClusterIngestCommandQueueMap = destinationClusterUris
+                .ToImmutableDictionary(
+                u => u,
+                u => new PriorityExecutionQueue<KustoPriority>(MAX_CONCURRENT_INGEST_QUEUING));
 
             return new DbClientFactory(
                 providerFactory,
                 allClusterQueryQueueMap,
                 allClusterCommandQueueMap,
-                destinationClusterDmQueryQueueMap);
+                destinationClusterDmQueryQueueMap,
+                destinationClusterIngestCommandQueueMap);
         }
 
         private DbClientFactory(
             ProviderFactory providerFactory,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> allClusterQueryQueueMap,
             IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> allClusterCommandQueueMap,
-            IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> destinationClusterDmCommandQueueMap)
+            IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> destinationClusterDmCommandQueueMap,
+            IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> destinationClusterIngestCommandQueueMap)
         {
             _providerFactory = providerFactory;
             _allClusterQueryQueueMap = allClusterQueryQueueMap;
             _allClusterCommandQueueMap = allClusterCommandQueueMap;
             _destinationClusterDmCommandQueueMap = destinationClusterDmCommandQueueMap;
+            _destinationClusterIngestCommandQueueMap = destinationClusterIngestCommandQueueMap;
         }
 
         private static async Task<int> GetQueryCapacityAsync(
@@ -163,8 +166,9 @@ namespace KustoCopyConsole.Kusto
         {
             try
             {
+                var queue = _destinationClusterIngestCommandQueueMap[clusterUri];
                 var ingestProvider = _providerFactory.GetIngestProvider(clusterUri);
-                var ingestClient = new IngestClient(ingestProvider, database, table);
+                var ingestClient = new IngestClient(ingestProvider, queue, database, table);
 
                 return ingestClient;
             }
