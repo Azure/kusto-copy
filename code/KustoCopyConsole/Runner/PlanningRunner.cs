@@ -6,6 +6,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -164,27 +165,38 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var taskMap = new Dictionary<IterationKey, Task>();
+            var tasks = Parameterization
+                .Activities
+                .Keys
+                .Select(a => Task.Run(() => RunActivityAsync(a, ct)))
+                .ToImmutableArray();
 
-            while (taskMap.Any() || !AllActivitiesCompleted())
+            await TaskHelper.WhenAllWithErrors(tasks);
+        }
+
+        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        {
+            while (!AllActivitiesCompleted())
             {
-                var newIterations = RowItemGateway.InMemoryCache.ActivityMap
-                     .Values
-                     .SelectMany(a => a.IterationMap.Values)
-                     .Select(i => i.RowItem)
-                     .Where(i => i.State <= IterationState.Planning)
-                     .Select(i => new
-                     {
-                         Key = i.GetIterationKey(),
-                         Iteration = i
-                     })
-                     .Where(o => !taskMap.ContainsKey(o.Key));
-
-                foreach (var o in newIterations)
+                if (RowItemGateway.InMemoryCache.ActivityMap.TryGetValue(
+                    activityName,
+                    out var activity))
                 {
-                    taskMap.Add(o.Key, PlanIterationAsync(o.Iteration, ct));
+                    var newIterations = activity.IterationMap
+                        .Values
+                        .Select(i => i.RowItem)
+                        .Where(i => i.State <= IterationState.Planning)
+                        .Select(i => new
+                        {
+                            Key = i.GetIterationKey(),
+                            Iteration = i
+                        });
+
+                    foreach (var o in newIterations)
+                    {
+                        await PlanIterationAsync(o.Iteration, ct);
+                    }
                 }
-                await CleanTaskMapAsync(taskMap);
                 //  Sleep
                 await SleepAsync(ct);
             }
@@ -194,20 +206,6 @@ namespace KustoCopyConsole.Runner
         {
             return item is IterationRowItem i
                 && i.State == IterationState.Starting;
-        }
-
-        private async Task CleanTaskMapAsync(IDictionary<IterationKey, Task> taskMap)
-        {
-            foreach (var taskKey in taskMap.Keys.ToImmutableArray())
-            {
-                var task = taskMap[taskKey];
-
-                if (task.IsCompleted)
-                {
-                    await task;
-                    taskMap.Remove(taskKey);
-                }
-            }
         }
 
         private async Task PlanIterationAsync(
@@ -263,6 +261,9 @@ namespace KustoCopyConsole.Runner
                     ct);
 
                 protoBlocks = protoBlocks.Add(newProtoBlocks);
+                Trace.TraceInformation($"Planning {iterationItem.GetIterationKey()}:  " +
+                    $"{newProtoBlocks.Count} new protoblocks compacted into " +
+                    $"{protoBlocks.PopCompletedBlocks(false).Blocks.Count()} blocks");
                 protoBlocks = PlanBlockBatch(
                     protoBlocks,
                     !newProtoBlocks.Any(),

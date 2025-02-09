@@ -181,7 +181,7 @@ namespace KustoCopyConsole.Runner
                 var newBlock = block.ChangeState(BlockState.Exported);
 
                 newBlock.ExportDuration = status.Duration;
-                Trace.TraceInformation($"Export block {block.GetBlockKey()}:  {urls.Count()} " +
+                Trace.TraceInformation($"Exported block {block.GetBlockKey()}:  {urls.Count()} " +
                     $"urls in {newBlock.ExportDuration}");
                 RowItemGateway.Append(urls);
                 RowItemGateway.Append(newBlock);

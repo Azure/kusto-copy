@@ -6,6 +6,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
@@ -86,6 +87,15 @@ namespace KustoCopyConsole.Runner
 
         private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
         {
+            UrlRowItem MarkUrlAsQueued(UrlRowItem url, string serializedQueueResult)
+            {
+                var newUrl = url.ChangeState(UrlState.Queued);
+
+                newUrl.SerializedQueuedResult = serializedQueueResult;
+
+                return newUrl;
+            }
+
             //  It's possible, although unlikely, the temp table hasn't been created yet
             //  If so, we'll process this block later
             if (item.TempTable != null)
@@ -95,43 +105,53 @@ namespace KustoCopyConsole.Runner
                     item.Activity.DestinationTable.DatabaseName,
                     item.TempTable!.TempTableName);
                 var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
-                var queueTasks = item
+
+                Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  ingest " +
+                    $"{item.Urls.Count()} urls");
+
+                var queuingTasks = item
                     .Urls
-                    .Select(u => QueueIngestUrlAsync(
-                        ingestClient,
-                        blockTag,
-                        item.Block.ExtentCreationTime,
-                        u,
-                        ct))
+                    .Select(u => new
+                    {
+                        Url = u,
+                        Task = QueueIngestUrlAsync(
+                            ingestClient,
+                            blockTag,
+                            item.Block.ExtentCreationTime,
+                            new Uri(u.Url),
+                            ct)
+                    })
                     .ToImmutableArray();
 
-                await TaskHelper.WhenAllWithErrors(queueTasks);
+                await TaskHelper.WhenAllWithErrors(queuingTasks.Select(o => o.Task));
 
+                var newUrlItems = queuingTasks
+                    .Select(o => MarkUrlAsQueued(o.Url, o.Task.Result));
                 var newBlockItem = item.Block.ChangeState(BlockState.Queued);
 
                 newBlockItem.BlockTag = blockTag;
+                RowItemGateway.Append(newUrlItems);
                 RowItemGateway.Append(newBlockItem);
+                Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  " +
+                    $"{item.Urls.Count()} urls queued");
             }
         }
 
-        private async Task QueueIngestUrlAsync(
+        private async Task<string> QueueIngestUrlAsync(
             IngestClient ingestClient,
             string blockTag,
             DateTime? extentCreationTime,
-            UrlRowItem urlItem,
+            Uri blobUrl,
             CancellationToken ct)
         {
-            var uri = await StagingBlobUriProvider.AuthorizeUriAsync(new Uri(urlItem.Url), ct);
+            var uri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl, ct);
             var serializedQueueResult = await ingestClient.QueueBlobAsync(
                     uri,
                     blockTag,
                     extentCreationTime,
                     ct);
 
-            urlItem = urlItem.ChangeState(UrlState.Queued);
-            urlItem.SerializedQueuedResult = serializedQueueResult;
-
-            RowItemGateway.Append(urlItem);
+            return serializedQueueResult;
         }
     }
 }

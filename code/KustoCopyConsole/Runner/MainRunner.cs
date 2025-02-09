@@ -1,18 +1,12 @@
-﻿using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.State;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage.LocalDisk;
 using KustoCopyConsole.Storage;
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using KustoCopyConsole.Storage.AzureStorage;
-using Azure.Core;
+using KustoCopyConsole.Storage.LocalDisk;
 
 namespace KustoCopyConsole.Runner
 {
