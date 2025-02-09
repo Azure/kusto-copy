@@ -85,7 +85,7 @@ namespace KustoCopyConsole.Runner
             var movedCount = blockItems.Count(b => b.State == BlockState.ExtentMoved);
 
             Console.WriteLine(
-                $"Progress ({key.ActivityName}, {key.IterationId}):  " +
+                $"Progress {key} {iterationCache.RowItem.State}:  " +
                 $"Total={blockMap.Count}, Planned={plannedCount}, " +
                 $"Exporting={exportingCount}, Exported={exportedCount}, " +
                 $"Queued={queuedCount}, Ingested={ingestedCount}, " +

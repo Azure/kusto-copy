@@ -13,7 +13,6 @@ using System.Text;
 using System.Threading.Tasks;
 using KustoCopyConsole.Storage.AzureStorage;
 using Azure.Core;
-using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {

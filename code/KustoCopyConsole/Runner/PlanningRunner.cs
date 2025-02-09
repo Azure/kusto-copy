@@ -143,7 +143,7 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const int MAX_STATS_COUNT = 100000;
+        private const int MAX_STATS_COUNT = 10000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
         public PlanningRunner(

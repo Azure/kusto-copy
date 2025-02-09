@@ -40,9 +40,8 @@ namespace KustoCopyConsole.Kusto
                     var reader = await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
                         commandText);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => (long)r[0])
+                    var result = reader
+                        .ToEnumerable(r => (long)r[0])
                         .First();
 
                     return (int)result;
@@ -66,9 +65,8 @@ namespace KustoCopyConsole.Kusto
                         var reader = await _provider.ExecuteControlCommandAsync(
                             DatabaseName,
                             commandText);
-                        var result = reader.ToDataSet().Tables[0].Rows
-                            .Cast<DataRow>()
-                            .Select(r => new ExportOperationStatus(
+                        var result = reader
+                            .ToEnumerable(r => new ExportOperationStatus(
                                 ((Guid)r["OperationId"]).ToString(),
                                 (TimeSpan)r["Duration"],
                                 (string)r["State"],
@@ -117,7 +115,8 @@ namespace KustoCopyConsole.Kusto
 with (
     namePrefix=""export"",
     persistDetails=true,
-    parquetDatetimePrecision=""microsecond""
+    parquetDatetimePrecision=""microsecond"",
+    distribution=""per_node""
 ) <| 
 declare query_parameters(
     {CURSOR_START_PARAM}:string,
@@ -142,7 +141,9 @@ let ['{tableName}'] = ['{tableName}']
                         DatabaseName,
                         commandText,
                         properties);
-                    var operationId = (Guid)reader.ToDataSet().Tables[0].Rows[0][0];
+                    var operationId = reader
+                        .ToEnumerable(r => (Guid)r[0])
+                        .First();
 
                     return operationId.ToString();
                 });
@@ -167,9 +168,8 @@ let ['{tableName}'] = ['{tableName}']
                         DatabaseName,
                         commandText,
                         properties);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => new ExtentDate(
+                    var result = reader
+                        .ToEnumerable(r => new ExtentDate(
                             (string)(r[0]),
                             (DateTime)(r[1])))
                         .ToImmutableArray();
@@ -195,9 +195,8 @@ let ['{tableName}'] = ['{tableName}']
                         DatabaseName,
                         commandText,
                         properties);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => new ExportDetail(
+                    var result = reader
+                        .ToEnumerable(r => new ExportDetail(
                             new Uri((string)(r[0])),
                             (long)(r[1]),
                             (long)(r[2])))
@@ -271,9 +270,8 @@ let ['{tableName}'] = ['{tableName}']
                         DatabaseName,
                         commandText,
                         properties);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => new
+                    var result = reader
+                        .ToEnumerable(r => new
                         {
                             OperationId = (Guid)(r[0]),
                             CommandType = (string)(r[1]),
@@ -314,13 +312,12 @@ let ['{tableName}'] = ['{tableName}']
                        DatabaseName,
                        commandText,
                        properties);
-                   var result = reader.ToDataSet().Tables[0].Rows
-                       .Cast<DataRow>()
-                       .Select(r => new ExtentRowCount(
-                           ((Guid)r["ExtentId"]).ToString(),
-                           (string)r["Tags"],
-                           (long)r["RowCount"]))
-                       .ToImmutableArray();
+                   var result = reader
+                        .ToEnumerable(r => new ExtentRowCount(
+                            ((Guid)r["ExtentId"]).ToString(),
+                            (string)r["Tags"],
+                            (long)r["RowCount"]))
+                        .ToImmutableArray();
 
                    return result;
                });
@@ -348,15 +345,14 @@ let ['{tableName}'] = ['{tableName}']
                        DatabaseName,
                        commandText,
                        properties);
-                   var results = reader.ToDataSet().Tables[0].Rows
-                       .Cast<DataRow>()
-                       .Select(r => new
-                       {
-                           OriginalExtentId = (string)(r[0]),
-                           ResultExtentId = (string)(r[1]),
-                           Details = r[2].ToString()
-                       })
-                       .ToImmutableArray();
+                   var results = reader
+                    .ToEnumerable(r => new
+                    {
+                        OriginalExtentId = (string)(r[0]),
+                        ResultExtentId = (string)(r[1]),
+                        Details = r[2].ToString()
+                    })
+                    .ToImmutableArray();
                    var singleDetail = results
                    .Where(r => !string.IsNullOrWhiteSpace(r.Details))
                    .Select(r => r.Details)
@@ -391,16 +387,15 @@ let ['{tableName}'] = ['{tableName}']
                        DatabaseName,
                        commandText,
                        properties);
-                   var results = reader.ToDataSet().Tables[0].Rows
-                       .Cast<DataRow>()
-                       .Select(r => new
-                       {
-                           OriginalExtentId = (string)(r[0]),
-                           ResultExtentId = (string)(r[1]),
-                           ResultExtentTags = (string)(r[2]),
-                           Details = r[3].ToString()
-                       })
-                       .ToImmutableArray();
+                   var results = reader
+                    .ToEnumerable(r => new
+                    {
+                        OriginalExtentId = (string)(r[0]),
+                        ResultExtentId = (string)(r[1]),
+                        ResultExtentTags = (string)(r[2]),
+                        Details = r[3].ToString()
+                    })
+                    .ToImmutableArray();
                    var singleDetail = results
                    .Where(r => !string.IsNullOrWhiteSpace(r.Details))
                    .Select(r => r.Details)
