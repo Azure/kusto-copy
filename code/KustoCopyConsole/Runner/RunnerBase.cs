@@ -14,6 +14,7 @@ namespace KustoCopyConsole.Runner
         private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
 
         private readonly TimeSpan _wakePeriod;
+        private readonly Queue<Task> _wakeUpTaskQueue = new();
         private volatile TaskCompletionSource _wakeUpSource = new TaskCompletionSource();
 
         public RunnerBase(
@@ -38,7 +39,8 @@ namespace KustoCopyConsole.Runner
                         ref _wakeUpSource,
                         new TaskCompletionSource());
 
-                    wakeUpSource.TrySetResult();
+                    //  Wake up on a different thread not to block the current one
+                    _wakeUpTaskQueue.Enqueue(Task.Run(() => wakeUpSource.TrySetResult()));
                 }
             };
         }
@@ -74,9 +76,10 @@ namespace KustoCopyConsole.Runner
             return false;
         }
 
-        protected Task SleepAsync(CancellationToken ct)
+        protected async Task SleepAsync(CancellationToken ct)
         {
-            return Task.WhenAny(
+            await CleanWakeUpTaskQueueAsync(ct);
+            await Task.WhenAny(
                 Task.Delay(_wakePeriod, ct),
                 WakeUpTask);
         }
@@ -84,6 +87,23 @@ namespace KustoCopyConsole.Runner
         protected void TraceWarning(string text)
         {
             _traceSource.TraceEvent(TraceEventType.Warning, 0, text);
+        }
+
+        private async Task CleanWakeUpTaskQueueAsync(CancellationToken ct)
+        {   //  Many threads could de-queue at the same time
+            while (_wakeUpTaskQueue.TryDequeue(out var task))
+            {
+                if (task.IsCompleted)
+                {
+                    await task;
+                }
+                else
+                {
+                    _wakeUpTaskQueue.Enqueue(task);
+
+                    return;
+                }
+            }
         }
     }
 }

@@ -95,7 +95,7 @@ namespace KustoCopyConsole.Runner
                 .Select(h => ProcessBlockAsync(h, ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
 
             return tasks.Count();
         }
@@ -163,7 +163,7 @@ namespace KustoCopyConsole.Runner
                 })
                 .ToImmutableArray();
 
-            await Task.WhenAll(capacityUpdateTasks.Select(o => o.CapacityTask));
+            await TaskHelper.WhenAllWithErrors(capacityUpdateTasks.Select(o => o.CapacityTask));
 
             foreach (var update in capacityUpdateTasks)
             {

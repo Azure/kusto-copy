@@ -1,7 +1,6 @@
 ﻿using Kusto.Cloud.Platform.Data;
 using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Entity;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
 using System.Data;
@@ -40,9 +39,8 @@ namespace KustoCopyConsole.Kusto
                         query,
                         EMPTY_PROPERTIES,
                         ct);
-                    var cursor = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => (string)r[0])
+                    var cursor = reader
+                        .ToEnumerable(r => (string)r[0])
                         .FirstOrDefault();
 
                     return cursor!;
@@ -117,9 +115,8 @@ BaseData
                         query,
                         properties,
                         ct);
-                    var result = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => new RecordDistribution(
+                    var result = reader
+                        .ToEnumerable(r => new RecordDistribution(
                             (DateTime)(r["IngestionTimeStart"]),
                             (DateTime)(r["IngestionTimeEnd"]),
                             (string)(r["ExtentId"]),

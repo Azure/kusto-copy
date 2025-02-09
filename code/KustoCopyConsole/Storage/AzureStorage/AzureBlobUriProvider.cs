@@ -127,7 +127,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 .Select(c => c.GetWritableFolderUrisAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
 
             var uris = tasks
                 .Select(t => t.Result)
@@ -163,7 +163,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
         }
 
         private string GetSubDirectory(IterationKey iterationKey)

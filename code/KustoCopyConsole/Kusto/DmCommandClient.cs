@@ -34,9 +34,8 @@ namespace KustoCopyConsole.Kusto
                     var reader = await _provider.ExecuteControlCommandAsync(
                         string.Empty,
                         commandText);
-                    var storageRoots = reader.ToDataSet().Tables[0].Rows
-                        .Cast<DataRow>()
-                        .Select(r => new
+                    var storageRoots = reader
+                        .ToEnumerable(r => new
                         {
                             ResourceTypeName = (string)r["ResourceTypeName"],
                             StorageRoot = (string)r["StorageRoot"]

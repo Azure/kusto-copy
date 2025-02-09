@@ -1,6 +1,5 @@
 ﻿using CommandLine;
 using CommandLine.Text;
-using Kusto.Ingest;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Runner;
 using System;
@@ -142,6 +141,11 @@ namespace KustoCopyConsole
                     Trace.WriteLine("");
                     await mainRunner.RunAsync(cancellationTokenSource.Token);
                 }
+            }
+            catch(Exception)
+            {
+                await cancellationTokenSource.CancelAsync();
+                throw;
             }
             finally
             {

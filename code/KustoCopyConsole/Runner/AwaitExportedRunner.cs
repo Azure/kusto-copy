@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Runner
                     .Select(o => UpdateOperationsAsync(o.ClusterUri, o.BlockItems, ct))
                     .ToImmutableArray();
 
-                await Task.WhenAll(tasks);
+                await TaskHelper.WhenAllWithErrors(tasks);
                 //  Sleep
                 await SleepAsync(ct);
             }
@@ -181,10 +181,9 @@ namespace KustoCopyConsole.Runner
                 var newBlock = block.ChangeState(BlockState.Exported);
 
                 newBlock.ExportDuration = status.Duration;
-                foreach (var url in urls)
-                {
-                    RowItemGateway.Append(url);
-                }
+                Trace.TraceInformation($"Exported block {block.GetBlockKey()}:  {urls.Count()} " +
+                    $"urls in {newBlock.ExportDuration}");
+                RowItemGateway.Append(urls);
                 RowItemGateway.Append(newBlock);
                 ValidatePlannedRowCount(block);
             }
@@ -194,7 +193,7 @@ namespace KustoCopyConsole.Runner
                 .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
         }
 
         private void ValidatePlannedRowCount(BlockRowItem block)
