@@ -37,4 +37,4 @@ That CLI invocation is configured as followed:
 
 # Documentation
 
-See the [full documentation here](documentation)
+See the [full documentation here](documentation/README.md)
