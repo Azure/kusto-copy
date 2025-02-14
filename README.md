@@ -2,7 +2,13 @@
 
 *Kusto Copy* is a command-line utility providing copying capabilities between Kusto databases (either Azure Data Explorer or Fabric Eventhouse).  This enables scenarios such as table copy, cluster migration, replication across region (BCDR) & others.
 
-*Kusto Copy* is an orchestration tool exporting data on the source database and ingesting it on the other.  It is fault tolerant (i.e. the tool can be interupted and restarted) and with exact copy semantic (no data loss nor data duplication).
+*Kusto Copy* is an orchestration tool exporting data on the source database and ingesting it on the other.  It is fault tolerant (i.e. the tool can be interupted and restarted) and with exact copy semantic (no data loss nor data duplication).  It preserves extent *creation time*, which means the data copied should be the same "age" as the source data with respect to caching & retention policy.
+
+Beyond those fundamental capabilities, *Kusto Copy* allowed some more advanced features:
+
+* Copy a query of a table, allowing to copy a filtered version of the source table (in rows and / or columns)
+* Allow copying "since last copy" ; this can be useful when planing a migration where it could take several hours or even days to copy the historic and you might want to copy the delta since you copied the history
+* Can orchestrate the copy of multiple tables from multiple databases at the time
 
 ## Limitations
 
