@@ -6,7 +6,6 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
-using KustoCopyConsole.Storage.LocalDisk;
 
 namespace KustoCopyConsole.Runner
 {
@@ -17,13 +16,11 @@ namespace KustoCopyConsole.Runner
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
             MainJobParameterization parameterization,
-            string logFilePath,
             string traceApplicationName,
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
             var appendStorage = await CreateAppendStorageAsync(
-                logFilePath,
                 parameterization.StagingStorageDirectories.First(),
                 credentials,
                 ct);
@@ -62,39 +59,15 @@ namespace KustoCopyConsole.Runner
         }
 
         private static async Task<IAppendStorage> CreateAppendStorageAsync(
-            string logFilePath,
             string storageDirectoryUri,
             TokenCredential credential,
             CancellationToken ct)
         {
-            if (string.IsNullOrWhiteSpace(logFilePath))
-            {
-                return await AzureBlobAppendStorage.CreateAsync(
-                    new Uri(storageDirectoryUri),
-                    DEFAULT_LOG_FILE_NAME,
-                    credential,
-                    ct);
-            }
-            else
-            {
-                return new LocalAppendStorage(GetLocalLogFilePath(logFilePath));
-            }
-        }
-
-        private static string GetLocalLogFilePath(string logFilePath)
-        {
-            if (string.IsNullOrWhiteSpace(logFilePath))
-            {
-                return DEFAULT_LOG_FILE_NAME;
-            }
-            else if (Directory.Exists(logFilePath))
-            {
-                return Path.Combine(logFilePath, DEFAULT_LOG_FILE_NAME);
-            }
-            else
-            {
-                return logFilePath;
-            }
+            return await AzureBlobAppendStorage.CreateAsync(
+                new Uri(storageDirectoryUri),
+                DEFAULT_LOG_FILE_NAME,
+                credential,
+                ct);
         }
         #endregion
 
