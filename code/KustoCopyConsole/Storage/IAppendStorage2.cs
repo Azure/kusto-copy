@@ -2,6 +2,9 @@
 {
     public interface IAppendStorage2
     {
+        /// <summary>Maximum size of buffer that can be written.</summary>
+        int MaxBufferSize { get; }
+
         /// <summary>Attempt to append the content to storage.</summary>
         /// <param name="content"></param>
         /// <param name="ct"></param>

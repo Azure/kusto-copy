@@ -8,9 +8,6 @@ namespace KustoCopyConsole.Storage
 {
     internal interface IFileSystem
     {
-        /// <summary>Maximum size of buffer that can be written.</summary>
-        int MaxBufferSize { get; }
-
         /// <summary>Opens a reading stream.</summary>
         /// <param name="path"></param>
         /// <param name="ct"></param>

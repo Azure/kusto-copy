@@ -113,7 +113,7 @@ namespace KustoCopyConsole.Storage
         #endregion
 
         /// <summary>Maximum size of buffer that can be written.</summary>
-        public int MaxBufferSize => _fileSystem.MaxBufferSize;
+        public int MaxBufferSize => _logAppendStorage.MaxBufferSize;
 
         /// <summary>Reads the latest view by chunks.</summary>
         /// <param name="ct"></param>
