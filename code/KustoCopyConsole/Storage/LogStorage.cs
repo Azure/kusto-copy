@@ -37,11 +37,18 @@ namespace KustoCopyConsole.Storage
         private const string LATEST_PATH = "logs/latest.log";
         private const string HISTORICAL_LOG_ROOT_PATH = "logs/historical/";
 
+        private static readonly JsonSerializerOptions JSON_SERIALIZER_OPTIONS = new()
+        {
+            WriteIndented = false,
+            PropertyNameCaseInsensitive = true
+        };
+
         private readonly IFileSystem _fileSystem;
         private readonly Version _appVersion;
         private long _currentLogFileIndex;
         private IAppendStorage2 _logAppendStorage;
-        private int _appendCount;
+        private int _appendCount = 0;
+        private bool _isFirstLogInProcess = true;
 
         #region Constructors
         private LogStorage(
@@ -54,7 +61,6 @@ namespace KustoCopyConsole.Storage
             _appVersion = appVersion;
             _currentLogFileIndex = currentLogFileIndex;
             _logAppendStorage = logAppendStorage;
-            _appendCount = 0;
         }
 
         public async static Task<LogStorage> CreateAsync(
@@ -182,9 +188,22 @@ namespace KustoCopyConsole.Storage
         /// <returns></returns>
         public async Task AtomicAppendAsync(IEnumerable<byte> content, CancellationToken ct)
         {
-            await Task.CompletedTask;
+            if (_appendCount == 0)
+            {
+                using (var memoryStream = new MemoryStream())
+                {
+                    var header = new BlobHeader { AppVersion = _appVersion };
+                    var logInfo = new LogInfo { IsFirstLogInProcess = _isFirstLogInProcess };
 
-            throw new NotImplementedException();
+                    JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                    JsonSerializer.Serialize(memoryStream, logInfo, JSON_SERIALIZER_OPTIONS);
+                    await _logAppendStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
+                    _isFirstLogInProcess = false;
+                    ++_appendCount;
+                }
+            }
+            await _logAppendStorage.AtomicAppendAsync(content, ct);
+            ++_appendCount;
         }
 
         private async static Task<IAppendStorage2> GetLogAppendStorageAsync(
