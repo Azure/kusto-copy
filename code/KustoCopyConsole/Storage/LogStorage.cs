@@ -24,11 +24,13 @@ namespace KustoCopyConsole.Storage
 
         private class ViewInfo
         {
-            public long LogFileIndexIncluded { get; set; } = 0;
+            public long LastLogFileIndexIncluded { get; set; } = 0;
         }
 
         private class LogInfo
         {
+            public long LogFileIndex { get; set; } = 0;
+
             public bool IsFirstLogInProcess { get; set; } = true;
         }
         #endregion
@@ -36,6 +38,7 @@ namespace KustoCopyConsole.Storage
         private const string INDEX_PATH = "logs/index.log";
         private const string LATEST_PATH = "logs/latest.log";
         private const string HISTORICAL_LOG_ROOT_PATH = "logs/historical/";
+        private const string TEMP_PATH = "logs/temp/";
 
         private static readonly JsonSerializerOptions JSON_SERIALIZER_OPTIONS = new()
         {
@@ -139,7 +142,7 @@ namespace KustoCopyConsole.Storage
                         throw new InvalidDataException(
                             "Latest view blob doesn't contain view information");
                     }
-                    logFileIndexIncluded = viewInfo.LogFileIndexIncluded;
+                    logFileIndexIncluded = viewInfo.LastLogFileIndexIncluded;
 
                     yield return new BlobChunk(true, latestStream);
                 }
@@ -177,9 +180,45 @@ namespace KustoCopyConsole.Storage
         /// <exception cref="NotImplementedException"></exception>
         public async Task WriteLatestViewAsync(IEnumerable<byte> content, CancellationToken ct)
         {
-            await Task.CompletedTask;
+            await AtomicReplaceAsync(
+                LATEST_PATH,
+                async tempStorage =>
+                {
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        var header = new BlobHeader { AppVersion = _appVersion };
+                        var viewInfo = new ViewInfo
+                        {
+                            LastLogFileIndexIncluded = _currentLogFileIndex
+                        };
 
-            throw new NotImplementedException();
+                        JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                        memoryStream.WriteByte((byte)'\n');
+                        JsonSerializer.Serialize(memoryStream, viewInfo, JSON_SERIALIZER_OPTIONS);
+                        memoryStream.WriteByte((byte)'\n');
+                        await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
+                    }
+                    var appendBlock = new List<byte>(MaxBufferSize);
+
+                    foreach (var character in content)
+                    {
+                        appendBlock.Add(character);
+                        if(appendBlock.Count > MaxBufferSize)
+                        {
+                            await tempStorage.AtomicAppendAsync(appendBlock, ct);
+                            appendBlock.Clear();
+                        }
+                    }
+                    if (appendBlock.Any())
+                    {
+                        await tempStorage.AtomicAppendAsync(appendBlock, ct);
+                    }
+                },
+                ct);
+            if (_appendCount != 0)
+            {
+                await RollOverAppendStorageAsync(ct);
+            }
         }
 
         /// <summary>Append some content atomically.</summary>
@@ -190,20 +229,83 @@ namespace KustoCopyConsole.Storage
         {
             if (_appendCount == 0)
             {
+                if (_isFirstLogInProcess)
+                {
+                    await UpdateIndexAsync(ct);
+                }
                 using (var memoryStream = new MemoryStream())
                 {
                     var header = new BlobHeader { AppVersion = _appVersion };
-                    var logInfo = new LogInfo { IsFirstLogInProcess = _isFirstLogInProcess };
+                    var logInfo = new LogInfo
+                    {
+                        IsFirstLogInProcess = _isFirstLogInProcess,
+                        LogFileIndex = _currentLogFileIndex
+                    };
 
                     JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                    memoryStream.WriteByte((byte)'\n');
                     JsonSerializer.Serialize(memoryStream, logInfo, JSON_SERIALIZER_OPTIONS);
+                    memoryStream.WriteByte((byte)'\n');
                     await _logAppendStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
                     _isFirstLogInProcess = false;
                     ++_appendCount;
                 }
             }
-            await _logAppendStorage.AtomicAppendAsync(content, ct);
-            ++_appendCount;
+            if (await _logAppendStorage.AtomicAppendAsync(content, ct))
+            {   //  Append worked, ack
+                ++_appendCount;
+            }
+            else
+            {   //  Roll over and retry
+                await RollOverAppendStorageAsync(ct);
+                await AtomicAppendAsync(content, ct);
+            }
+        }
+
+        private async Task RollOverAppendStorageAsync(CancellationToken ct)
+        {
+            ++_currentLogFileIndex;
+            await UpdateIndexAsync(ct);
+            _logAppendStorage = await GetLogAppendStorageAsync(
+                _fileSystem,
+                _currentLogFileIndex,
+                ct);
+            _appendCount = 0;
+        }
+
+        private async Task UpdateIndexAsync(CancellationToken ct)
+        {
+            await AtomicReplaceAsync(
+                INDEX_PATH,
+                async tempStorage =>
+                {
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        var header = new BlobHeader { AppVersion = _appVersion };
+                        var indexInfo = new IndexInfo { LogFileCount = _currentLogFileIndex };
+
+                        JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                        memoryStream.WriteByte((byte)'\n');
+                        JsonSerializer.Serialize(memoryStream, indexInfo, JSON_SERIALIZER_OPTIONS);
+                        memoryStream.WriteByte((byte)'\n');
+                        await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
+                    }
+                },
+                ct);
+        }
+
+        private async Task AtomicReplaceAsync(
+            string path,
+            Func<IAppendStorage2, Task> appendTempStorageFunc,
+            CancellationToken ct)
+        {
+            var tempFileName = $"{TEMP_PATH}{Guid.NewGuid()}.log";
+            var tempStorage = await _fileSystem.OpenWriteAsync(tempFileName, ct);
+
+            await appendTempStorageFunc(tempStorage);
+
+            await _fileSystem.MoveAsync(tempFileName, path, ct);
+            await _fileSystem.RemoveFolderAsync(TEMP_PATH, ct);
         }
 
         private async static Task<IAppendStorage2> GetLogAppendStorageAsync(
