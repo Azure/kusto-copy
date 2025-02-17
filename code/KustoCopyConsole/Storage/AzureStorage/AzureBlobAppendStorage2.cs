@@ -6,16 +6,16 @@ namespace KustoCopyConsole.Storage.AzureStorage
 {
     internal class AzureBlobAppendStorage2 : IAppendStorage2
     {
-        private static readonly AsyncPolicy _writeBlockRetryPolicy =
-            Policy.Handle<RequestFailedException>()
-            .RetryAsync(3);
-
         private readonly AppendBlobClient _appendBlobClient;
+        private readonly AsyncPolicy _writeBlockRetryPolicy;
         private int _writeCount = 0;
 
-        public AzureBlobAppendStorage2(AppendBlobClient blobClient)
+        public AzureBlobAppendStorage2(
+            AppendBlobClient blobClient,
+            AsyncPolicy writeBlockRetryPolicy)
         {
             _appendBlobClient = blobClient;
+            _writeBlockRetryPolicy = writeBlockRetryPolicy;
         }
 
         int IAppendStorage2.MaxBufferSize => _appendBlobClient.AppendBlobMaxAppendBlockBytes;
