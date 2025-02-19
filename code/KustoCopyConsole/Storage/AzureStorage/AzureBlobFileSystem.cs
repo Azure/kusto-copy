@@ -22,12 +22,12 @@ namespace KustoCopyConsole.Storage.AzureStorage
         private readonly TokenCredential _tokenCredential;
 
         /// <summary>Construct an Azure Blob based <see cref="IFileSystem"/>.</summary>
-        /// <param name="rootDirectory">Root directory of the file system.</param>
-        public AzureBlobFileSystem(
-            DataLakeDirectoryClient rootDirectory,
-            TokenCredential tokenCredential)
+        /// <param name="dataLakeRootUrl">Root directory of the file system.</param>
+        public AzureBlobFileSystem(string dataLakeRootUrl, TokenCredential tokenCredential)
         {
-            _rootDirectory = rootDirectory;
+            _rootDirectory = new DataLakeDirectoryClient(
+                new Uri(dataLakeRootUrl),
+                tokenCredential);
             _tokenCredential = tokenCredential;
         }
 

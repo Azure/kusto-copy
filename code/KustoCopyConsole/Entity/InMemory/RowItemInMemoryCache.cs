@@ -16,8 +16,13 @@ namespace KustoCopyConsole.Entity.InMemory
             ActivityMap = activityMap;
         }
 
-        public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
+        public RowItemInMemoryCache()
             : this(ImmutableDictionary<string, ActivityCache>.Empty)
+        {
+        }
+
+        public RowItemInMemoryCache(IEnumerable<RowItemBase> items)
+            : this()
         {
             foreach (var item in items)
             {

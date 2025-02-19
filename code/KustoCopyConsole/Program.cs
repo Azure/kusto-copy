@@ -132,6 +132,7 @@ namespace KustoCopyConsole
             try
             {
                 await using (var mainRunner = await MainRunner.CreateAsync(
+                    new Version(AssemblyVersion),
                     parameterization,
                     $"KUSTO-COPY;{AssemblyVersion}",
                     cancellationTokenSource.Token))

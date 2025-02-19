@@ -1,5 +1,4 @@
-﻿using Azure.Storage.Queues.Models;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using System;
@@ -17,32 +16,31 @@ namespace KustoCopyConsole.Storage
     {
         #region Inner Types
         private record QueueItem(
-            DateTime enqueueTime,
+            DateTime EnqueueTime,
             byte[] Buffer,
-            RowItemInMemoryCache SnapshotCache,
+            RowItemInMemoryCache? SnapshotCache,
             TaskCompletionSource? TaskSource);
         #endregion
 
-        private static readonly Version CURRENT_FILE_VERSION = new Version(0, 0, 1, 0);
         private static readonly TimeSpan MIN_WAIT_PERIOD = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan FLUSH_PERIOD = TimeSpan.FromSeconds(5);
 
         private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
 
-        private readonly object _lock = new object();
-        private readonly IAppendStorage _appendStorage;
+        private readonly LogStorage _logStorage;
         private readonly ConcurrentQueue<QueueItem> _queue = new();
         private readonly Task _backgroundTask;
         private readonly TaskCompletionSource _backgroundCompletedSource = new();
+        private readonly object _lock = new object();
         private volatile RowItemInMemoryCache _inMemoryCache;
 
         #region Construction
         private RowItemGateway(
-            IAppendStorage appendStorage,
+            LogStorage logStorage,
             RowItemInMemoryCache cache,
             CancellationToken ct)
         {
-            _appendStorage = appendStorage;
+            _logStorage = logStorage;
             _backgroundTask = Task.Run(() => BackgroundPersistanceAsync(ct));
             _inMemoryCache = cache;
         }
@@ -60,55 +58,70 @@ namespace KustoCopyConsole.Storage
         }
 
         public static async Task<RowItemGateway> CreateAsync(
-            IAppendStorage appendStorage,
+            LogStorage logStorage,
+            Version appVersion,
             CancellationToken ct)
         {
-            var readBuffer = await appendStorage.LoadAllAsync(ct);
-            var allItems = _rowItemSerializer.Deserialize(readBuffer);
+            var cache = new RowItemInMemoryCache();
 
-            if (allItems.Any())
+            await foreach (var chunk in logStorage.ReadLatestViewAsync(ct))
             {
-                var version = allItems.First() as FileVersionRowItem;
+                using (var stream = chunk.Stream)
+                using (var reader = new StreamReader(stream))
+                {
+                    var firstLine = await reader.ReadLineAsync();
 
-                if (version == null)
-                {
-                    throw new InvalidDataException("First row is expected to be a version row");
+                    if (firstLine != null)
+                    {
+                        var versionItem =
+                            _rowItemSerializer.Deserialize(firstLine) as FileVersionRowItem;
+
+                        if (versionItem != null)
+                        {
+                            //  Eventually validate version
+                            string? line;
+
+                            while ((line = await reader.ReadLineAsync()) != null)
+                            {
+                                var item = _rowItemSerializer.Deserialize(firstLine);
+
+                                cache = cache.AppendItem(item);
+                            }
+                        }
+                        else
+                        {
+                            throw new InvalidDataException(
+                                $"Expect the first row to be a version row:  {firstLine}");
+                        }
+                    }
+                    else
+                    {
+                        throw new InvalidDataException("Unexpect empty chunk");
+                    }
                 }
-                if (version.FileVersion != CURRENT_FILE_VERSION)
-                {
-                    throw new NotSupportedException(
-                        $"Only support version is {CURRENT_FILE_VERSION}");
-                }
-                //  Validate all
-                foreach (var item in allItems)
-                {
-                    item.Validate();
-                }
-                //  Remove file version from it
-                allItems = allItems.RemoveAt(0);
             }
+            await logStorage.WriteLatestViewAsync(StreamCache(cache, appVersion), ct);
 
-            var newVersionItem = new FileVersionRowItem
-            {
-                FileVersion = CURRENT_FILE_VERSION
-            };
-            var cache = new RowItemInMemoryCache(allItems);
+            return new RowItemGateway(logStorage, cache, ct);
+        }
 
-            cache = cache.CleanOnRestart();
-            //  Re-write the logs by taking items "compressed" by the cache
-            using (var tempMemoryStream = new MemoryStream())
+        private static IEnumerable<byte> StreamCache(
+            RowItemInMemoryCache cache,
+            Version appVersion)
+        {
+            var versionItem = new FileVersionRowItem { FileVersion = appVersion };
+            var items = cache.GetItems().Prepend(versionItem);
+
+            foreach (var item in items)
             {
-                _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
-                foreach (var item in cache.GetItems())
+                var text = $"{_rowItemSerializer.Serialize(item)}";
+                var buffer = ASCIIEncoding.UTF8.GetBytes(text);
+
+                foreach (var character in buffer)
                 {
-                    _rowItemSerializer.Serialize(item, tempMemoryStream);
+                    yield return character;
                 }
-
-                var writeBuffer = tempMemoryStream.ToArray();
-
-                await appendStorage.AtomicReplaceAsync(writeBuffer, ct);
-
-                return new RowItemGateway(appendStorage, cache, ct);
+                yield return (byte)'\n';
             }
         }
         #endregion
@@ -121,7 +134,6 @@ namespace KustoCopyConsole.Storage
         {
             _backgroundCompletedSource.SetResult();
             await _backgroundTask;
-            await _appendStorage.DisposeAsync();
         }
 
         public void Append(RowItemBase item)
@@ -163,7 +175,8 @@ namespace KustoCopyConsole.Storage
         {
             item.Validate();
 
-            var binaryItem = GetBytes(item);
+            var text = _rowItemSerializer.Serialize(item);
+            var binaryItem = ASCIIEncoding.ASCII.GetBytes(text);
 
             lock (_lock)
             {
@@ -183,35 +196,18 @@ namespace KustoCopyConsole.Storage
             }
         }
 
-        private static byte[] GetBytes(RowItemBase item)
-        {
-            using (var stream = new MemoryStream())
-            {
-                _rowItemSerializer.Serialize(item, stream);
-
-                return stream.ToArray();
-            }
-        }
-
         private async Task BackgroundPersistanceAsync(CancellationToken ct)
         {
             while (!_backgroundCompletedSource.Task.IsCompleted)
             {
                 if (_queue.TryPeek(out var queueItem))
                 {
-                    var delta = DateTime.Now - queueItem.enqueueTime;
+                    var delta = DateTime.Now - queueItem.EnqueueTime;
                     var waitTime = FLUSH_PERIOD - delta;
 
                     if (waitTime < MIN_WAIT_PERIOD)
                     {
-                        if (_appendStorage.IsCompactionRequired)
-                        {
-                            await CompactAsync(ct);
-                        }
-                        else
-                        {
-                            await PersistBatchAsync(ct);
-                        }
+                        await PersistBatchAsync(ct);
                     }
                     else
                     {   //  Wait for first item to age to about FLUSH_PERIOD
@@ -229,44 +225,6 @@ namespace KustoCopyConsole.Storage
             }
         }
 
-        private async Task CompactAsync(CancellationToken ct)
-        {
-            var sources = new List<TaskCompletionSource>();
-            RowItemInMemoryCache? latestSnapshotCache = null;
-
-            while (_queue.TryDequeue(out var queueItem))
-            {
-                latestSnapshotCache = queueItem.SnapshotCache;
-            }
-            if (latestSnapshotCache == null)
-            {
-                throw new InvalidOperationException(
-                    $"{nameof(latestSnapshotCache)} should be set here");
-            }
-            using (var tempMemoryStream = new MemoryStream())
-            {
-                var newVersionItem = new FileVersionRowItem
-                {
-                    FileVersion = CURRENT_FILE_VERSION
-                };
-
-                _rowItemSerializer.Serialize(newVersionItem, tempMemoryStream);
-                foreach (var item in latestSnapshotCache.GetItems())
-                {
-                    _rowItemSerializer.Serialize(item, tempMemoryStream);
-                }
-
-                var writeBuffer = tempMemoryStream.ToArray();
-
-                await _appendStorage.AtomicReplaceAsync(writeBuffer, ct);
-            }
-            //  Release tasks
-            foreach (var source in sources)
-            {
-                source.SetResult();
-            }
-        }
-
         private async Task PersistBatchAsync(CancellationToken ct)
         {
             using (var bufferStream = new MemoryStream())
@@ -277,13 +235,13 @@ namespace KustoCopyConsole.Storage
                 {
                     if (!_queue.TryPeek(out var queueItem)
                         || bufferStream.Length + queueItem.Buffer.Length
-                            > _appendStorage.MaxBufferSize)
+                            > _logStorage.MaxBufferSize)
                     {
                         if (bufferStream.Length == 0)
                         {
                             throw new InvalidDataException("No buffer to append");
                         }
-                        await _appendStorage.AtomicAppendAsync(bufferStream.ToArray(), ct);
+                        await _logStorage.AtomicAppendAsync(bufferStream.ToArray(), ct);
                         //  Release tasks
                         foreach (var source in sources)
                         {

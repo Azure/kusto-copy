@@ -11,20 +11,19 @@ namespace KustoCopyConsole.Runner
 {
     internal class MainRunner : RunnerBase, IAsyncDisposable
     {
-        const string DEFAULT_LOG_FILE_NAME = "kusto-copy.log";
-
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
+            Version appVersion,
             MainJobParameterization parameterization,
             string traceApplicationName,
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var appendStorage = await CreateAppendStorageAsync(
+            var fileSystem = new AzureBlobFileSystem(
                 parameterization.StagingStorageDirectories.First(),
-                credentials,
-                ct);
-            var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
+                credentials);
+            var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
+            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, appVersion, ct);
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
@@ -56,18 +55,6 @@ namespace KustoCopyConsole.Runner
                   stagingBlobUriProvider,
                   TimeSpan.Zero)
         {
-        }
-
-        private static async Task<IAppendStorage> CreateAppendStorageAsync(
-            string storageDirectoryUri,
-            TokenCredential credential,
-            CancellationToken ct)
-        {
-            return await AzureBlobAppendStorage.CreateAsync(
-                new Uri(storageDirectoryUri),
-                DEFAULT_LOG_FILE_NAME,
-                credential,
-                ct);
         }
         #endregion
 
