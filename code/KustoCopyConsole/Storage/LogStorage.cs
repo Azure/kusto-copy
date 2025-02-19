@@ -97,20 +97,30 @@ namespace KustoCopyConsole.Storage
                 }
                 else
                 {
-                    var header = JsonSerializer.Deserialize<BlobHeader>(stream);
-                    var indexInfo = JsonSerializer.Deserialize<IndexInfo>(stream);
-
-                    if (header == null)
+                    using (var reader = new StreamReader(stream))
                     {
-                        throw new InvalidDataException("Index blob doesn't contain header");
-                    }
-                    if (indexInfo == null)
-                    {
-                        throw new InvalidDataException(
-                            "Index blob doesn't contain index information");
-                    }
+                        var headerText = await reader.ReadLineAsync();
+                        var indexText = await reader.ReadLineAsync();
 
-                    return indexInfo.ShardCount;
+                        var header = headerText != null
+                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                            : null;
+                        var indexInfo = indexText != null
+                            ? JsonSerializer.Deserialize<IndexInfo>(indexText)
+                            : null;
+
+                        if (header == null)
+                        {
+                            throw new InvalidDataException("Index blob doesn't contain header");
+                        }
+                        if (indexInfo == null)
+                        {
+                            throw new InvalidDataException(
+                                "Index blob doesn't contain index information");
+                        }
+
+                        return indexInfo.ShardCount;
+                    }
                 }
             }
         }
@@ -127,32 +137,42 @@ namespace KustoCopyConsole.Storage
             [EnumeratorCancellation]
             CancellationToken ct)
         {
-            long logFileIndexIncluded = 0;
+            long shardIndexIncluded = 0;
 
             //  Start with the view itself
             using (var latestStream = await _fileSystem.OpenReadAsync(LATEST_PATH, ct))
             {
                 if (latestStream != null)
                 {
-                    var header = JsonSerializer.Deserialize<BlobHeader>(latestStream);
-                    var viewInfo = JsonSerializer.Deserialize<ViewInfo>(latestStream);
-
-                    if (header == null)
+                    using (var reader = new StreamReader(latestStream))
                     {
-                        throw new InvalidDataException("Latest view blob doesn't contain header");
-                    }
-                    if (viewInfo == null)
-                    {
-                        throw new InvalidDataException(
-                            "Latest view blob doesn't contain view information");
-                    }
-                    logFileIndexIncluded = viewInfo.LastShardIncluded;
+                        var headerText = await reader.ReadLineAsync();
+                        var viewText = await reader.ReadLineAsync();
 
-                    yield return new BlobChunk(true, latestStream);
+                        var header = headerText != null
+                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                            : null;
+                        var viewInfo = viewText != null
+                            ? JsonSerializer.Deserialize<ViewInfo>(viewText)
+                            : null;
+
+                        if (header == null)
+                        {
+                            throw new InvalidDataException("Latest view blob doesn't contain header");
+                        }
+                        if (viewInfo == null)
+                        {
+                            throw new InvalidDataException(
+                                "Latest view blob doesn't contain view information");
+                        }
+                        shardIndexIncluded = viewInfo.LastShardIncluded;
+
+                        yield return new BlobChunk(true, latestStream);
+                    }
                 }
             }
             //  Loop through log files not included in the view
-            for (long i = logFileIndexIncluded + 1; i < _currentShardIndex; ++i)
+            for (long i = shardIndexIncluded + 1; i < _currentShardIndex; ++i)
             {
                 using (var logStream = await _fileSystem.OpenReadAsync(GetLogPath(i), ct))
                 {

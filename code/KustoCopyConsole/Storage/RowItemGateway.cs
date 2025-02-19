@@ -94,10 +94,6 @@ namespace KustoCopyConsole.Storage
                                 $"Expect the first row to be a version row:  {firstLine}");
                         }
                     }
-                    else
-                    {
-                        throw new InvalidDataException("Unexpect empty chunk");
-                    }
                 }
             }
             await logStorage.WriteLatestViewAsync(StreamCache(cache, appVersion), ct);

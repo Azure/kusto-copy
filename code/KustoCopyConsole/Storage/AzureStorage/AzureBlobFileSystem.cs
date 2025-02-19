@@ -56,7 +56,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             else
             {
                 var blobClient = new AppendBlobClient(fileClient.Uri, _tokenCredential);
-                var storage = await AzureBlobAppendStorage2.CreateAsync(
+                var storage = new AzureBlobAppendStorage2(
                     blobClient,
                     _writeBlockRetryPolicy);
 
