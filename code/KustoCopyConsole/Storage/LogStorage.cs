@@ -12,26 +12,30 @@ namespace KustoCopyConsole.Storage
     internal class LogStorage
     {
         #region Inner Types
+        /// <summary>Used for all three types of blobs:  index, log (shard) & view.</summary>
         private class BlobHeader
         {
             public Version AppVersion { get; set; } = new();
         }
 
+        /// <summary>Used by the index blob.</summary>>
         private class IndexInfo
         {
-            public long LogFileCount { get; set; } = 0;
+            public long ShardCount { get; set; } = 0;
         }
 
-        private class ViewInfo
-        {
-            public long LastLogFileIndexIncluded { get; set; } = 0;
-        }
-
+        /// <summary>Used by log blobs (shards).</summary>
         private class LogInfo
         {
-            public long LogFileIndex { get; set; } = 0;
+            public long ShardIndex { get; set; } = 0;
 
-            public bool IsFirstLogInProcess { get; set; } = true;
+            public bool IsNewProcess { get; set; } = true;
+        }
+
+        /// <summary>Used by view blobs.</summary>
+        private class ViewInfo
+        {
+            public long LastShardIncluded { get; set; } = 0;
         }
         #endregion
 
@@ -48,21 +52,21 @@ namespace KustoCopyConsole.Storage
 
         private readonly IFileSystem _fileSystem;
         private readonly Version _appVersion;
-        private long _currentLogFileIndex;
+        private bool _isNewProcess = true;
+        private long _currentShardIndex;
         private IAppendStorage2 _logAppendStorage;
         private int _appendCount = 0;
-        private bool _isFirstLogInProcess = true;
 
         #region Constructors
         private LogStorage(
             IFileSystem fileSystem,
             Version appVersion,
-            long currentLogFileIndex,
+            long currentShardIndex,
             IAppendStorage2 logAppendStorage)
         {
             _fileSystem = fileSystem;
             _appVersion = appVersion;
-            _currentLogFileIndex = currentLogFileIndex;
+            _currentShardIndex = currentShardIndex;
             _logAppendStorage = logAppendStorage;
         }
 
@@ -71,17 +75,17 @@ namespace KustoCopyConsole.Storage
             Version appVersion,
             CancellationToken ct)
         {
-            var logFileCount = await FetchLogFileCountAsync(fileSystem, ct);
-            var currentLogFileIndex = logFileCount + 1;
+            var logFileCount = await FetchShardCountAsync(fileSystem, ct);
+            var currentShardIndex = logFileCount + 1;
             var logAppendStorage = await GetLogAppendStorageAsync(
                 fileSystem,
-                currentLogFileIndex,
+                currentShardIndex,
                 ct);
 
-            return new LogStorage(fileSystem, appVersion, currentLogFileIndex, logAppendStorage);
+            return new LogStorage(fileSystem, appVersion, currentShardIndex, logAppendStorage);
         }
 
-        private async static Task<long> FetchLogFileCountAsync(
+        private async static Task<long> FetchShardCountAsync(
             IFileSystem fileSystem,
             CancellationToken ct)
         {
@@ -106,7 +110,7 @@ namespace KustoCopyConsole.Storage
                             "Index blob doesn't contain index information");
                     }
 
-                    return indexInfo.LogFileCount;
+                    return indexInfo.ShardCount;
                 }
             }
         }
@@ -142,13 +146,13 @@ namespace KustoCopyConsole.Storage
                         throw new InvalidDataException(
                             "Latest view blob doesn't contain view information");
                     }
-                    logFileIndexIncluded = viewInfo.LastLogFileIndexIncluded;
+                    logFileIndexIncluded = viewInfo.LastShardIncluded;
 
                     yield return new BlobChunk(true, latestStream);
                 }
             }
             //  Loop through log files not included in the view
-            for (long i = logFileIndexIncluded + 1; i < _currentLogFileIndex; ++i)
+            for (long i = logFileIndexIncluded + 1; i < _currentShardIndex; ++i)
             {
                 using (var logStream = await _fileSystem.OpenReadAsync(GetLogPath(i), ct))
                 {
@@ -167,7 +171,7 @@ namespace KustoCopyConsole.Storage
                                 "Log blob doesn't contain view information");
                         }
 
-                        yield return new BlobChunk(logInfo.IsFirstLogInProcess, logStream);
+                        yield return new BlobChunk(logInfo.IsNewProcess, logStream);
                     }
                 }
             }
@@ -180,16 +184,18 @@ namespace KustoCopyConsole.Storage
         /// <exception cref="NotImplementedException"></exception>
         public async Task WriteLatestViewAsync(IEnumerable<byte> content, CancellationToken ct)
         {
+            var completedShards = await SealShardAsync(ct);
+
             await AtomicReplaceAsync(
                 LATEST_PATH,
                 async tempStorage =>
                 {
                     using (var memoryStream = new MemoryStream())
-                    {
+                    {   //  Headers for the view
                         var header = new BlobHeader { AppVersion = _appVersion };
                         var viewInfo = new ViewInfo
                         {
-                            LastLogFileIndexIncluded = _currentLogFileIndex
+                            LastShardIncluded = completedShards
                         };
 
                         JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
@@ -200,25 +206,23 @@ namespace KustoCopyConsole.Storage
                     }
                     var appendBlock = new List<byte>(MaxBufferSize);
 
+                    //  Content of the view
                     foreach (var character in content)
                     {
                         appendBlock.Add(character);
-                        if(appendBlock.Count > MaxBufferSize)
+                        if (appendBlock.Count == MaxBufferSize)
                         {
                             await tempStorage.AtomicAppendAsync(appendBlock, ct);
                             appendBlock.Clear();
                         }
                     }
+                    //  Push the remainder of content
                     if (appendBlock.Any())
                     {
                         await tempStorage.AtomicAppendAsync(appendBlock, ct);
                     }
                 },
                 ct);
-            if (_appendCount != 0)
-            {
-                await RollOverAppendStorageAsync(ct);
-            }
         }
 
         /// <summary>Append some content atomically.</summary>
@@ -228,28 +232,8 @@ namespace KustoCopyConsole.Storage
         public async Task AtomicAppendAsync(IEnumerable<byte> content, CancellationToken ct)
         {
             if (_appendCount == 0)
-            {
-                if (_isFirstLogInProcess)
-                {
-                    await UpdateIndexAsync(ct);
-                }
-                using (var memoryStream = new MemoryStream())
-                {
-                    var header = new BlobHeader { AppVersion = _appVersion };
-                    var logInfo = new LogInfo
-                    {
-                        IsFirstLogInProcess = _isFirstLogInProcess,
-                        LogFileIndex = _currentLogFileIndex
-                    };
-
-                    JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
-                    memoryStream.WriteByte((byte)'\n');
-                    JsonSerializer.Serialize(memoryStream, logInfo, JSON_SERIALIZER_OPTIONS);
-                    memoryStream.WriteByte((byte)'\n');
-                    await _logAppendStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
-                    _isFirstLogInProcess = false;
-                    ++_appendCount;
-                }
+            {   //  Shard hasn't been initialized
+                await InitNewShardAsync(ct);
             }
             if (await _logAppendStorage.AtomicAppendAsync(content, ct))
             {   //  Append worked, ack
@@ -257,20 +241,31 @@ namespace KustoCopyConsole.Storage
             }
             else
             {   //  Roll over and retry
-                await RollOverAppendStorageAsync(ct);
+                await SealShardAsync(ct);
                 await AtomicAppendAsync(content, ct);
             }
         }
 
-        private async Task RollOverAppendStorageAsync(CancellationToken ct)
+        #region Shard management
+        private async Task<long> SealShardAsync(CancellationToken ct)
         {
-            ++_currentLogFileIndex;
+            if (_appendCount != 0)
+            {
+                ++_currentShardIndex;
+                _appendCount = 0;
+                _logAppendStorage = await GetLogAppendStorageAsync(
+                    _fileSystem,
+                    _currentShardIndex,
+                    ct);
+            }
+
+            return _currentShardIndex;
+        }
+
+        private async Task InitNewShardAsync(CancellationToken ct)
+        {
             await UpdateIndexAsync(ct);
-            _logAppendStorage = await GetLogAppendStorageAsync(
-                _fileSystem,
-                _currentLogFileIndex,
-                ct);
-            _appendCount = 0;
+            await AppendHeadersAsync(ct);
         }
 
         private async Task UpdateIndexAsync(CancellationToken ct)
@@ -282,7 +277,7 @@ namespace KustoCopyConsole.Storage
                     using (var memoryStream = new MemoryStream())
                     {
                         var header = new BlobHeader { AppVersion = _appVersion };
-                        var indexInfo = new IndexInfo { LogFileCount = _currentLogFileIndex };
+                        var indexInfo = new IndexInfo { ShardCount = _currentShardIndex };
 
                         JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
                         memoryStream.WriteByte((byte)'\n');
@@ -293,6 +288,28 @@ namespace KustoCopyConsole.Storage
                 },
                 ct);
         }
+
+        private async Task AppendHeadersAsync(CancellationToken ct)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                var header = new BlobHeader { AppVersion = _appVersion };
+                var logInfo = new LogInfo
+                {
+                    IsNewProcess = _isNewProcess,
+                    ShardIndex = _currentShardIndex
+                };
+
+                JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                memoryStream.WriteByte((byte)'\n');
+                JsonSerializer.Serialize(memoryStream, logInfo, JSON_SERIALIZER_OPTIONS);
+                memoryStream.WriteByte((byte)'\n');
+                await _logAppendStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
+                _isNewProcess = false;
+                ++_appendCount;
+            }
+        }
+        #endregion
 
         private async Task AtomicReplaceAsync(
             string path,
