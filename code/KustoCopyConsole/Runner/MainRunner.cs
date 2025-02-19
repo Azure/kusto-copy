@@ -24,6 +24,9 @@ namespace KustoCopyConsole.Runner
                 credentials);
             var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
             var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, appVersion, ct);
+
+            Console.WriteLine("Reading checkpoint logs...");
+
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
