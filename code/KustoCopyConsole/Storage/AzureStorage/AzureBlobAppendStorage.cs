@@ -34,7 +34,6 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 {
                     if (_writeCount == 0)
                     {
-                        await _appendBlobClient.DeleteIfExistsAsync();
                         await _appendBlobClient.CreateAsync();
                     }
                     using (var stream = new MemoryStream(content.ToArray()))

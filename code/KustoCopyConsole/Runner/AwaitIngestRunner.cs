@@ -1,4 +1,5 @@
 ﻿using Azure.Core;
+using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
@@ -68,7 +69,7 @@ namespace KustoCopyConsole.Runner
                     $"extents found with {extentRowCountByTags.Count} tags");
                 foreach (var item in items)
                 {
-                    if(extentRowCountByTags.TryGetValue(
+                    if (extentRowCountByTags.TryGetValue(
                         item.Block.BlockTag,
                         out var extentRowCounts))
                     {
@@ -254,8 +255,10 @@ namespace KustoCopyConsole.Runner
                     tags,
                     ct);
                 var newBlockItems = movingItems
-                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved));
+                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved))
+                    .ToImmutableArray();
 
+                newBlockItems.ForEach(i => i.BlockTag = string.Empty);
                 RowItemGateway.Append(newBlockItems);
                 sortedItems = sortedItems
                     .Skip(movingItems.Count())
