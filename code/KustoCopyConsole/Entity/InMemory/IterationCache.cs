@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.State;
 using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Entity.InMemory
@@ -13,6 +14,12 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             TempTable = tempTable;
             BlockMap = blockMap;
+            //  Clean everything after an iteration is completed
+            if (item.State == IterationState.Completed)
+            {
+                TempTable = null;
+                BlockMap = ImmutableDictionary<long, BlockCache>.Empty;
+            }
         }
 
         public IterationCache(IterationRowItem item)

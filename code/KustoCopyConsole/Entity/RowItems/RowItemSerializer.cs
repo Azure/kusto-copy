@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -40,20 +39,16 @@ namespace KustoCopyConsole.Entity.RowItems
         }
 
         #region Serialize
-        public void Serialize(RowItemBase item, Stream stream)
+        public string Serialize(RowItemBase item)
         {
             if (_typeIndex.TryGetValue(item.GetType(), out var rowType))
             {
-                using (var writer = new StreamWriter(stream, leaveOpen: true))
-                {
-                    writer.Write(@$"{{ ""rowType"" : ""{rowType}"", ""row"" : ");
-                    writer.Flush();
-                    JsonSerializer.Serialize(
-                        stream,
-                        item,
-                        RowItemJsonContext.Default.GetTypeInfo(item.GetType())!);
-                    writer.WriteLine(" }");
-                }
+                var itemText = JsonSerializer.Serialize(
+                    item,
+                    RowItemJsonContext.Default.GetTypeInfo(item.GetType())!);
+                var wrapperText = @$"{{ ""rowType"" : ""{rowType}"", ""row"" : {itemText} }}";
+
+                return wrapperText + '\n';
             }
             else
             {
@@ -64,132 +59,48 @@ namespace KustoCopyConsole.Entity.RowItems
         #endregion
 
         #region Deserialize
-        public IImmutableList<RowItemBase> Deserialize(ReadOnlySpan<byte> buffer)
+        public RowItemBase Deserialize(string text)
         {
-            var builder = ImmutableList<RowItemBase>.Empty.ToBuilder();
-            var remainingBuffer = buffer;
+            var document = JsonDocument.Parse(text);
 
-            while (!IsWhitespaceOnly(remainingBuffer))
+            if (document.RootElement.TryGetProperty("rowType", out var rowTypeElement))
             {
-                var reader = new Utf8JsonReader(remainingBuffer, true, default);
-                var rowType = ReadRowType(ref reader);
-                var rowItemType = _rowTypeIndex[rowType];
-                var row = ReadRow(ref reader, rowItemType);
+                var rowTypeText = rowTypeElement.GetString()!;
 
-                ReadEndObject(ref reader);
-                builder.Add(row);
-                remainingBuffer = remainingBuffer.Slice((int)reader.BytesConsumed);
-            }
-
-            return builder.ToImmutableArray();
-        }
-
-        private void ReadEndObject(ref Utf8JsonReader reader)
-        {
-            reader.Read();
-            if (reader.TokenType == JsonTokenType.EndObject)
-            {
-            }
-            else
-            {
-                throw new InvalidDataException(
-                    $"Expect end-of-object, not '{reader.TokenType}'");
-            }
-        }
-
-        private static RowItemBase ReadRow(ref Utf8JsonReader reader, Type rowItemType)
-        {
-            reader.Read();
-            if (reader.TokenType == JsonTokenType.PropertyName)
-            {
-                var propertyName = reader.GetString();
-
-                reader.Read(); // Move to property value
-                if (propertyName == "row")
+                if (Enum.TryParse<RowType>(rowTypeText, out var rowType))
                 {
-                    var rowJson = JsonDocument.ParseValue(ref reader).RootElement.GetRawText();
-                    var row = (RowItemBase?)JsonSerializer.Deserialize(
-                        rowJson,
-                        RowItemJsonContext.Default.GetTypeInfo(rowItemType)!);
+                    var rowItemType = _rowTypeIndex[rowType];
 
-                    if (row == null)
+                    if (document.RootElement.TryGetProperty("row", out var rowElement))
                     {
-                        throw new InvalidDataException(
-                            $"Expected valid row object instead of '{rowJson}'");
-                    }
+                        var rowElementText = rowElement.GetRawText();
+                        var itemObject = JsonSerializer.Deserialize(
+                            rowElementText,
+                            RowItemJsonContext.Default.GetTypeInfo(rowItemType)!);
 
-                    return row;
-                }
-                else
-                {
-                    throw new InvalidDataException(
-                        $"Expect 'row' JSON Property, not '{propertyName}'");
-                }
-            }
-            else
-            {
-                throw new InvalidDataException("Expect JSON Property for 'row'");
-            }
-        }
-
-        private static RowType ReadRowType(ref Utf8JsonReader reader)
-        {
-            reader.Read();
-            if (reader.TokenType == JsonTokenType.StartObject)
-            {
-                reader.Read();
-                if (reader.TokenType == JsonTokenType.PropertyName)
-                {
-                    var propertyName = reader.GetString();
-
-                    reader.Read(); // Move to property value
-                    if (propertyName == "rowType")
-                    {
-                        var rowTypeText = reader.GetString();
-
-                        if (rowTypeText == null)
+                        if (itemObject != null)
                         {
-                            throw new InvalidDataException("Expect 'rowType' JSON Property to be non-null");
+                            return (RowItemBase)itemObject;
                         }
-
-                        var rowType = Enum.Parse<RowType>(rowTypeText);
-
-                        return rowType;
+                        else
+                        {
+                            throw new InvalidDataException(
+                                $"Can't deserialize row:  {rowElement.GetRawText()}");
+                        }
                     }
                     else
                     {
-                        throw new InvalidDataException(
-                            $"Expect 'rowType' JSON Property, not '{propertyName}'");
+                        throw new InvalidDataException($"Expected a property 'rowType':  {text}");
                     }
                 }
                 else
                 {
-                    throw new InvalidDataException("Expect JSON Property for 'rowType'");
+                    throw new InvalidDataException($"Unexpected 'rowType':  '{rowTypeText}'");
                 }
             }
             else
             {
-                throw new InvalidDataException("Expect start JSON object");
-            }
-        }
-
-        private static bool IsWhitespaceOnly(ReadOnlySpan<byte> buffer)
-        {
-            if (buffer.Length == 0)
-            {
-                return true;
-            }
-            else
-            {
-                foreach (var b in buffer)
-                {
-                    if (!char.IsWhiteSpace((char)b))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
+                throw new InvalidDataException($"Expect 'rowType' JSON Property:  {text}");
             }
         }
         #endregion

@@ -68,7 +68,7 @@ namespace KustoCopyConsole.Runner
                     $"extents found with {extentRowCountByTags.Count} tags");
                 foreach (var item in items)
                 {
-                    if(extentRowCountByTags.TryGetValue(
+                    if (extentRowCountByTags.TryGetValue(
                         item.Block.BlockTag,
                         out var extentRowCounts))
                     {
@@ -254,8 +254,13 @@ namespace KustoCopyConsole.Runner
                     tags,
                     ct);
                 var newBlockItems = movingItems
-                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved));
+                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved))
+                    .ToImmutableArray();
 
+                foreach(var item in newBlockItems)
+                {
+                    item.BlockTag = string.Empty;
+                }
                 RowItemGateway.Append(newBlockItems);
                 sortedItems = sortedItems
                     .Skip(movingItems.Count())

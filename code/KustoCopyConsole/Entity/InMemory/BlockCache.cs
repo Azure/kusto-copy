@@ -11,11 +11,25 @@ namespace KustoCopyConsole.Entity.InMemory
             IImmutableDictionary<string, UrlCache> urlMap,
             IImmutableDictionary<string, ExtentCache> extentMap)
             : base(item)
-        {   //  Removes urls when a block is sent back to planning
-            UrlMap = item.State == BlockState.Planned
-                ? ImmutableDictionary<string, UrlCache>.Empty
-                : urlMap;
+        {
+            UrlMap = urlMap;
             ExtentMap = extentMap;
+            //  Removes urls when a block is sent back to planning
+            if (item.State == BlockState.Planned)
+            {
+                UrlMap = ImmutableDictionary<string, UrlCache>.Empty;
+            }
+            //  Removes extents when a block is sent back to exported
+            if (item.State == BlockState.Exported)
+            {
+                ExtentMap = ImmutableDictionary<string, ExtentCache>.Empty;
+            }
+            //  Removes all children when a block is moved
+            if (item.State == BlockState.ExtentMoved)
+            {
+                UrlMap = ImmutableDictionary<string, UrlCache>.Empty;
+                ExtentMap = ImmutableDictionary<string, ExtentCache>.Empty;
+            }
         }
 
         public BlockCache(BlockRowItem item)

@@ -6,33 +6,43 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
-using KustoCopyConsole.Storage.LocalDisk;
 
 namespace KustoCopyConsole.Runner
 {
     internal class MainRunner : RunnerBase, IAsyncDisposable
     {
-        const string DEFAULT_LOG_FILE_NAME = "kusto-copy.log";
-
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
+            Version appVersion,
             MainJobParameterization parameterization,
-            string logFilePath,
             string traceApplicationName,
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var appendStorage = await CreateAppendStorageAsync(
-                logFilePath,
+            var fileSystem = new AzureBlobFileSystem(
                 parameterization.StagingStorageDirectories.First(),
-                credentials,
-                ct);
-            var rowItemGateway = await RowItemGateway.CreateAsync(appendStorage, ct);
+                credentials);
+
+            Console.Write("Initialize storage...");
+
+            var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
+
+            Console.WriteLine("  Done");
+            Console.Write("Reading checkpoint logs...");
+
+            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, ct);
+
+            Console.WriteLine("  Done");
+            Console.Write("Initialize Kusto connections...");
+
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
                 traceApplicationName,
                 ct);
+
+            Console.WriteLine("  Done");
+
             var stagingBlobUriProvider = new AzureBlobUriProvider(
                 parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
                 credentials);
@@ -59,42 +69,6 @@ namespace KustoCopyConsole.Runner
                   stagingBlobUriProvider,
                   TimeSpan.Zero)
         {
-        }
-
-        private static async Task<IAppendStorage> CreateAppendStorageAsync(
-            string logFilePath,
-            string storageDirectoryUri,
-            TokenCredential credential,
-            CancellationToken ct)
-        {
-            if (string.IsNullOrWhiteSpace(logFilePath))
-            {
-                return await AzureBlobAppendStorage.CreateAsync(
-                    new Uri(storageDirectoryUri),
-                    DEFAULT_LOG_FILE_NAME,
-                    credential,
-                    ct);
-            }
-            else
-            {
-                return new LocalAppendStorage(GetLocalLogFilePath(logFilePath));
-            }
-        }
-
-        private static string GetLocalLogFilePath(string logFilePath)
-        {
-            if (string.IsNullOrWhiteSpace(logFilePath))
-            {
-                return DEFAULT_LOG_FILE_NAME;
-            }
-            else if (Directory.Exists(logFilePath))
-            {
-                return Path.Combine(logFilePath, DEFAULT_LOG_FILE_NAME);
-            }
-            else
-            {
-                return logFilePath;
-            }
         }
         #endregion
 

@@ -40,7 +40,7 @@ namespace KustoCopyConsole.Runner
                         new TaskCompletionSource());
 
                     //  Wake up on a different thread not to block the current one
-                    _wakeUpTaskQueue.Enqueue(Task.Run(() => wakeUpSource.TrySetResult()));
+                    EnqueueWakeUpTask(Task.Run(() => wakeUpSource.TrySetResult()));
                 }
             };
         }
@@ -99,11 +99,20 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    _wakeUpTaskQueue.Enqueue(task);
+                    EnqueueWakeUpTask(task);
 
                     return;
                 }
             }
+        }
+
+        private void EnqueueWakeUpTask(Task task)
+        {
+            if (task == null)
+            {
+                throw new ArgumentNullException(nameof(task));
+            }
+            _wakeUpTaskQueue.Enqueue(task);
         }
     }
 }

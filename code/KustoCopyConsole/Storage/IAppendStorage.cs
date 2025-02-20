@@ -1,38 +1,14 @@
-﻿using KustoCopyConsole.Entity;
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace KustoCopyConsole.Storage
+﻿namespace KustoCopyConsole.Storage
 {
-    internal interface IAppendStorage : IAsyncDisposable
+    public interface IAppendStorage
     {
         /// <summary>Maximum size of buffer that can be written.</summary>
         int MaxBufferSize { get; }
 
-        /// <summary>
-        /// Returns <c>true</c> iif compaction is required before invoking
-        /// <see cref="AtomicAppendAsync(byte[], CancellationToken)"/>.
-        /// </summary>
-        bool IsCompactionRequired { get; }
-
-        /// <summary>Returns the full content of the storage.</summary>
+        /// <summary>Attempt to append the content to storage.</summary>
+        /// <param name="content"></param>
         /// <param name="ct"></param>
-        /// <returns></returns>
-        Task<byte[]> LoadAllAsync(CancellationToken ct);
-
-        /// <summary>Replace atomically the content of the storage.</summary>
-        /// <param name="buffer"></param>
-        /// <param name="ct"></param>
-        /// <returns></returns>
-        Task AtomicReplaceAsync(byte[] buffer, CancellationToken ct);
-
-        /// <summary>Attempt to append the buffer to storage.</summary>
-        /// <param name="buffer"></param>
-        /// <param name="ct"></param>
-        Task AtomicAppendAsync(byte[] buffer, CancellationToken ct);
+        /// <returns><c>false</c> iif blob is full, i.e. the next append would fail.</returns>
+        Task<bool> AtomicAppendAsync(IEnumerable<byte> content, CancellationToken ct);
     }
 }
