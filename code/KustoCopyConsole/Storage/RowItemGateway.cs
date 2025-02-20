@@ -110,14 +110,13 @@ namespace KustoCopyConsole.Storage
 
             foreach (var item in items)
             {
-                var text = $"{_rowItemSerializer.Serialize(item)}";
+                var text = _rowItemSerializer.Serialize(item);
                 var buffer = ASCIIEncoding.UTF8.GetBytes(text);
 
                 foreach (var character in buffer)
                 {
                     yield return character;
                 }
-                yield return (byte)'\n';
             }
         }
         #endregion

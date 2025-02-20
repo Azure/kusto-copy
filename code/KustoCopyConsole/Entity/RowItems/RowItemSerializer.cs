@@ -48,7 +48,7 @@ namespace KustoCopyConsole.Entity.RowItems
                     RowItemJsonContext.Default.GetTypeInfo(item.GetType())!);
                 var wrapperText = @$"{{ ""rowType"" : ""{rowType}"", ""row"" : {itemText} }}";
 
-                return wrapperText;
+                return wrapperText + '\n';
             }
             else
             {
@@ -67,14 +67,15 @@ namespace KustoCopyConsole.Entity.RowItems
             {
                 var rowTypeText = rowTypeElement.GetString()!;
 
-                if(Enum.TryParse<RowType>(rowTypeText, out var rowType))
+                if (Enum.TryParse<RowType>(rowTypeText, out var rowType))
                 {
                     var rowItemType = _rowTypeIndex[rowType];
 
-                    if (document.RootElement.TryGetProperty("rowType", out var rowElement))
+                    if (document.RootElement.TryGetProperty("row", out var rowElement))
                     {
+                        var rowElementText = rowElement.GetRawText();
                         var itemObject = JsonSerializer.Deserialize(
-                            rowElement,
+                            rowElementText,
                             RowItemJsonContext.Default.GetTypeInfo(rowItemType)!);
 
                         if (itemObject != null)

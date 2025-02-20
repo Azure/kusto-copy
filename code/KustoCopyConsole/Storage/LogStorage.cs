@@ -2,10 +2,13 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using YamlDotNet.Serialization.TypeInspectors;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace KustoCopyConsole.Storage
 {
@@ -144,31 +147,27 @@ namespace KustoCopyConsole.Storage
             {
                 if (latestStream != null)
                 {
-                    using (var reader = new StreamReader(latestStream))
+                    var headerText = await ReadLineGreedilyAsync(latestStream, ct);
+                    var viewText = await ReadLineGreedilyAsync(latestStream, ct);
+                    var header = headerText != null
+                        ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                        : null;
+                    var viewInfo = viewText != null
+                        ? JsonSerializer.Deserialize<ViewInfo>(viewText)
+                        : null;
+
+                    if (header == null)
                     {
-                        var headerText = await reader.ReadLineAsync();
-                        var viewText = await reader.ReadLineAsync();
-
-                        var header = headerText != null
-                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
-                            : null;
-                        var viewInfo = viewText != null
-                            ? JsonSerializer.Deserialize<ViewInfo>(viewText)
-                            : null;
-
-                        if (header == null)
-                        {
-                            throw new InvalidDataException("Latest view blob doesn't contain header");
-                        }
-                        if (viewInfo == null)
-                        {
-                            throw new InvalidDataException(
-                                "Latest view blob doesn't contain view information");
-                        }
-                        shardIndexIncluded = viewInfo.LastShardIncluded;
-
-                        yield return new BlobChunk(true, latestStream);
+                        throw new InvalidDataException("Latest view blob doesn't contain header");
                     }
+                    if (viewInfo == null)
+                    {
+                        throw new InvalidDataException(
+                            "Latest view blob doesn't contain view information");
+                    }
+                    shardIndexIncluded = viewInfo.LastShardIncluded;
+
+                    yield return new BlobChunk(true, latestStream);
                 }
             }
             //  Loop through log files not included in the view
@@ -178,8 +177,14 @@ namespace KustoCopyConsole.Storage
                 {
                     if (logStream != null)
                     {
-                        var header = JsonSerializer.Deserialize<BlobHeader>(logStream);
-                        var logInfo = JsonSerializer.Deserialize<LogInfo>(logStream);
+                        var headerText = await ReadLineGreedilyAsync(logStream, ct);
+                        var logInfoText = await ReadLineGreedilyAsync(logStream, ct);
+                        var header = headerText != null
+                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                            : null;
+                        var logInfo = logInfoText != null
+                            ? JsonSerializer.Deserialize<LogInfo>(logInfoText)
+                            : null;
 
                         if (header == null)
                         {
@@ -206,43 +211,48 @@ namespace KustoCopyConsole.Storage
         {
             var completedShards = await SealShardAsync(ct);
 
-            await AtomicReplaceAsync(
-                LATEST_PATH,
-                async tempStorage =>
-                {
-                    using (var memoryStream = new MemoryStream())
-                    {   //  Headers for the view
-                        var header = new BlobHeader { AppVersion = _appVersion };
-                        var viewInfo = new ViewInfo
-                        {
-                            LastShardIncluded = completedShards
-                        };
-
-                        JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
-                        memoryStream.WriteByte((byte)'\n');
-                        JsonSerializer.Serialize(memoryStream, viewInfo, JSON_SERIALIZER_OPTIONS);
-                        memoryStream.WriteByte((byte)'\n');
-                        await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
-                    }
-                    var appendBlock = new List<byte>(MaxBufferSize);
-
-                    //  Content of the view
-                    foreach (var character in content)
+            if (completedShards >= 1)
+            {
+                await AtomicReplaceAsync(
+                    LATEST_PATH,
+                    async tempStorage =>
                     {
-                        appendBlock.Add(character);
-                        if (appendBlock.Count == MaxBufferSize)
+                        using (var memoryStream = new MemoryStream())
+                        {   //  Headers for the view
+                            var header = new BlobHeader { AppVersion = _appVersion };
+                            var viewInfo = new ViewInfo
+                            {
+                                LastShardIncluded = completedShards
+                            };
+
+                            JsonSerializer.Serialize(
+                                memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                            memoryStream.WriteByte((byte)'\n');
+                            JsonSerializer.Serialize(
+                                memoryStream, viewInfo, JSON_SERIALIZER_OPTIONS);
+                            memoryStream.WriteByte((byte)'\n');
+                            await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
+                        }
+                        var appendBlock = new List<byte>(MaxBufferSize);
+
+                        //  Content of the view
+                        foreach (var character in content)
+                        {
+                            appendBlock.Add(character);
+                            if (appendBlock.Count == MaxBufferSize)
+                            {
+                                await tempStorage.AtomicAppendAsync(appendBlock, ct);
+                                appendBlock.Clear();
+                            }
+                        }
+                        //  Push the remainder of content
+                        if (appendBlock.Any())
                         {
                             await tempStorage.AtomicAppendAsync(appendBlock, ct);
-                            appendBlock.Clear();
                         }
-                    }
-                    //  Push the remainder of content
-                    if (appendBlock.Any())
-                    {
-                        await tempStorage.AtomicAppendAsync(appendBlock, ct);
-                    }
-                },
-                ct);
+                    },
+                    ct);
+            }
         }
 
         /// <summary>Append some content atomically.</summary>
@@ -279,7 +289,7 @@ namespace KustoCopyConsole.Storage
                     ct);
             }
 
-            return _currentShardIndex;
+            return _currentShardIndex - 1;
         }
 
         private async Task InitNewShardAsync(CancellationToken ct)
@@ -356,6 +366,24 @@ namespace KustoCopyConsole.Storage
         private static string GetLogPath(long logFileIndex)
         {
             return $"{HISTORICAL_LOG_ROOT_PATH}{logFileIndex:D20}.log";
+        }
+
+        private async Task<string> ReadLineGreedilyAsync(
+            Stream stream,
+            CancellationToken ct)
+        {
+            var buffer = new byte[1];
+            var accumulatedBytes = new List<byte>();
+
+            while (await stream.ReadAsync(buffer, 0, 1, ct) == 1
+                && buffer[0] != (byte)'\n')
+            {
+                accumulatedBytes.Add(buffer[0]);
+            }
+
+            var text = ASCIIEncoding.UTF8.GetString(accumulatedBytes.ToArray());
+
+            return text;
         }
     }
 }
