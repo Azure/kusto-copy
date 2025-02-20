@@ -48,7 +48,6 @@ namespace KustoCopyConsole.Storage
         private static RowItemSerializer CreateRowItemSerializer()
         {
             return new RowItemSerializer()
-                .AddType<FileVersionRowItem>(RowType.FileVersion)
                 .AddType<ActivityRowItem>(RowType.Activity)
                 .AddType<IterationRowItem>(RowType.Iteration)
                 .AddType<TempTableRowItem>(RowType.TempTable)
@@ -69,30 +68,13 @@ namespace KustoCopyConsole.Storage
                 using (var stream = chunk.Stream)
                 using (var reader = new StreamReader(stream))
                 {
-                    var firstLine = await reader.ReadLineAsync();
+                    string? line;
 
-                    if (firstLine != null)
+                    while ((line = await reader.ReadLineAsync()) != null)
                     {
-                        var versionItem =
-                            _rowItemSerializer.Deserialize(firstLine) as FileVersionRowItem;
+                        var item = _rowItemSerializer.Deserialize(line);
 
-                        if (versionItem != null)
-                        {
-                            //  Eventually validate version
-                            string? line;
-
-                            while ((line = await reader.ReadLineAsync()) != null)
-                            {
-                                var item = _rowItemSerializer.Deserialize(firstLine);
-
-                                cache = cache.AppendItem(item);
-                            }
-                        }
-                        else
-                        {
-                            throw new InvalidDataException(
-                                $"Expect the first row to be a version row:  {firstLine}");
-                        }
+                        cache = cache.AppendItem(item);
                     }
                 }
             }
@@ -105,10 +87,7 @@ namespace KustoCopyConsole.Storage
             RowItemInMemoryCache cache,
             Version appVersion)
         {
-            var versionItem = new FileVersionRowItem { FileVersion = appVersion };
-            var items = cache.GetItems().Prepend(versionItem);
-
-            foreach (var item in items)
+            foreach (var item in cache.GetItems())
             {
                 var text = _rowItemSerializer.Serialize(item);
                 var buffer = ASCIIEncoding.UTF8.GetBytes(text);

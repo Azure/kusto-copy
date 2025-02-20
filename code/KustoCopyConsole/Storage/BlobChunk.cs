@@ -6,5 +6,5 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage
 {
-    internal record BlobChunk(bool IsProcessReset, Stream Stream);
+    internal record BlobChunk(bool IsProcessReset, Version fileVersion, Stream Stream);
 }

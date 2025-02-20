@@ -24,7 +24,6 @@ namespace KustoCopyConsole.Entity.RowItems
     [JsonSerializable(typeof(RowItemBase))]
     [JsonSerializable(typeof(ActivityRowItem))]
     [JsonSerializable(typeof(BlockRowItem))]
-    [JsonSerializable(typeof(FileVersionRowItem))]
     [JsonSerializable(typeof(IterationRowItem))]
     [JsonSerializable(typeof(TempTableRowItem))]
     [JsonSerializable(typeof(UrlRowItem))]

@@ -16,7 +16,7 @@ namespace KustoCopyConsole.Storage
     {
         #region Inner Types
         /// <summary>Used for all three types of blobs:  index, log (shard) & view.</summary>
-        private class BlobHeader
+        private class VersionHeader
         {
             public Version AppVersion { get; set; } = new();
         }
@@ -30,8 +30,6 @@ namespace KustoCopyConsole.Storage
         /// <summary>Used by log blobs (shards).</summary>
         private class LogInfo
         {
-            public long ShardIndex { get; set; } = 0;
-
             public bool IsNewProcess { get; set; } = true;
         }
 
@@ -106,7 +104,7 @@ namespace KustoCopyConsole.Storage
                         var indexText = await reader.ReadLineAsync();
 
                         var header = headerText != null
-                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                            ? JsonSerializer.Deserialize<VersionHeader>(headerText)
                             : null;
                         var indexInfo = indexText != null
                             ? JsonSerializer.Deserialize<IndexInfo>(indexText)
@@ -147,18 +145,19 @@ namespace KustoCopyConsole.Storage
             {
                 if (latestStream != null)
                 {
-                    var headerText = await ReadLineGreedilyAsync(latestStream, ct);
+                    var versionHeaderText = await ReadLineGreedilyAsync(latestStream, ct);
                     var viewText = await ReadLineGreedilyAsync(latestStream, ct);
-                    var header = headerText != null
-                        ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                    var versionHeader = versionHeaderText != null
+                        ? JsonSerializer.Deserialize<VersionHeader>(versionHeaderText)
                         : null;
                     var viewInfo = viewText != null
                         ? JsonSerializer.Deserialize<ViewInfo>(viewText)
                         : null;
 
-                    if (header == null)
+                    if (versionHeader == null)
                     {
-                        throw new InvalidDataException("Latest view blob doesn't contain header");
+                        throw new InvalidDataException(
+                            "Latest view blob doesn't contain version header");
                     }
                     if (viewInfo == null)
                     {
@@ -167,7 +166,7 @@ namespace KustoCopyConsole.Storage
                     }
                     shardIndexIncluded = viewInfo.LastShardIncluded;
 
-                    yield return new BlobChunk(true, latestStream);
+                    yield return new BlobChunk(true, versionHeader.AppVersion, latestStream);
                 }
             }
             //  Loop through log files not included in the view
@@ -177,18 +176,19 @@ namespace KustoCopyConsole.Storage
                 {
                     if (logStream != null)
                     {
-                        var headerText = await ReadLineGreedilyAsync(logStream, ct);
+                        var versionHeaderText = await ReadLineGreedilyAsync(logStream, ct);
                         var logInfoText = await ReadLineGreedilyAsync(logStream, ct);
-                        var header = headerText != null
-                            ? JsonSerializer.Deserialize<BlobHeader>(headerText)
+                        var versionHeader = versionHeaderText != null
+                            ? JsonSerializer.Deserialize<VersionHeader>(versionHeaderText)
                             : null;
                         var logInfo = logInfoText != null
                             ? JsonSerializer.Deserialize<LogInfo>(logInfoText)
                             : null;
 
-                        if (header == null)
+                        if (versionHeader == null)
                         {
-                            throw new InvalidDataException("Log blob doesn't contain header");
+                            throw new InvalidDataException(
+                                "Log blob doesn't contain version header");
                         }
                         if (logInfo == null)
                         {
@@ -196,7 +196,10 @@ namespace KustoCopyConsole.Storage
                                 "Log blob doesn't contain view information");
                         }
 
-                        yield return new BlobChunk(logInfo.IsNewProcess, logStream);
+                        yield return new BlobChunk(
+                            logInfo.IsNewProcess,
+                            versionHeader.AppVersion,
+                            logStream);
                     }
                 }
             }
@@ -219,7 +222,7 @@ namespace KustoCopyConsole.Storage
                     {
                         using (var memoryStream = new MemoryStream())
                         {   //  Headers for the view
-                            var header = new BlobHeader { AppVersion = _appVersion };
+                            var header = new VersionHeader { AppVersion = _appVersion };
                             var viewInfo = new ViewInfo
                             {
                                 LastShardIncluded = completedShards
@@ -306,7 +309,7 @@ namespace KustoCopyConsole.Storage
                 {
                     using (var memoryStream = new MemoryStream())
                     {
-                        var header = new BlobHeader { AppVersion = _appVersion };
+                        var header = new VersionHeader { AppVersion = _appVersion };
                         var indexInfo = new IndexInfo { ShardCount = _currentShardIndex };
 
                         JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
@@ -323,12 +326,8 @@ namespace KustoCopyConsole.Storage
         {
             using (var memoryStream = new MemoryStream())
             {
-                var header = new BlobHeader { AppVersion = _appVersion };
-                var logInfo = new LogInfo
-                {
-                    IsNewProcess = _isNewProcess,
-                    ShardIndex = _currentShardIndex
-                };
+                var header = new VersionHeader { AppVersion = _appVersion };
+                var logInfo = new LogInfo { IsNewProcess = _isNewProcess };
 
                 JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
                 memoryStream.WriteByte((byte)'\n');
