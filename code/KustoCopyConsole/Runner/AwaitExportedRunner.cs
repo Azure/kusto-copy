@@ -180,6 +180,7 @@ namespace KustoCopyConsole.Runner
                     });
                 var newBlock = block.ChangeState(BlockState.Exported);
 
+                newBlock.ExportOperationId = string.Empty;
                 newBlock.ExportDuration = status.Duration;
                 Trace.TraceInformation($"Exported block {block.GetBlockKey()}:  {urls.Count()} " +
                     $"urls in {newBlock.ExportDuration}");

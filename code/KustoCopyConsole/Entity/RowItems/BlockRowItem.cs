@@ -68,20 +68,24 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(PlannedRowCount)} should be superior to zero");
             }
-            if (State != BlockState.Planned && string.IsNullOrWhiteSpace(ExportOperationId))
+            if (State == BlockState.Exporting && string.IsNullOrWhiteSpace(ExportOperationId))
             {
-                throw new InvalidDataException($"{nameof(ExportOperationId)} hasn't been populated");
+                throw new InvalidDataException(
+                    $"{nameof(ExportOperationId)} hasn't been populated");
             }
-            if (State == BlockState.Planned && !string.IsNullOrWhiteSpace(ExportOperationId))
+            if (State != BlockState.Exporting && !string.IsNullOrWhiteSpace(ExportOperationId))
             {
                 throw new InvalidDataException(
                     $"{nameof(ExportOperationId)} should be empty but is '{ExportOperationId}'");
             }
-            if (State < BlockState.Queued && !string.IsNullOrWhiteSpace(BlockTag))
+            if (State != BlockState.Queued
+                && State != BlockState.Ingested
+                && !string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should be empty");
             }
-            if (State >= BlockState.Queued && string.IsNullOrWhiteSpace(BlockTag))
+            if ((State == BlockState.Queued || State == BlockState.Ingested)
+                && string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
             }
