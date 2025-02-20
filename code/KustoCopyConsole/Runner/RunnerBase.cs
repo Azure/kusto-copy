@@ -108,7 +108,7 @@ namespace KustoCopyConsole.Runner
 
         private void EnqueueWakeUpTask(Task task)
         {
-            if(task==null)
+            if (task == null)
             {
                 throw new ArgumentNullException(nameof(task));
             }

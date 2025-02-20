@@ -22,19 +22,27 @@ namespace KustoCopyConsole.Runner
             var fileSystem = new AzureBlobFileSystem(
                 parameterization.StagingStorageDirectories.First(),
                 credentials);
+
+            Console.Write("Initialize storage...");
+
             var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
 
+            Console.WriteLine("  Done");
             Console.Write("Reading checkpoint logs...");
 
             var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, appVersion, ct);
 
             Console.WriteLine("  Done");
+            Console.Write("Initialize Kusto connections...");
 
             var dbClientFactory = await DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
                 traceApplicationName,
                 ct);
+
+            Console.WriteLine("  Done");
+
             var stagingBlobUriProvider = new AzureBlobUriProvider(
                 parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
                 credentials);
