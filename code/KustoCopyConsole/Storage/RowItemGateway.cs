@@ -15,23 +15,26 @@ namespace KustoCopyConsole.Storage
     internal class RowItemGateway : IAsyncDisposable
     {
         #region Inner Types
-        private record QueueItem(
+        private record QueuedRowItem(
             DateTime EnqueueTime,
             byte[] Buffer,
             RowItemInMemoryCache? SnapshotCache,
             TaskCompletionSource? TaskSource);
         #endregion
 
+        private const long MAX_VOLUME_BEFORE_SNAPSHOT = 20000000;
         private static readonly TimeSpan MIN_WAIT_PERIOD = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan FLUSH_PERIOD = TimeSpan.FromSeconds(5);
 
         private static readonly RowItemSerializer _rowItemSerializer = CreateRowItemSerializer();
 
         private readonly LogStorage _logStorage;
-        private readonly ConcurrentQueue<QueueItem> _queue = new();
+        private readonly ConcurrentQueue<QueuedRowItem> _rowItemQueue = new();
+        private readonly ConcurrentQueue<Task> _releaseSourceTaskQueue = new();
         private readonly Task _backgroundTask;
         private readonly TaskCompletionSource _backgroundCompletedSource = new();
         private readonly object _lock = new object();
+        private long _volumeSinceLastSnapshot = 0;
         private volatile RowItemInMemoryCache _inMemoryCache;
 
         #region Construction
@@ -45,20 +48,8 @@ namespace KustoCopyConsole.Storage
             _inMemoryCache = cache;
         }
 
-        private static RowItemSerializer CreateRowItemSerializer()
-        {
-            return new RowItemSerializer()
-                .AddType<ActivityRowItem>(RowType.Activity)
-                .AddType<IterationRowItem>(RowType.Iteration)
-                .AddType<TempTableRowItem>(RowType.TempTable)
-                .AddType<BlockRowItem>(RowType.Block)
-                .AddType<UrlRowItem>(RowType.Url)
-                .AddType<ExtentRowItem>(RowType.Extent);
-        }
-
         public static async Task<RowItemGateway> CreateAsync(
             LogStorage logStorage,
-            Version appVersion,
             CancellationToken ct)
         {
             var cache = new RowItemInMemoryCache();
@@ -78,14 +69,23 @@ namespace KustoCopyConsole.Storage
                     }
                 }
             }
-            await logStorage.WriteLatestViewAsync(StreamCache(cache, appVersion), ct);
+            await logStorage.WriteLatestViewAsync(StreamCache(cache), ct);
 
             return new RowItemGateway(logStorage, cache, ct);
         }
 
-        private static IEnumerable<byte> StreamCache(
-            RowItemInMemoryCache cache,
-            Version appVersion)
+        private static RowItemSerializer CreateRowItemSerializer()
+        {
+            return new RowItemSerializer()
+                .AddType<ActivityRowItem>(RowType.Activity)
+                .AddType<IterationRowItem>(RowType.Iteration)
+                .AddType<TempTableRowItem>(RowType.TempTable)
+                .AddType<BlockRowItem>(RowType.Block)
+                .AddType<UrlRowItem>(RowType.Url)
+                .AddType<ExtentRowItem>(RowType.Extent);
+        }
+
+        private static IEnumerable<byte> StreamCache(RowItemInMemoryCache cache)
         {
             foreach (var item in cache.GetItems())
             {
@@ -108,26 +108,24 @@ namespace KustoCopyConsole.Storage
         {
             _backgroundCompletedSource.SetResult();
             await _backgroundTask;
+            await Task.WhenAll(_releaseSourceTaskQueue);
         }
 
         public void Append(RowItemBase item)
         {
-            AppendInternal(item, null);
+            AppendInternal(new[] { item }, null);
         }
 
         public void Append(IEnumerable<RowItemBase> items)
         {
-            foreach (var item in items)
-            {
-                Append(item);
-            }
+            AppendInternal(items, null);
         }
 
         public Task AppendAndPersistAsync(RowItemBase item, CancellationToken ct)
         {
             var taskSource = new TaskCompletionSource();
 
-            AppendInternal(item, taskSource);
+            AppendInternal(new[] { item }, taskSource);
 
             return taskSource.Task;
         }
@@ -140,26 +138,54 @@ namespace KustoCopyConsole.Storage
 
             if (materializedItems.Any())
             {
-                Append(materializedItems.Take(materializedItems.Count() - 1));
-                await AppendAndPersistAsync(materializedItems.Last(), ct);
+                var taskSource = new TaskCompletionSource();
+
+                AppendInternal(items, taskSource);
+                await taskSource.Task;
             }
         }
 
-        private void AppendInternal(RowItemBase item, TaskCompletionSource? TaskSource)
+        private void AppendInternal(
+            IEnumerable<RowItemBase> items,
+            TaskCompletionSource? TaskSource)
         {
-            item.Validate();
+            var materializedItems = items.ToImmutableArray();
+            var binaryItems = new List<byte[]>();
+            RowItemInMemoryCache? snapshot = null;
 
-            var text = _rowItemSerializer.Serialize(item);
-            var binaryItem = ASCIIEncoding.ASCII.GetBytes(text);
+            foreach (var item in materializedItems)
+            {
+                item.Validate();
 
+                var text = _rowItemSerializer.Serialize(item);
+                var binaryItem = ASCIIEncoding.ASCII.GetBytes(text);
+
+                binaryItems.Add(binaryItem);
+            }
             lock (_lock)
             {
-                var newCache = _inMemoryCache.AppendItem(item);
+                var newCache = _inMemoryCache;
 
+                foreach (var item in materializedItems)
+                {
+                    newCache = newCache.AppendItem(item);
+                }
                 Interlocked.Exchange(ref _inMemoryCache, newCache);
-                _queue.Enqueue(new QueueItem(DateTime.Now, binaryItem, newCache, TaskSource));
+                Interlocked.Add(ref _volumeSinceLastSnapshot, binaryItems.Sum(i => i.Length));
+                if (_volumeSinceLastSnapshot > MAX_VOLUME_BEFORE_SNAPSHOT)
+                {
+                    snapshot = newCache;
+                    Interlocked.Exchange(ref _volumeSinceLastSnapshot, 0);
+                }
             }
-            OnRowItemAppended(item);
+            foreach (var binaryItem in binaryItems)
+            {
+                _rowItemQueue.Enqueue(new QueuedRowItem(DateTime.Now, binaryItem, snapshot, TaskSource));
+            }
+            foreach (var item in materializedItems)
+            {
+                OnRowItemAppended(item);
+            }
         }
 
         private void OnRowItemAppended(RowItemBase item)
@@ -174,7 +200,7 @@ namespace KustoCopyConsole.Storage
         {
             while (!_backgroundCompletedSource.Task.IsCompleted)
             {
-                if (_queue.TryPeek(out var queueItem))
+                if (_rowItemQueue.TryPeek(out var queueItem))
                 {
                     var delta = DateTime.Now - queueItem.EnqueueTime;
                     var waitTime = FLUSH_PERIOD - delta;
@@ -196,6 +222,18 @@ namespace KustoCopyConsole.Storage
                         Task.Delay(FLUSH_PERIOD, ct),
                         _backgroundCompletedSource.Task);
                 }
+                await CleanReleaseSourceTaskQueueAsync();
+            }
+        }
+
+        private async Task CleanReleaseSourceTaskQueueAsync()
+        {
+            while (_releaseSourceTaskQueue.TryPeek(out var task) && task.IsCompleted)
+            {
+                if (_releaseSourceTaskQueue.TryDequeue(out var task2))
+                {
+                    await task2;
+                }
             }
         }
 
@@ -204,13 +242,14 @@ namespace KustoCopyConsole.Storage
             using (var bufferStream = new MemoryStream())
             {
                 var sources = new List<TaskCompletionSource>();
+                RowItemInMemoryCache? lastCache = null;
 
                 while (true)
                 {
-                    if (!_queue.TryPeek(out var queueItem)
+                    if (!_rowItemQueue.TryPeek(out var queueItem)
                         || bufferStream.Length + queueItem.Buffer.Length
                             > _logStorage.MaxBufferSize)
-                    {
+                    {   //  Flush buffer stream
                         if (bufferStream.Length == 0)
                         {
                             throw new InvalidDataException("No buffer to append");
@@ -218,26 +257,31 @@ namespace KustoCopyConsole.Storage
                         await _logStorage.AtomicAppendAsync(bufferStream.ToArray(), ct);
                         //  Release tasks
                         foreach (var source in sources)
+                        {   //  We run it on another thread not to block the persistance
+                            _releaseSourceTaskQueue.Enqueue(Task.Run(() => source.TrySetResult()));
+                        }
+                        if (lastCache != null)
                         {
-                            source.SetResult();
+                            await _logStorage.WriteLatestViewAsync(StreamCache(lastCache), ct);
                         }
 
                         return;
                     }
                     else
-                    {
-                        if (!_queue.TryDequeue(out queueItem))
+                    {   //  Append to buffer stream
+                        if (_rowItemQueue.TryDequeue(out queueItem))
                         {
-                            throw new InvalidOperationException(
-                                "We dequeue what we just peeked, this shouldn't fail");
-                        }
-                        else
-                        {
+                            lastCache = queueItem.SnapshotCache ?? lastCache;
                             bufferStream.Write(queueItem.Buffer);
                             if (queueItem.TaskSource != null)
                             {
                                 sources.Add(queueItem.TaskSource);
                             }
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                "We dequeue what we just peeked, this shouldn't fail");
                         }
                     }
                 }

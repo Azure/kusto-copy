@@ -1,15 +1,18 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.State;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Storage
 {
-    internal class LogStorage
+    internal partial class LogStorage
     {
         #region Inner Types
         /// <summary>Used for all three types of blobs:  index, log (shard) & view.</summary>
@@ -35,18 +38,25 @@ namespace KustoCopyConsole.Storage
         {
             public long LastShardIncluded { get; set; } = 0;
         }
+
+        [JsonSourceGenerationOptions(
+            WriteIndented = false,
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+        [JsonSerializable(typeof(VersionHeader))]
+        [JsonSerializable(typeof(IndexInfo))]
+        [JsonSerializable(typeof(LogInfo))]
+        [JsonSerializable(typeof(ViewInfo))]
+        private partial class HeaderJsonContext : JsonSerializerContext
+        {
+        }
         #endregion
 
         private const string INDEX_PATH = "logs/index.log";
         private const string LATEST_PATH = "logs/latest.log";
         private const string HISTORICAL_LOG_ROOT_PATH = "logs/historical/";
         private const string TEMP_PATH = "logs/temp/";
-
-        private static readonly JsonSerializerOptions JSON_SERIALIZER_OPTIONS = new()
-        {
-            WriteIndented = false,
-            PropertyNameCaseInsensitive = true
-        };
 
         private readonly IFileSystem _fileSystem;
         private readonly Version _appVersion;
@@ -226,10 +236,14 @@ namespace KustoCopyConsole.Storage
                             };
 
                             JsonSerializer.Serialize(
-                                memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                                memoryStream,
+                                header,
+                                HeaderJsonContext.Default.VersionHeader);
                             memoryStream.WriteByte((byte)'\n');
                             JsonSerializer.Serialize(
-                                memoryStream, viewInfo, JSON_SERIALIZER_OPTIONS);
+                                memoryStream,
+                                viewInfo,
+                                HeaderJsonContext.Default.ViewInfo);
                             memoryStream.WriteByte((byte)'\n');
                             await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
                         }
@@ -309,9 +323,15 @@ namespace KustoCopyConsole.Storage
                         var header = new VersionHeader { AppVersion = _appVersion };
                         var indexInfo = new IndexInfo { ShardCount = _currentShardIndex };
 
-                        JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                        JsonSerializer.Serialize(
+                            memoryStream,
+                            header,
+                            HeaderJsonContext.Default.VersionHeader);
                         memoryStream.WriteByte((byte)'\n');
-                        JsonSerializer.Serialize(memoryStream, indexInfo, JSON_SERIALIZER_OPTIONS);
+                        JsonSerializer.Serialize(
+                            memoryStream,
+                            indexInfo,
+                            HeaderJsonContext.Default.IndexInfo);
                         memoryStream.WriteByte((byte)'\n');
                         await tempStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
                     }
@@ -326,9 +346,15 @@ namespace KustoCopyConsole.Storage
                 var header = new VersionHeader { AppVersion = _appVersion };
                 var logInfo = new LogInfo { IsNewProcess = _isNewProcess };
 
-                JsonSerializer.Serialize(memoryStream, header, JSON_SERIALIZER_OPTIONS);
+                JsonSerializer.Serialize(
+                    memoryStream,
+                    header,
+                    HeaderJsonContext.Default.VersionHeader);
                 memoryStream.WriteByte((byte)'\n');
-                JsonSerializer.Serialize(memoryStream, logInfo, JSON_SERIALIZER_OPTIONS);
+                JsonSerializer.Serialize(
+                    memoryStream,
+                    logInfo,
+                    HeaderJsonContext.Default.LogInfo);
                 memoryStream.WriteByte((byte)'\n');
                 await _logAppendStorage.AtomicAppendAsync(memoryStream.ToArray(), ct);
                 _isNewProcess = false;

@@ -30,7 +30,7 @@ namespace KustoCopyConsole.Runner
             Console.WriteLine("  Done");
             Console.Write("Reading checkpoint logs...");
 
-            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, appVersion, ct);
+            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, ct);
 
             Console.WriteLine("  Done");
             Console.Write("Initialize Kusto connections...");

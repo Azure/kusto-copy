@@ -1,5 +1,4 @@
 ﻿using Azure.Core;
-using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
@@ -258,7 +257,10 @@ namespace KustoCopyConsole.Runner
                     .Select(i => i.Block.ChangeState(BlockState.ExtentMoved))
                     .ToImmutableArray();
 
-                newBlockItems.ForEach(i => i.BlockTag = string.Empty);
+                foreach(var item in newBlockItems)
+                {
+                    item.BlockTag = string.Empty;
+                }
                 RowItemGateway.Append(newBlockItems);
                 sortedItems = sortedItems
                     .Skip(movingItems.Count())
