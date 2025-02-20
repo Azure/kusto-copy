@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Storage
         /// <param name="path"></param>
         /// <param name="ct"></param>
         /// <returns></returns>
-        Task<IAppendStorage2> OpenWriteAsync(string path, CancellationToken ct);
+        Task<IAppendStorage> OpenWriteAsync(string path, CancellationToken ct);
 
         /// <summary>Moves a blob from one path to another.</summary>
         /// <param name="source"></param>

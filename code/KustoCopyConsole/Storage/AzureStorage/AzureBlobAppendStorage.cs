@@ -1,18 +1,16 @@
-﻿using Azure;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Specialized;
+﻿using Azure.Storage.Blobs.Specialized;
 using Kusto.Cloud.Platform.Utils;
 using Polly;
 
 namespace KustoCopyConsole.Storage.AzureStorage
 {
-    internal class AzureBlobAppendStorage2 : IAppendStorage2
+    internal class AzureBlobAppendStorage : IAppendStorage
     {
         private readonly AppendBlobClient _appendBlobClient;
         private readonly AsyncPolicy _writeBlockRetryPolicy;
         private int _writeCount = 0;
 
-        public AzureBlobAppendStorage2(
+        public AzureBlobAppendStorage(
             AppendBlobClient blobClient,
             AsyncPolicy writeBlockRetryPolicy)
         {
@@ -20,9 +18,9 @@ namespace KustoCopyConsole.Storage.AzureStorage
             _writeBlockRetryPolicy = writeBlockRetryPolicy;
         }
 
-        int IAppendStorage2.MaxBufferSize => _appendBlobClient.AppendBlobMaxAppendBlockBytes;
+        int IAppendStorage.MaxBufferSize => _appendBlobClient.AppendBlobMaxAppendBlockBytes;
 
-        async Task<bool> IAppendStorage2.AtomicAppendAsync(
+        async Task<bool> IAppendStorage.AtomicAppendAsync(
             IEnumerable<byte> content,
             CancellationToken ct)
         {

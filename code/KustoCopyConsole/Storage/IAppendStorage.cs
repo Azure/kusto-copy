@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyConsole.Storage
 {
-    public interface IAppendStorage2
+    public interface IAppendStorage
     {
         /// <summary>Maximum size of buffer that can be written.</summary>
         int MaxBufferSize { get; }

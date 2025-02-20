@@ -55,7 +55,7 @@ namespace KustoCopyConsole.Storage
         private readonly Version _appVersion;
         private bool _isNewProcess = true;
         private long _currentShardIndex;
-        private IAppendStorage2 _logAppendStorage;
+        private IAppendStorage _logAppendStorage;
         private int _appendCount = 0;
 
         #region Constructors
@@ -63,7 +63,7 @@ namespace KustoCopyConsole.Storage
             IFileSystem fileSystem,
             Version appVersion,
             long currentShardIndex,
-            IAppendStorage2 logAppendStorage)
+            IAppendStorage logAppendStorage)
         {
             _fileSystem = fileSystem;
             _appVersion = appVersion;
@@ -342,7 +342,7 @@ namespace KustoCopyConsole.Storage
 
         private async Task AtomicReplaceAsync(
             string path,
-            Func<IAppendStorage2, Task> appendTempStorageFunc,
+            Func<IAppendStorage, Task> appendTempStorageFunc,
             CancellationToken ct)
         {
             var tempFileName = $"{TEMP_PATH}{Guid.NewGuid()}.log";
@@ -354,7 +354,7 @@ namespace KustoCopyConsole.Storage
             await _fileSystem.RemoveFolderAsync(TEMP_PATH, ct);
         }
 
-        private async static Task<IAppendStorage2> GetLogAppendStorageAsync(
+        private async static Task<IAppendStorage> GetLogAppendStorageAsync(
             IFileSystem fileSystem,
             long logFileIndex,
             CancellationToken ct)

@@ -45,7 +45,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             }
         }
 
-        async Task<IAppendStorage2> IFileSystem.OpenWriteAsync(string path, CancellationToken ct)
+        async Task<IAppendStorage> IFileSystem.OpenWriteAsync(string path, CancellationToken ct)
         {
             var fileClient = _rootDirectory.GetFileClient(path);
 
@@ -56,7 +56,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             else
             {
                 var blobClient = new AppendBlobClient(fileClient.Uri, _tokenCredential);
-                var storage = new AzureBlobAppendStorage2(
+                var storage = new AzureBlobAppendStorage(
                     blobClient,
                     _writeBlockRetryPolicy);
 
