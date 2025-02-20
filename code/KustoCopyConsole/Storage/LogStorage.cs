@@ -1,6 +1,4 @@
-﻿using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Entity.State;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -111,10 +109,14 @@ namespace KustoCopyConsole.Storage
                         var indexText = await reader.ReadLineAsync();
 
                         var header = headerText != null
-                            ? JsonSerializer.Deserialize<VersionHeader>(headerText)
+                            ? JsonSerializer.Deserialize<VersionHeader>(
+                                headerText,
+                                HeaderJsonContext.Default.VersionHeader)
                             : null;
                         var indexInfo = indexText != null
-                            ? JsonSerializer.Deserialize<IndexInfo>(indexText)
+                            ? JsonSerializer.Deserialize<IndexInfo>(
+                                indexText,
+                                HeaderJsonContext.Default.IndexInfo)
                             : null;
 
                         if (header == null)
@@ -155,10 +157,14 @@ namespace KustoCopyConsole.Storage
                     var versionHeaderText = await ReadLineGreedilyAsync(latestStream, ct);
                     var viewText = await ReadLineGreedilyAsync(latestStream, ct);
                     var versionHeader = versionHeaderText != null
-                        ? JsonSerializer.Deserialize<VersionHeader>(versionHeaderText)
+                        ? JsonSerializer.Deserialize<VersionHeader>(
+                            versionHeaderText,
+                            HeaderJsonContext.Default.VersionHeader)
                         : null;
                     var viewInfo = viewText != null
-                        ? JsonSerializer.Deserialize<ViewInfo>(viewText)
+                        ? JsonSerializer.Deserialize<ViewInfo>(
+                            viewText,
+                            HeaderJsonContext.Default.ViewInfo)
                         : null;
 
                     if (versionHeader == null)
@@ -186,10 +192,14 @@ namespace KustoCopyConsole.Storage
                         var versionHeaderText = await ReadLineGreedilyAsync(logStream, ct);
                         var logInfoText = await ReadLineGreedilyAsync(logStream, ct);
                         var versionHeader = versionHeaderText != null
-                            ? JsonSerializer.Deserialize<VersionHeader>(versionHeaderText)
+                            ? JsonSerializer.Deserialize<VersionHeader>(
+                                versionHeaderText,
+                                HeaderJsonContext.Default.VersionHeader)
                             : null;
                         var logInfo = logInfoText != null
-                            ? JsonSerializer.Deserialize<LogInfo>(logInfoText)
+                            ? JsonSerializer.Deserialize<LogInfo>(
+                                logInfoText,
+                                HeaderJsonContext.Default.LogInfo)
                             : null;
 
                         if (versionHeader == null)
