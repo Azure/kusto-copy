@@ -73,6 +73,18 @@ namespace KustoCopyConsole.Runner
             public static ProtoBlockCollection Empty { get; }
                 = new(Array.Empty<ProtoBlock>(), null);
 
+            public DateTime? LastIngestionTimeEnd()
+            {
+                var allBlocks = _remainingBlock == null
+                    ? _completedBlocks
+                    : _completedBlocks.Append(_remainingBlock);
+                var lastIngestionTimeEndBlock = allBlocks.Any()
+                    ? allBlocks.ArgMax(b => b.IngestionTimeEnd)
+                    : null;
+
+                return lastIngestionTimeEndBlock?.IngestionTimeEnd;
+            }
+
             public ProtoBlockCollection Add(IEnumerable<ProtoBlock> blocks)
             {
                 var remainingBlocks = _remainingBlock == null
@@ -254,7 +266,7 @@ namespace KustoCopyConsole.Runner
                     : null;
                 var newProtoBlocks = await GetProtoBlockAsync(
                     iterationItem,
-                    lastBlock?.IngestionTimeEnd,
+                    protoBlocks.LastIngestionTimeEnd() ?? lastBlock?.IngestionTimeEnd,
                     queryClient,
                     dbCommandClient,
                     ct);
