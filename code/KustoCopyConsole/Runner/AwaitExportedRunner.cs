@@ -182,6 +182,7 @@ namespace KustoCopyConsole.Runner
 
                 newBlock.ExportOperationId = string.Empty;
                 newBlock.ExportDuration = status.Duration;
+                newBlock.ExportedRowCount = details.Sum(d => d.RecordCount);
                 Trace.TraceInformation($"Exported block {block.GetBlockKey()}:  {urls.Count()} " +
                     $"urls in {newBlock.ExportDuration}");
                 RowItemGateway.Append(urls);

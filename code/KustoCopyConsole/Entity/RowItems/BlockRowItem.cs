@@ -25,6 +25,8 @@ namespace KustoCopyConsole.Entity.RowItems
         public DateTime? ExtentCreationTime { get; set; } = DateTime.MinValue;
 
         public long PlannedRowCount { get; set; } = 0;
+        
+        public long ExportedRowCount { get; set; } = 0;
 
         public string ExportOperationId { get; set; } = string.Empty;
 
