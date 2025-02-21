@@ -336,7 +336,8 @@ namespace KustoCopyConsole.Runner
                     BlockId = ++lastBlockId,
                     IngestionTimeStart = block.IngestionTimeStart,
                     IngestionTimeEnd = block.IngestionTimeEnd,
-                    ExtentCreationTime = block.MinCreationTime,
+                    MinCreationTime = block.MinCreationTime,
+                    MaxCreationTime = block.MaxCreationTime,
                     PlannedRowCount = block.RowCount
                 };
 
