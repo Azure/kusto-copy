@@ -95,7 +95,7 @@ namespace KustoCopyConsole.Runner
                 $"Exporting={exportingCount}, Exported={exportedCount}, " +
                 $"Queued={queuedCount}, Ingested={ingestedCount}, " +
                 $"Moved={movedCount} " +
-                $"({plannedRowCount} / {exportedRowCount})");
+                $"({plannedRowCount:N0} / {exportedRowCount:N0})");
         }
     }
 }

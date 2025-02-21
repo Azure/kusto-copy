@@ -154,4 +154,4 @@ jobs:
         fullVersion=$(cat linux-assets/full-version.txt)
         echo "Full version:  $fullVersion"
         # Create the release draft
-        gh release create $fullVersion final-assets/*
+        gh release create "$fullVersion" final-assets/*

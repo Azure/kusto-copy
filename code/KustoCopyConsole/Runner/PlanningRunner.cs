@@ -170,7 +170,7 @@ namespace KustoCopyConsole.Runner
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(10))
+                 TimeSpan.FromSeconds(5))
         {
         }
 
@@ -211,12 +211,6 @@ namespace KustoCopyConsole.Runner
                 //  Sleep
                 await SleepAsync(ct);
             }
-        }
-
-        protected override bool IsWakeUpRelevant(RowItemBase item)
-        {
-            return item is IterationRowItem i
-                && i.State == IterationState.Starting;
         }
 
         private async Task PlanIterationAsync(

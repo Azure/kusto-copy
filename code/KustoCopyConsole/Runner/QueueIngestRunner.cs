@@ -80,12 +80,6 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        protected override bool IsWakeUpRelevant(RowItemBase item)
-        {
-            return item is BlockRowItem b
-                && b.State == BlockState.Exported;
-        }
-
         private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
         {
             UrlRowItem MarkUrlAsQueued(UrlRowItem url, string serializedQueueResult)

@@ -100,8 +100,6 @@ namespace KustoCopyConsole.Storage
         }
         #endregion
 
-        public event EventHandler<RowItemBase>? RowItemAppended;
-
         public RowItemInMemoryCache InMemoryCache => _inMemoryCache;
 
         async ValueTask IAsyncDisposable.DisposeAsync()
@@ -181,18 +179,6 @@ namespace KustoCopyConsole.Storage
             foreach (var binaryItem in binaryItems)
             {
                 _rowItemQueue.Enqueue(new QueuedRowItem(DateTime.Now, binaryItem, snapshot, TaskSource));
-            }
-            foreach (var item in materializedItems)
-            {
-                OnRowItemAppended(item);
-            }
-        }
-
-        private void OnRowItemAppended(RowItemBase item)
-        {
-            if (RowItemAppended != null)
-            {
-                RowItemAppended(this, item);
             }
         }
 
