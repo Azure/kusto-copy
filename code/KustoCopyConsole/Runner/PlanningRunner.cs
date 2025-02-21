@@ -237,7 +237,31 @@ namespace KustoCopyConsole.Runner
                 iterationItem.CursorEnd = cursor;
                 RowItemGateway.Append(iterationItem);
             }
+            await ValidateIngestionTimeAsync(queryClient, activity, iterationItem, ct);
             await PlanBlocksAsync(queryClient, dbCommandClient, iterationItem, ct);
+        }
+
+        private async Task ValidateIngestionTimeAsync(
+            DbQueryClient queryClient,
+            ActivityRowItem activity,
+            IterationRowItem iterationItem,
+            CancellationToken ct)
+        {
+            var activityParam = Parameterization.Activities[iterationItem.ActivityName];
+            var hasNullIngestionTime = await queryClient.HasNullIngestionTime(
+                new KustoPriority(iterationItem.GetIterationKey()),
+                activity.SourceTable.TableName,
+                activityParam.KqlQuery,
+                ct);
+
+            if (hasNullIngestionTime)
+            {
+                throw new CopyException(
+                    $"Activity '{activity.ActivityName}' / Iteration" +
+                    $" {iterationItem.IterationId}:  null ingestion time are present." +
+                    $"  Null ingestion time aren't supported.",
+                    false);
+            }
         }
 
         private async Task PlanBlocksAsync(
