@@ -54,12 +54,6 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        protected override bool IsWakeUpRelevant(RowItemBase item)
-        {
-            return item is BlockRowItem b
-                && (b.State == BlockState.Planned || b.State == BlockState.Exported);
-        }
-
         private async Task<int> StartExportAsync(
             IEnumerable<ActivityFlatHierarchy> exportLineUp,
             CancellationToken ct)

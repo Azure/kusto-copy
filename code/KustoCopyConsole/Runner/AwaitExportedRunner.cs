@@ -42,7 +42,7 @@ namespace KustoCopyConsole.Runner
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(3))
+                 TimeSpan.FromSeconds(5))
         {
         }
 
