@@ -47,6 +47,41 @@ namespace KustoCopyConsole.Kusto
                 });
         }
 
+        public async Task<bool> HasNullIngestionTime(
+            KustoPriority priority,
+            string tableName,
+            string? kqlQuery,
+            CancellationToken ct)
+        {
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var query = @$"
+let BaseData = ['{tableName}']
+{kqlQuery}
+;
+BaseData
+| where isnull(ingestion_time())
+| take 1
+| count
+";
+                    var properties = new ClientRequestProperties();
+
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        properties,
+                        ct);
+                    var result = reader
+                        .ToEnumerable(r => (long) r[0])
+                        .First();
+                    var hasNull = result != 0;
+
+                    return hasNull;
+                });
+        }
+
         public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
             KustoPriority priority,
             string tableName,
