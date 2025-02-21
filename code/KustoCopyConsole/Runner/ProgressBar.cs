@@ -84,10 +84,7 @@ namespace KustoCopyConsole.Runner
             var ingestedCount = blockItems.Count(b => b.State == BlockState.Ingested);
             var movedCount = blockItems.Count(b => b.State == BlockState.ExtentMoved);
             var plannedRowCount = blockItems.Sum(b => b.PlannedRowCount);
-            var exportedRowCount = blockMap
-                .Values
-                .SelectMany(b => b.UrlMap.Values)
-                .Sum(u => u.RowItem.RowCount);
+            var exportedRowCount = blockItems.Sum(b => b.ExportedRowCount);
 
             Console.WriteLine(
                 $"Progress {key} [{iterationCache.RowItem.State}]:  " +
