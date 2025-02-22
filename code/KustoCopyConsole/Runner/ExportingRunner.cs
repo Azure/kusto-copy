@@ -1,15 +1,16 @@
 ﻿using Azure.Core;
+using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
-using Microsoft.Extensions.Azure;
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
+using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Runner
 {
@@ -43,105 +44,55 @@ namespace KustoCopyConsole.Runner
 
             while (!AllActivitiesCompleted())
             {
-                var exportLineUp = await GetExportLineUpAsync(capacityMap, ct);
-                var exportCount = await StartExportAsync(exportLineUp, ct);
+                var candidatesByCluster = GetCandidatesByCluster();
 
-                if (exportCount == 0)
-                {
-                    //  Sleep
-                    await SleepAsync(ct);
-                }
+                //  Ensure (or fetch) capacity of each cluster having candidates
+                await EnsureCapacityCacheAsync(capacityMap, candidatesByCluster.Keys, ct);
+
+                var processTasks = candidatesByCluster
+                    .Select(p => Task.Run(() => ProcessExportByClusterAsync(
+                        p.Key,
+                        capacityMap[p.Key].CachedCapacity,
+                        p.Value,
+                        ct)))
+                    .ToImmutableArray();
+
+                await Task.WhenAll(processTasks);
+                await SleepAsync(ct);
             }
         }
 
-        private async Task<int> StartExportAsync(
-            IEnumerable<ActivityFlatHierarchy> exportLineUp,
-            CancellationToken ct)
+        private IImmutableDictionary<Uri, IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>>>
+            GetCandidatesByCluster()
         {
-            async Task ProcessBlockAsync(
-                ActivityFlatHierarchy item,
-                CancellationToken ct)
+            IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>> GroupByIteration(
+                IEnumerable<ActivityFlatHierarchy> flatHierarchy)
             {
-                var dbClient = DbClientFactory.GetDbCommandClient(
-                    item.Activity.SourceTable.ClusterUri,
-                    item.Activity.SourceTable.DatabaseName);
-                var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                    item.Block.GetBlockKey(),
-                    ct);
-                var query = Parameterization.Activities[item.Activity.ActivityName].KqlQuery;
-                var operationId = await dbClient.ExportBlockAsync(
-                    new KustoPriority(item.Block.GetBlockKey()),
-                    writableUris,
-                    item.Activity.SourceTable.TableName,
-                    query,
-                    item.Iteration.CursorStart,
-                    item.Iteration.CursorEnd,
-                    item.Block.IngestionTimeStart,
-                    item.Block.IngestionTimeEnd,
-                    ct);
-                var blockItem = item.Block.ChangeState(BlockState.Exporting);
+                var map = flatHierarchy
+                    .GroupBy(
+                        h => new IterationKey(h.Activity.ActivityName, h.Iteration.IterationId),
+                        h => h.Block)
+                    .ToImmutableDictionary(
+                        g => g.Key,
+                        g => (IImmutableList<BlockRowItem>)g.ToImmutableArray());
 
-                blockItem.ExportOperationId = operationId;
-                RowItemGateway.Append(blockItem);
+                return map;
             }
-
-            var tasks = exportLineUp
-                .Select(h => ProcessBlockAsync(h, ct))
-                .ToImmutableArray();
-
-            await TaskHelper.WhenAllWithErrors(tasks);
-
-            return tasks.Count();
-        }
-
-        private async Task<IEnumerable<ActivityFlatHierarchy>> GetExportLineUpAsync(
-            IDictionary<Uri, CapacityCache> capacityMap,
-            CancellationToken ct)
-        {
             var flatHierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
                 a => a.RowItem.State != ActivityState.Completed,
                 i => i.RowItem.State != IterationState.Completed);
-            //  Find candidates for export and group them by cluster
-            var candidatesByCluster = flatHierarchy
+            var plannedOnly = flatHierarchy
+                .Where(h => h.Block.State == BlockState.Planned);
+            var candidates = plannedOnly
                 .GroupBy(h => h.Activity.SourceTable.ClusterUri)
-                .Select(g => new
-                {
-                    ClusterUri = g.Key,
-                    ExportingCount = g.Count(h => h.Block.State == BlockState.Exporting),
-                    Candidates = g
-                    .Where(h => h.Block.State == BlockState.Planned)
-                    .OrderBy(h => h.Activity.ActivityName)
-                    .ThenBy(h => h.Block.IterationId)
-                    .ThenBy(h => h.Block.BlockId)
-                })
-                //  Keep only clusters with candidates
-                .Where(o => o.Candidates.Any())
-                .ToImmutableDictionary(o => o.ClusterUri);
+                .ToImmutableDictionary(
+                    g => g.Key,
+                    g => GroupByIteration(g));
 
-            //  Ensure we have the capacity for clusters with candidates 
-            await EnsureCapacityCache(capacityMap, candidatesByCluster.Keys, ct);
-
-            //  Create the line up
-            var exportLineUp = candidatesByCluster
-                .Values
-                .Select(o => new
-                {
-                    o.Candidates,
-                    //  Find the export availability (capacity - current usage)
-                    ExportingAvailability = capacityMap[o.ClusterUri].CachedCapacity - o.ExportingCount
-                })
-                //  Keep only clusters with availability
-                .Where(o => o.ExportingAvailability > 0)
-                //  Select candidates by priority
-                .SelectMany(o => o.Candidates
-                .OrderBy(c => new KustoPriority(c.Block.GetBlockKey()))
-                .Take(o.ExportingAvailability))
-                .ToImmutableArray();
-
-            return exportLineUp;
+            return candidates;
         }
 
-        private async Task EnsureCapacityCache(
+        private async Task EnsureCapacityCacheAsync(
             IDictionary<Uri, CapacityCache> capacityMap,
             IEnumerable<Uri> clusterUris,
             CancellationToken ct)
@@ -164,6 +115,186 @@ namespace KustoCopyConsole.Runner
                 capacityMap[update.ClusterUri] =
                     new CapacityCache(DateTime.Now, update.CapacityTask.Result);
             }
+        }
+
+        private async Task<int> ProcessExportByClusterAsync(
+            Uri clusterUri,
+            int capacity,
+            IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>> iterationMap,
+            CancellationToken ct)
+        {
+            var exportingCount = GetExportingCount(clusterUri);
+            var freeCapacity = capacity - exportingCount;
+            var orderedIterationKeys = iterationMap.Keys
+                .OrderBy(k => k.ActivityName)
+                .ThenBy(k => k.IterationId);
+            var lineup = new List<BlockRowItem>();
+
+            //  Get line up by iteration priority
+            foreach (var iterationKey in orderedIterationKeys)
+            {
+                if (freeCapacity > 0)
+                {
+                    var candidates = iterationMap[iterationKey];
+
+                    freeCapacity -= lineup.Count();
+                    lineup.AddRange(GetLineup(iterationKey, candidates, freeCapacity));
+                }
+            }
+
+            var startExportTasks = lineup
+                .Select(b => Task.Run(() => StartExportAsync(b, ct)))
+                .ToImmutableArray();
+
+            await Task.WhenAll(startExportTasks);
+
+            return lineup.Count;
+        }
+
+        private int GetExportingCount(Uri clusterUri)
+        {
+            var flatHierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
+                a => a.RowItem.SourceTable.ClusterUri == clusterUri,
+                i => i.RowItem.State != IterationState.Completed);
+            var exportCount = flatHierarchy
+                .Where(h => h.Block.State == BlockState.Exporting)
+                .Count();
+
+            return exportCount;
+        }
+
+        private IEnumerable<BlockRowItem> GetLineup(
+            IterationKey iterationKey,
+            IEnumerable<BlockRowItem> candidates,
+            int freeCapacity)
+        {
+            const int MIN_STAT_COUNT = 5;
+            const long MIN_ROW_COUNT_STATS = 100000;
+            const long MAX_ROW_COUNT = 16000000;
+            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(1);
+
+            var latestBlocks = RowItemGateway.InMemoryCache
+                .ActivityMap[iterationKey.ActivityName]
+                .IterationMap[iterationKey.IterationId]
+                .BlockMap
+                .Values
+                .Select(c => c.RowItem)
+                .Where(b => b.State >= BlockState.Exported)
+                //  We want representative export, i.e. meaningful size
+                .Where(b => b.ExportedRowCount > MIN_ROW_COUNT_STATS)
+                .OrderByDescending(b => b.Updated)
+                .Take(MIN_STAT_COUNT)
+                .ToImmutableArray();
+
+            if (latestBlocks.Length == MIN_STAT_COUNT)
+            {   //  Replan blocks
+                var totalDuration = latestBlocks.Sum(b => b.ExportDuration!.Value.TotalSeconds);
+                var totalRows = latestBlocks.Sum(b => b.ExportedRowCount);
+                var maxRowCount = latestBlocks.Max(b => b.ExportedRowCount);
+                var averageDurationPerRow = TimeSpan.FromSeconds(totalDuration / totalRows);
+                var targetRowCount = Math.Max(
+                    1,
+                    Math.Min(
+                        Math.Min(MAX_ROW_COUNT, 2 * maxRowCount),
+                        MAX_EXPORT_DURATION / averageDurationPerRow));
+
+                return GetReplannedLineup(candidates, targetRowCount, freeCapacity);
+            }
+            else
+            {   //  Just return the top blocks
+                return candidates
+                    .OrderBy(b => b.IngestionTimeStart)
+                    .Take(freeCapacity)
+                    .ToImmutableArray();
+            }
+        }
+
+        private IEnumerable<BlockRowItem> GetReplannedLineup(
+            IEnumerable<BlockRowItem> candidates,
+            double targetRowCount,
+            int freeCapacity)
+        {
+            //  Stack them upside down
+            var candidateStack =
+                new Stack<BlockRowItem>(candidates.OrderByDescending(c => c.IngestionTimeStart));
+            var lineup = new List<BlockRowItem>(freeCapacity);
+
+            while (freeCapacity - lineup.Count > 0 && candidateStack.Any())
+            {
+                var first = candidateStack.Pop();
+
+                if (candidateStack.Any())
+                {
+                    var second = candidateStack.Pop();
+                    var merge = new BlockRowItem
+                    {
+                        State = first.State,
+                        ActivityName = first.ActivityName,
+                        IterationId = first.IterationId,
+                        BlockId = first.BlockId,
+                        IngestionTimeStart = first.IngestionTimeStart,
+                        IngestionTimeEnd = second.IngestionTimeEnd,
+                        MinCreationTime = first.MinCreationTime < second.MinCreationTime
+                        ? first.MinCreationTime
+                        : second.MinCreationTime,
+                        MaxCreationTime = first.MaxCreationTime > second.MaxCreationTime
+                        ? first.MaxCreationTime
+                        : second.MaxCreationTime,
+                        PlannedRowCount = first.PlannedRowCount + second.PlannedRowCount,
+                        ReplannedBlockIds = first.ReplannedBlockIds
+                        .Concat(second.ReplannedBlockIds)
+                        .Append(second.BlockId)
+                        .ToImmutableArray(),
+                    };
+
+                    if (merge.PlannedRowCount <= targetRowCount
+                        && (merge.MaxCreationTime - merge.MinCreationTime < TimeSpan.FromDays(1)))
+                    {
+                        candidateStack.Push(merge);
+                    }
+                    else
+                    {
+                        lineup.Add(first);
+                        candidateStack.Push(second);
+                    }
+                }
+                else
+                {
+                    lineup.Add(first);
+                }
+            }
+
+            return lineup;
+        }
+
+        private async Task StartExportAsync(BlockRowItem item, CancellationToken ct)
+        {
+            var activity = RowItemGateway.InMemoryCache.ActivityMap[item.ActivityName].RowItem;
+            var iteration = RowItemGateway.InMemoryCache
+                .ActivityMap[item.ActivityName]
+                .IterationMap[item.IterationId]
+                .RowItem;
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                activity.SourceTable.ClusterUri,
+                activity.SourceTable.DatabaseName);
+            var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
+                item.GetBlockKey(),
+                ct);
+            var query = Parameterization.Activities[item.ActivityName].KqlQuery;
+            var operationId = await dbClient.ExportBlockAsync(
+                new KustoPriority(item.GetBlockKey()),
+                writableUris,
+                activity.SourceTable.TableName,
+                query,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                item.IngestionTimeStart,
+                item.IngestionTimeEnd,
+                ct);
+            var newBlockItem = item.ChangeState(BlockState.Exporting);
+
+            newBlockItem.ExportOperationId = operationId;
+            RowItemGateway.Append(newBlockItem);
         }
 
         private async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)

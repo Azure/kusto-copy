@@ -180,6 +180,7 @@ namespace KustoCopyConsole.Runner
                     });
                 var newBlock = block.ChangeState(BlockState.Exported);
 
+                newBlock.ReplannedBlockIds = block.ReplannedBlockIds.Clear();
                 newBlock.ExportOperationId = string.Empty;
                 newBlock.ExportDuration = status.Duration;
                 newBlock.ExportedRowCount = details.Sum(d => d.RecordCount);
