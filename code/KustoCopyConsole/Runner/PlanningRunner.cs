@@ -17,8 +17,8 @@ namespace KustoCopyConsole.Runner
             DateTime IngestionTimeStart,
             DateTime IngestionTimeEnd,
             long RowCount,
-            DateTime? MinCreationTime,
-            DateTime? MaxCreationTime)
+            DateTime MinCreationTime,
+            DateTime MaxCreationTime)
         {
             public ProtoBlock Merge(ProtoBlock other)
             {
@@ -26,29 +26,15 @@ namespace KustoCopyConsole.Runner
                     Min(IngestionTimeStart, other.IngestionTimeStart),
                     Max(IngestionTimeEnd, other.IngestionTimeEnd),
                     RowCount + other.RowCount,
-                    MinWithNull(MinCreationTime, MaxCreationTime),
-                    MaxWithNull(MinCreationTime, MaxCreationTime));
+                    Min(MinCreationTime, MaxCreationTime),
+                    Max(MinCreationTime, MaxCreationTime));
             }
 
             public TimeSpan? CreationTimeDelta => MaxCreationTime - MinCreationTime;
 
-            private static DateTime? MinWithNull(DateTime? a, DateTime? b)
-            {
-                return a == null || b == null
-                    ? null
-                    : Min(a.Value, b.Value);
-            }
-
             private static DateTime Min(DateTime a, DateTime b)
             {
                 return a < b ? a : b;
-            }
-
-            private static DateTime? MaxWithNull(DateTime? a, DateTime? b)
-            {
-                return a == null || b == null
-                    ? null
-                    : Max(a.Value, b.Value);
             }
 
             private static DateTime Max(DateTime a, DateTime b)
@@ -108,8 +94,7 @@ namespace KustoCopyConsole.Runner
 
                         if (first.IngestionTimeEnd == second.IngestionTimeStart
                             || (merge.RowCount <= RECORDS_PER_BLOCK
-                            && (merge.CreationTimeDelta < TimeSpan.FromDays(1)
-                            || second.MinCreationTime == null && first.MinCreationTime == null)))
+                            && merge.CreationTimeDelta < TimeSpan.FromDays(1)))
                         {   //  We merge
                             stack.Push(merge);
                         }
@@ -336,7 +321,8 @@ namespace KustoCopyConsole.Runner
                     BlockId = ++lastBlockId,
                     IngestionTimeStart = block.IngestionTimeStart,
                     IngestionTimeEnd = block.IngestionTimeEnd,
-                    ExtentCreationTime = block.MinCreationTime,
+                    MinCreationTime = block.MinCreationTime,
+                    MaxCreationTime = block.MaxCreationTime,
                     PlannedRowCount = block.RowCount
                 };
 

@@ -142,7 +142,7 @@ namespace KustoCopyConsole.Runner
                 new KustoPriority(block.GetBlockKey()),
                 uri,
                 block.BlockTag,
-                block.ExtentCreationTime,
+                block.MinCreationTime,
                 ct);
 
             return serializedQueueResult;

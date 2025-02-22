@@ -2,6 +2,7 @@
 using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,10 +23,12 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public DateTime IngestionTimeEnd { get; set; } = DateTime.MinValue;
 
-        public DateTime? ExtentCreationTime { get; set; } = DateTime.MinValue;
+        public DateTime MinCreationTime { get; set; } = DateTime.MinValue;
+
+        public DateTime MaxCreationTime { get; set; } = DateTime.MinValue;
 
         public long PlannedRowCount { get; set; } = 0;
-        
+
         public long ExportedRowCount { get; set; } = 0;
 
         public string ExportOperationId { get; set; } = string.Empty;
@@ -33,6 +36,8 @@ namespace KustoCopyConsole.Entity.RowItems
         public TimeSpan? ExportDuration { get; set; }
 
         public string BlockTag { get; set; } = string.Empty;
+
+        public IImmutableList<long> ReplannedBlockIds { get; set; } = ImmutableArray<long>.Empty;
 
         public override void Validate()
         {
@@ -60,10 +65,15 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeEnd)} hasn't been populated");
             }
-            if (ExtentCreationTime == DateTime.MinValue)
+            if (MinCreationTime == DateTime.MinValue)
             {
                 throw new InvalidDataException(
-                    $"{nameof(ExtentCreationTime)} hasn't been populated");
+                    $"{nameof(MinCreationTime)} hasn't been populated");
+            }
+            if (MaxCreationTime == DateTime.MinValue)
+            {
+                throw new InvalidDataException(
+                    $"{nameof(MinCreationTime)} hasn't been populated");
             }
             if (PlannedRowCount < 0)
             {
@@ -90,6 +100,11 @@ namespace KustoCopyConsole.Entity.RowItems
                 && string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
+            }
+            if (State != BlockState.Exporting && ReplannedBlockIds.Any())
+            {
+                throw new InvalidDataException(
+                    $"{nameof(ReplannedBlockIds)} should be empty with state '{State}'");
             }
         }
 
