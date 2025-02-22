@@ -171,6 +171,7 @@ namespace KustoCopyConsole.Runner
             const int MIN_STAT_COUNT = 5;
             const long MIN_ROW_COUNT_STATS = 100000;
             const long MAX_ROW_COUNT = 16000000;
+            const int LEAP_RATIO = 3;
             var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(1);
 
             var latestBlocks = RowItemGateway.InMemoryCache
@@ -195,7 +196,7 @@ namespace KustoCopyConsole.Runner
                 var targetRowCount = Math.Max(
                     1,
                     Math.Min(
-                        Math.Min(MAX_ROW_COUNT, 2 * maxRowCount),
+                        Math.Min(MAX_ROW_COUNT, LEAP_RATIO * maxRowCount),
                         MAX_EXPORT_DURATION / averageDurationPerRow));
 
                 return GetReplannedLineup(candidates, targetRowCount, freeCapacity);
