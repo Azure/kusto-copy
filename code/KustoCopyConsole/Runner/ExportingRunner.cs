@@ -183,7 +183,7 @@ namespace KustoCopyConsole.Runner
                 .Where(b => b.State >= BlockState.Exported)
                 //  We want representative export, i.e. meaningful size
                 .Where(b => b.ExportedRowCount > MIN_ROW_COUNT_STATS)
-                .OrderByDescending(b => b.Updated)
+                .OrderByDescending(b => b.ExportedRowCount)
                 .Take(MIN_STAT_COUNT)
                 .ToImmutableArray();
 
