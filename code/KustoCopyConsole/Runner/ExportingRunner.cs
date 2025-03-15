@@ -10,7 +10,6 @@ using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Runner
 {

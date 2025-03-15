@@ -1,5 +1,4 @@
-﻿using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Storage;
 using System;
@@ -92,7 +91,7 @@ namespace KustoCopyConsole.Runner
                 $"Exporting={exportingCount}, Exported={exportedCount}, " +
                 $"Queued={queuedCount}, Ingested={ingestedCount}, " +
                 $"Moved={movedCount} " +
-                $"({plannedRowCount:N0} / {exportedRowCount:N0})");
+                $"({exportedRowCount:N0} / {plannedRowCount:N0})");
         }
     }
 }
