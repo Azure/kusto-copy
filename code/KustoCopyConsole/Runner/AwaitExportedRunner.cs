@@ -22,6 +22,7 @@ namespace KustoCopyConsole.Runner
         private static readonly IImmutableSet<string> FAILED_STATUS =
             ImmutableHashSet.Create(
                 [
+                "Throttled",
                 "Failed",
                 "PartiallySucceeded",
                 "Abandoned",
