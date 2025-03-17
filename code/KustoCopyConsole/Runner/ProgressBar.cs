@@ -12,7 +12,7 @@ namespace KustoCopyConsole.Runner
 {
     internal class ProgressBar : IAsyncDisposable
     {
-        private static readonly TimeSpan WAKE_PERIOD = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan WAKE_PERIOD = TimeSpan.FromSeconds(10);
 
         private readonly RowItemGateway _rowItemGateway;
         private readonly Task _backgroundTask;
