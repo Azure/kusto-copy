@@ -171,7 +171,7 @@ namespace KustoCopyConsole.Runner
             const long MIN_ROW_COUNT_STATS = 100000;
             const long MAX_ROW_COUNT = 16000000;
             const int LEAP_RATIO = 3;
-            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(1);
+            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(4);
 
             var latestBlocks = RowItemGateway.InMemoryCache
                 .ActivityMap[iterationKey.ActivityName]
