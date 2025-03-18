@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -80,6 +81,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
+            DisplayExistingIterations();
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
                 foreach (var a in Parameterization.Activities.Values)
@@ -113,6 +115,32 @@ namespace KustoCopyConsole.Runner
             }
         }
 
+        private static void DisplayIteration(IterationRowItem item, bool isNew)
+        {
+            var iterationAge = isNew
+                ? "New"
+                : "Existing";
+
+            Console.WriteLine(
+                $"{iterationAge} iteration {item.GetIterationKey()}:  " +
+                $"['{item.CursorStart}', '{item.CursorEnd}']");
+        }
+
+        private void DisplayExistingIterations()
+        {
+            var cache = RowItemGateway.InMemoryCache;
+            var existingIterations = cache.ActivityMap
+                .Values
+                .SelectMany(a => a.IterationMap.Values)
+                .Select(i => i.RowItem)
+                .Where(i => i.State != IterationState.Completed);
+
+            foreach (var iteration in existingIterations)
+            {
+                DisplayIteration(iteration, false);
+            }
+        }
+
         private void EnsureIteration(ActivityParameterization activityParam)
         {
             if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
@@ -122,7 +150,6 @@ namespace KustoCopyConsole.Runner
             }
 
             var cache = RowItemGateway.InMemoryCache;
-            var activityItem = cache.ActivityMap[activityParam.ActivityName].RowItem;
             var cachedIterations = cache.ActivityMap.ContainsKey(activityParam.ActivityName)
                 ? cache.ActivityMap[activityParam.ActivityName].IterationMap.Values
                 : Array.Empty<IterationCache>();
@@ -155,8 +182,10 @@ namespace KustoCopyConsole.Runner
                     CursorStart = cursorStart,
                     CursorEnd = string.Empty
                 };
+                var iterationKey = newIterationItem.GetIterationKey();
 
                 RowItemGateway.Append(newIterationItem);
+                DisplayIteration(newIterationItem, true);
             }
         }
 
@@ -173,6 +202,7 @@ namespace KustoCopyConsole.Runner
                 };
 
                 RowItemGateway.Append(activity);
+                Console.WriteLine($"New activity:  '{activity.ActivityName}'");
             }
         }
     }
