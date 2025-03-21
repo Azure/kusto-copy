@@ -1,3 +1,4 @@
 #   Kusto Copy Documentation
 
-This section is coming...
+* [Setup guide](setup.md) - **How to** install Kusto Copy and use it to copy a table
+* [Reading progress](progress.md) - How to read the progress of Kusto Copy

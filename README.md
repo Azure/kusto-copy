@@ -20,6 +20,8 @@
 
 You can find the command line interface (CLI) binary executable [here](https://github.com/Azure/kusto-copy/releases) for Linux, Windows & Mac.
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/5IxwTjSeqN4?si=pilUmiC_u08ScoML" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 Here is a usage example:
 
 ```
