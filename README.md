@@ -16,11 +16,9 @@
 * Copy "since last copy" ; this can be useful when planing a migration where it could take several hours or even days to copy the historic and you might want to copy the delta since you copied the history
 * Can orchestrate the copy of multiple tables from multiple databases in one execution context
 
-## Introduction Video
-
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/5IxwTjSeqN4/0.jpg)](https://www.youtube.com/watch?v=5IxwTjSeqN4)
-
 ## Getting started
+
+See the [introductory video](https://www.youtube.com/watch?v=5IxwTjSeqN4).
 
 You can find the command line interface (CLI) binary executable [here](https://github.com/Azure/kusto-copy/releases) for Linux, Windows & Mac.
 
