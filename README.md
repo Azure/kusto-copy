@@ -20,7 +20,7 @@
 
 See the [introductory video](https://www.youtube.com/watch?v=5IxwTjSeqN4):
 
-[<img src="documentation/artefacts/introductory-video.png" width="200" />](https://www.youtube.com/watch?v=5IxwTjSeqN4)
+[<img src="documentation/artefacts/introductory-video.png" width="350" />](https://www.youtube.com/watch?v=5IxwTjSeqN4)
 
 You can find the command line interface (CLI) binary executable [here](https://github.com/Azure/kusto-copy/releases) for Linux, Windows & Mac.
 
