@@ -18,6 +18,10 @@
 
 ## Getting started
 
+See the [introductory video](https://www.youtube.com/watch?v=5IxwTjSeqN4):
+
+[<img src="documentation/artefacts/introductory-video.png" width="350" />](https://www.youtube.com/watch?v=5IxwTjSeqN4)
+
 You can find the command line interface (CLI) binary executable [here](https://github.com/Azure/kusto-copy/releases) for Linux, Windows & Mac.
 
 Here is a usage example:
@@ -28,13 +32,13 @@ kc -s https://mycluster.eastus.kusto.windows.net/mydb/mytable -d https://yourclu
 
 That CLI invocation is configured as followed:
 
-* The data lake checkpoint blobs are staging blob folders are located at https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 * The source cluster is https://mycluster.eastus.kusto.windows.net
     * The source database is mydb
     * The source table is mytable
 * The destination cluster is https://yourcluster.eastus.kusto.windows.net
     * The destination database is yourdb
     * The destination table is mytable (implicitly takes the same value as the source if not specified)
+* The data lake checkpoint blobs are staging blob folders are located at https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 * It will use the "current user" authentication to run queries / commands on both clusters
 
 ## Limitations
@@ -42,7 +46,7 @@ That CLI invocation is configured as followed:
 Known limitations:
 
 *   Bound by source cluster's export capacity and the destination cluster's ingestion capacity
-*   The tool doesn't track row deletions / updates, extent drops or purges
+*   The tool doesn't track row deletions / updates, extent drops or purges:  it leverages native Kusto data export & cursors which tracks only new data
 
 # Documentation
 
