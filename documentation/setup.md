@@ -21,20 +21,66 @@ Download the package matching the OS you want to run on (Linux / Mac OS / Window
 
 Kusto Copy runs with an Azure Entra ID identity which identity will:
 
-* Execute queries on the source database:  it needs the *viewer* role on the source database
-* Ingest data, create temporary tables and run queries on the destination database:  it needs *admin* role on the destination database
-* Export data to the ADLS gen 2 storage account and generate SAS tokens on those blobs:  it needs *XYZ* role on the storage container
+* Execute queries on the source database
+* Ingest data, create temporary tables and run queries on the destination database
+* Generate read / write SAS tokens in ADLS gen 2 storage container to export data and have it read for ingestion
 
  By default, the identity of the user logged into Azure CLI.  In general, that is **your identity**.
 
 ### Source Database permissions
 
-There are two ways to assign the viewer role to a principal
+There are two ways to assign the **viewer role** to a principal:
+
+* Control Plane
+    * You can do it from the portal via the permission pane
+    * Through Azure CLI
+    * Through PowerShell
+* Data Plane
+    * By [running KQL commands](https://learn.microsoft.com/en-us/kusto/management/manage-database-security-roles?view=azure-data-explorer)
+
+Although this permission can be assigned at the cluster level, the minimum permission requires to be at the database level.
 
 ### Destination Database permissions
 
+You need to assign the **admin** permisison at the database level.
+
+See previous section on how.
+
 ### ADLS Gen2 container permissions
+
+You need to assign Azure RBAC role **Storage Blob Delegator** on the ADLS gen 2 container.
+
+## Preparing the destination table
+
+Kusto Copy **does not** create the destination table:  it expects it to be present with a schema compatible with what is exported from the source table.
 
 ## Running the tool
 
+Here is an example:
+
+```
+kc -s https://mycluster.eastus.kusto.windows.net/mydb/mytable -d https://yourcluster.eastus.kusto.windows.net/yourdb/ -t https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
+```
+
+The parameters are the following:
+
+Parameter|Mandatory|Description|Example
+-|-|-|-
+Source (-s)|x|Source database|https://mycluster.eastus.kusto.windows.net/mydb/mytable
+Destination (-d)|x|Destination database or table|https://yourcluster.eastus.kusto.windows.net/yourdb or https://yourcluster.eastus.kusto.windows.net/yourdb/mytable
+Staging Storage (-t)|x|ADLS gen 2 container|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
+Query (-d)||Optional query|"\| where Level == 'error'"
+
+A couple of comments:
+
+* The source always point to table using the notation \<cluster URI\>/\<database name\>/<\table name\>
+* The destination can either be:
+  * A table using the notation \<cluster URI\>/\<database name\>/<\table name\>
+  * A database using the notation \<cluster URI\>/\<database name\>
+* When the destination only specifies a database, the table name is infered from the source's table name
+* The staging storage points to a container:  not only the storage account URL, but the container's URL
+* A query is optional and allow you to transform the source table (e.g. filtering, projecting only some columns, etc.)
+
 ## Validating the copy
+
+You should always validate the copy.  You can do this by looking at the number of rows but also by doing some sort of aggregation that returns a small amount of rows (or even just one number, e.g. the average of a column) you can compare with the source table.
