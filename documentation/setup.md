@@ -23,7 +23,7 @@ Kusto Copy runs with an Azure Entra ID identity which identity will:
 
 * Execute queries on the source database
 * Ingest data, create temporary tables and run queries on the destination database
-* Generate read / write SAS tokens in ADLS gen 2 storage container to export data and have it read for ingestion
+* Generate read / write SAS tokens in ADLS gen 2 storage container to export data and have it read for ingestion & also write directly audit blobs
 
  By default, the identity of the user logged into Azure CLI.  In general, that is **your identity**.
 
@@ -48,7 +48,7 @@ See previous section on how.
 
 ### ADLS Gen2 container permissions
 
-You need to assign Azure RBAC role **Storage Blob Delegator** on the ADLS gen 2 container.
+You need to assign Azure RBAC roles **Storage Blob Delegator** & **Storage Blob Data Contributor** on the ADLS gen 2 container.
 
 ## Preparing the destination table
 
