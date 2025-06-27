@@ -9,6 +9,6 @@ namespace KustoCopyConsole.Kusto.Data
     internal record RecordDistribution(
         DateTime IngestionTimeStart,
         DateTime IngestionTimeEnd,
-        string ExtentId,
-        long RowCount);
+        long RowCount,
+        DateTime? CreatedOn);
 }

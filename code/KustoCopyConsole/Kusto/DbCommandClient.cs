@@ -148,35 +148,6 @@ let ['{tableName}'] = ['{tableName}']
                 });
         }
 
-        public async Task<IImmutableList<ExtentDate>> GetExtentDatesAsync(
-            KustoPriority priority,
-            string tableName,
-            IEnumerable<string> extentIds,
-            CancellationToken ct)
-        {
-            return await _commandQueue.RequestRunAsync(
-                priority,
-                async () =>
-                {
-                    var extentList = string.Join(", ", extentIds);
-                    var commandText = @$"
-.show table ['{tableName}'] extents ({extentList})
-| project ExtentId=tostring(ExtentId), MinCreatedOn";
-                    var properties = new ClientRequestProperties();
-                    var reader = await _provider.ExecuteControlCommandAsync(
-                        DatabaseName,
-                        commandText,
-                        properties);
-                    var result = reader
-                        .ToEnumerable(r => new ExtentDate(
-                            (string)(r[0]),
-                            (DateTime)(r[1])))
-                        .ToImmutableArray();
-
-                    return result;
-                });
-        }
-
         public async Task<IImmutableList<ExportDetail>> ShowExportDetailsAsync(
             KustoPriority priority,
             string operationId,

@@ -141,7 +141,6 @@ namespace KustoCopyConsole.Runner
             DateTime? nextIngestionTimeStart);
         #endregion
 
-        private const int MAX_STATS_COUNT = 250000;
         private const long RECORDS_PER_BLOCK = 1048576;
 
         public PlanningRunner(
@@ -284,7 +283,8 @@ namespace KustoCopyConsole.Runner
                         activityItem,
                         activityParam,
                         iterationItem,
-                        ingestionTimeInterval,
+                        ingestionTimeInterval.MinIngestionTime.Value,
+                        ingestionTimeInterval.MaxIngestionTime.Value,
                         ct);
                 }
             }
@@ -296,7 +296,8 @@ namespace KustoCopyConsole.Runner
             ActivityRowItem activityItem,
             ActivityParameterization activityParam,
             IterationRowItem iterationItem,
-            IngestionTimeInterval ingestionTimeInterval,
+            DateTime minIngestionTime,
+            DateTime maxIngestionTime,
             CancellationToken ct)
         {
             var protoBlocks = ProtoBlockCollection.Empty;
@@ -311,11 +312,16 @@ namespace KustoCopyConsole.Runner
                 var lastBlock = blockMap.Any()
                     ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                     : null;
+                var lowerIngestionTime = protoBlocks.LastIngestionTimeEnd()
+                    //  Since lower time is excluded...
+                    ?? minIngestionTime.Subtract(TimeSpan.FromHours(1));
+                var upperIngestionTime = lowerIngestionTime.AddDays(1);
                 var newProtoBlocks = await GetProtoBlockAsync(
                     activityItem,
                     iterationItem,
                     activityParam,
-                    protoBlocks.LastIngestionTimeEnd() ?? lastBlock?.IngestionTimeEnd,
+                    lowerIngestionTime,
+                    upperIngestionTime,
                     queryClient,
                     dbCommandClient,
                     ct);
@@ -383,7 +389,8 @@ namespace KustoCopyConsole.Runner
             ActivityRowItem activityItem,
             IterationRowItem iterationItem,
             ActivityParameterization activityParam,
-            DateTime? ingestionTimeStart,
+            DateTime lowerIngestionTime,
+            DateTime upperIngestionTime,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)
@@ -394,56 +401,40 @@ namespace KustoCopyConsole.Runner
                 activityParam.KqlQuery,
                 iterationItem.CursorStart,
                 iterationItem.CursorEnd,
-                ingestionTimeStart,
-                MAX_STATS_COUNT,
+                lowerIngestionTime,
+                upperIngestionTime,
+                RECORDS_PER_BLOCK,
                 ct);
 
-            if (distributions.Any())
+            //  Check for racing condition where extents got merged and extent ids didn't exist
+            //  when retrieving extent creation date
+            if (distributions.Any(d => d.CreatedOn == null))
             {
-                var extentIds = distributions
-                    .Select(d => d.ExtentId)
-                    //  Exclude the empty extent-id (for row-store rows)
-                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct();
-                var extentDates = await dbCommandClient.GetExtentDatesAsync(
-                    new KustoPriority(iterationItem.GetIterationKey()),
-                    activityItem.SourceTable.TableName,
-                    extentIds,
+                return await GetProtoBlockAsync(
+                    activityItem,
+                    iterationItem,
+                    activityParam,
+                    lowerIngestionTime,
+                    upperIngestionTime,
+                    queryClient,
+                    dbCommandClient,
                     ct);
-                var extentDateMap = extentDates
-                    .ToImmutableDictionary(e => e.ExtentId, e => e.MinCreatedOn);
+            }
+            else if (distributions.Any())
+            {
+                var protoBlocks = distributions
+                    .Select(d =>
+                    {
+                        return new ProtoBlock(
+                            d.IngestionTimeStart,
+                            d.IngestionTimeEnd,
+                            d.RowCount,
+                            d.CreatedOn!.Value,
+                            d.CreatedOn!.Value);
+                    })
+                    .ToImmutableArray();
 
-                //  Check for racing condition where extents got merged and extent ids don't exist
-                //  between 2 queries
-                if (extentDates.Count == extentIds.Count())
-                {
-                    var protoBlocks = distributions
-                        .Select(d =>
-                        {
-                            extentDateMap.TryGetValue(d.ExtentId, out DateTime creationTime);
-
-                            return new ProtoBlock(
-                                d.IngestionTimeStart,
-                                d.IngestionTimeEnd,
-                                d.RowCount,
-                                creationTime,
-                                creationTime);
-                        })
-                        .ToImmutableArray();
-
-                    return protoBlocks;
-                }
-                else
-                {
-                    return await GetProtoBlockAsync(
-                        activityItem,
-                        iterationItem,
-                        activityParam,
-                        ingestionTimeStart,
-                        queryClient,
-                        dbCommandClient,
-                        ct);
-                }
+                return protoBlocks;
             }
             else
             {
