@@ -81,6 +81,54 @@ BaseData
                 });
         }
 
+        public async Task<IngestionTimeInterval> GetIngestionTimeIntervalAsync(
+            KustoPriority priority,
+            string tableName,
+            string? kqlQuery,
+            string cursorStart,
+            string cursorEnd,
+            CancellationToken ct)
+        {
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    const string CURSOR_START_PARAM = "CursorStart";
+                    const string CURSOR_END_PARAM = "CursorEnd";
+
+                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    ? string.Empty
+                    : $"| where cursor_after({CURSOR_START_PARAM})";
+                    var query = @$"
+declare query_parameters({CURSOR_START_PARAM}:string, {CURSOR_END_PARAM}:string);
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at({CURSOR_END_PARAM})
+    {kqlQuery}
+;
+BaseData
+| summarize MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+";
+                    var properties = new ClientRequestProperties();
+
+                    properties.SetParameter(CURSOR_START_PARAM, cursorStart);
+                    properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
+
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        properties,
+                        ct);
+                    var result = reader
+                        .ToEnumerable(r => new IngestionTimeInterval(
+                            r["MinIngestionTime"].To<DateTime>(),
+                            r["MaxIngestionTime"].To<DateTime>()))
+                        .First();
+
+                    return result;
+                });
+        }
+
         public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
             KustoPriority priority,
             string tableName,

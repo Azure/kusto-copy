@@ -3,6 +3,7 @@ using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -255,6 +256,49 @@ namespace KustoCopyConsole.Runner
             IterationRowItem iterationItem,
             CancellationToken ct)
         {
+            if (iterationItem.State == IterationState.Planning)
+            {
+                var activityItem = RowItemGateway.InMemoryCache
+                    .ActivityMap[iterationItem.ActivityName]
+                    .RowItem;
+                var activityParam = Parameterization.Activities[iterationItem.ActivityName];
+                var ingestionTimeInterval = await queryClient.GetIngestionTimeIntervalAsync(
+                    new KustoPriority(iterationItem.GetIterationKey()),
+                    activityItem.SourceTable.TableName,
+                    activityParam.KqlQuery,
+                    iterationItem.CursorStart,
+                    iterationItem.CursorEnd,
+                    ct);
+
+                if (ingestionTimeInterval.MinIngestionTime == null
+                    || ingestionTimeInterval.MaxIngestionTime == null)
+                {
+                    iterationItem = iterationItem.ChangeState(IterationState.Completed);
+                    RowItemGateway.Append(iterationItem);
+                }
+                else
+                {
+                    await PlanBlocksInIntervalAsync(
+                        queryClient,
+                        dbCommandClient,
+                        activityItem,
+                        activityParam,
+                        iterationItem,
+                        ingestionTimeInterval,
+                        ct);
+                }
+            }
+        }
+
+        private async Task PlanBlocksInIntervalAsync(
+            DbQueryClient queryClient,
+            DbCommandClient dbCommandClient,
+            ActivityRowItem activityItem,
+            ActivityParameterization activityParam,
+            IterationRowItem iterationItem,
+            IngestionTimeInterval ingestionTimeInterval,
+            CancellationToken ct)
+        {
             var protoBlocks = ProtoBlockCollection.Empty;
 
             //  Loop on block batches
@@ -268,7 +312,9 @@ namespace KustoCopyConsole.Runner
                     ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                     : null;
                 var newProtoBlocks = await GetProtoBlockAsync(
+                    activityItem,
                     iterationItem,
+                    activityParam,
                     protoBlocks.LastIngestionTimeEnd() ?? lastBlock?.IngestionTimeEnd,
                     queryClient,
                     dbCommandClient,
@@ -334,16 +380,14 @@ namespace KustoCopyConsole.Runner
 
         //  Merge results from query + show extents command
         private async Task<IImmutableList<ProtoBlock>> GetProtoBlockAsync(
+            ActivityRowItem activityItem,
             IterationRowItem iterationItem,
+            ActivityParameterization activityParam,
             DateTime? ingestionTimeStart,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)
         {
-            var activityItem = RowItemGateway.InMemoryCache
-                .ActivityMap[iterationItem.ActivityName]
-                .RowItem;
-            var activityParam = Parameterization.Activities[iterationItem.ActivityName];
             var distributions = await queryClient.GetRecordDistributionAsync(
                 new KustoPriority(iterationItem.GetIterationKey()),
                 activityItem.SourceTable.TableName,
@@ -392,7 +436,9 @@ namespace KustoCopyConsole.Runner
                 else
                 {
                     return await GetProtoBlockAsync(
+                        activityItem,
                         iterationItem,
+                        activityParam,
                         ingestionTimeStart,
                         queryClient,
                         dbCommandClient,
