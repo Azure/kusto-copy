@@ -3,7 +3,6 @@ using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -15,17 +14,23 @@ namespace KustoCopyConsole.Runner
     {
         #region Inner Types
         private record ProtoBlock(
-            DateTime IngestionTimeStart,
-            DateTime IngestionTimeEnd,
+            string IngestionTimeStart,
+            string IngestionTimeEnd,
             long RowCount,
             DateTime MinCreationTime,
             DateTime MaxCreationTime)
         {
+            /// <summary>
+            /// This must importantly be called with the "earlier" proto block first
+            /// so the ingestion time end up in order i.e. start <= end
+            /// </summary>
+            /// <param name="other"></param>
+            /// <returns></returns>
             public ProtoBlock Merge(ProtoBlock other)
             {
                 return new ProtoBlock(
-                    Min(IngestionTimeStart, other.IngestionTimeStart),
-                    Max(IngestionTimeEnd, other.IngestionTimeEnd),
+                    IngestionTimeStart,
+                    other.IngestionTimeEnd,
                     RowCount + other.RowCount,
                     Min(MinCreationTime, MaxCreationTime),
                     Max(MinCreationTime, MaxCreationTime));
@@ -46,7 +51,7 @@ namespace KustoCopyConsole.Runner
 
         private class ProtoBlockCollection
         {
-            private readonly IImmutableList<ProtoBlock> _completedBlocks;
+            private readonly ImmutableArray<ProtoBlock> _completedBlocks;
             private readonly ProtoBlock? _remainingBlock;
 
             private ProtoBlockCollection(
@@ -60,16 +65,13 @@ namespace KustoCopyConsole.Runner
             public static ProtoBlockCollection Empty { get; }
                 = new(Array.Empty<ProtoBlock>(), null);
 
-            public DateTime? LastIngestionTimeEnd()
+            public string? LastIngestionTimeEnd()
             {
                 var allBlocks = _remainingBlock == null
                     ? _completedBlocks
-                    : _completedBlocks.Append(_remainingBlock);
-                var lastIngestionTimeEndBlock = allBlocks.Any()
-                    ? allBlocks.ArgMax(b => b.IngestionTimeEnd)
-                    : null;
+                    : _completedBlocks.Prepend(_remainingBlock);
 
-                return lastIngestionTimeEndBlock?.IngestionTimeEnd;
+                return allBlocks.LastOrDefault()?.IngestionTimeEnd;
             }
 
             public ProtoBlockCollection Add(IEnumerable<ProtoBlock> blocks)
@@ -78,11 +80,9 @@ namespace KustoCopyConsole.Runner
                     ? blocks
                     : blocks.Prepend(_remainingBlock);
 
-                //  We sort descending since the stack serves them upside-down
-                var stack = new Stack<ProtoBlock>(remainingBlocks
-                    .OrderByDescending(d => d.IngestionTimeStart)
-                    .ThenByDescending(d => d.IngestionTimeEnd));
-                var completedBlocks = new List<ProtoBlock>(_completedBlocks);
+                //  We reverse since the stack serves them upside-down
+                var stack = new Stack<ProtoBlock>(remainingBlocks.Reverse());
+                var completedBlocks = _completedBlocks.ToBuilder();
 
                 while (stack.Any())
                 {
@@ -269,9 +269,9 @@ namespace KustoCopyConsole.Runner
                     iterationItem.CursorEnd,
                     ct);
 
-                if (ingestionTimeInterval.MinIngestionTime == null
-                    || ingestionTimeInterval.MaxIngestionTime == null)
-                {
+                if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
+                    || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
+                {   //  No ingestion time:  either no rows or no rows with ingestion time
                     iterationItem = iterationItem.ChangeState(IterationState.Completed);
                     RowItemGateway.Append(iterationItem);
                 }
@@ -283,8 +283,8 @@ namespace KustoCopyConsole.Runner
                         activityItem,
                         activityParam,
                         iterationItem,
-                        ingestionTimeInterval.MinIngestionTime.Value,
-                        ingestionTimeInterval.MaxIngestionTime.Value,
+                        ingestionTimeInterval.MinIngestionTime,
+                        ingestionTimeInterval.MaxIngestionTime,
                         ct);
                 }
             }
@@ -296,8 +296,8 @@ namespace KustoCopyConsole.Runner
             ActivityRowItem activityItem,
             ActivityParameterization activityParam,
             IterationRowItem iterationItem,
-            DateTime minIngestionTime,
-            DateTime maxIngestionTime,
+            string minIngestionTimeText,
+            string maxIngestionTimeText,
             CancellationToken ct)
         {
             var protoBlocks = ProtoBlockCollection.Empty;
@@ -313,15 +313,13 @@ namespace KustoCopyConsole.Runner
                     ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                     : null;
                 var lowerIngestionTime = protoBlocks.LastIngestionTimeEnd()
-                    //  Since lower time is excluded...
-                    ?? minIngestionTime.Subtract(TimeSpan.FromHours(1));
-                var upperIngestionTime = lowerIngestionTime.AddDays(1);
+                    ?? minIngestionTimeText;
                 var newProtoBlocks = await GetProtoBlockAsync(
                     activityItem,
                     iterationItem,
                     activityParam,
+                    protoBlocks.LastIngestionTimeEnd(),
                     lowerIngestionTime,
-                    upperIngestionTime,
                     queryClient,
                     dbCommandClient,
                     ct);
@@ -365,20 +363,21 @@ namespace KustoCopyConsole.Runner
 
             foreach (var block in blocks)
             {
-                var blockItem = new BlockRowItem
-                {
-                    State = BlockState.Planned,
-                    ActivityName = activityName,
-                    IterationId = iterationId,
-                    BlockId = ++lastBlockId,
-                    IngestionTimeStart = block.IngestionTimeStart,
-                    IngestionTimeEnd = block.IngestionTimeEnd,
-                    MinCreationTime = block.MinCreationTime,
-                    MaxCreationTime = block.MaxCreationTime,
-                    PlannedRowCount = block.RowCount
-                };
+                throw new NotImplementedException();
+                //var blockItem = new BlockRowItem
+                //{
+                //    State = BlockState.Planned,
+                //    ActivityName = activityName,
+                //    IterationId = iterationId,
+                //    BlockId = ++lastBlockId,
+                //    //IngestionTimeStart = block.IngestionTimeStart,
+                //    //IngestionTimeEnd = block.IngestionTimeEnd,
+                //    MinCreationTime = block.MinCreationTime,
+                //    MaxCreationTime = block.MaxCreationTime,
+                //    PlannedRowCount = block.RowCount
+                //};
 
-                RowItemGateway.Append(blockItem);
+                //RowItemGateway.Append(blockItem);
             }
 
             return newProtoBlocks;
@@ -389,8 +388,8 @@ namespace KustoCopyConsole.Runner
             ActivityRowItem activityItem,
             IterationRowItem iterationItem,
             ActivityParameterization activityParam,
-            DateTime lowerIngestionTime,
-            DateTime upperIngestionTime,
+            string? lastIngestionTime,
+            string lowerIngestionTime,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)
@@ -401,8 +400,8 @@ namespace KustoCopyConsole.Runner
                 activityParam.KqlQuery,
                 iterationItem.CursorStart,
                 iterationItem.CursorEnd,
+                lastIngestionTime,
                 lowerIngestionTime,
-                upperIngestionTime,
                 RECORDS_PER_BLOCK,
                 ct);
 
@@ -414,8 +413,8 @@ namespace KustoCopyConsole.Runner
                     activityItem,
                     iterationItem,
                     activityParam,
+                    lastIngestionTime,
                     lowerIngestionTime,
-                    upperIngestionTime,
                     queryClient,
                     dbCommandClient,
                     ct);

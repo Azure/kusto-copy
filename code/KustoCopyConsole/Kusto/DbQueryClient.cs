@@ -97,36 +97,28 @@ BaseData
                 priority,
                 async () =>
                 {
-                    const string CURSOR_START_PARAM = "CursorStart";
-                    const string CURSOR_END_PARAM = "CursorEnd";
-
                     var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
                     ? string.Empty
-                    : $"| where cursor_after({CURSOR_START_PARAM})";
+                    : $"| where cursor_after('{cursorStart}')";
                     var query = @$"
-declare query_parameters({CURSOR_START_PARAM}:string, {CURSOR_END_PARAM}:string);
 let BaseData = ['{tableName}']
     {cursorStartFilter}
-    | where cursor_before_or_at({CURSOR_END_PARAM})
-    {kqlQuery}
-;
+    | where cursor_before_or_at('{cursorEnd}')
+    {kqlQuery};
 BaseData
-| summarize MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+| summarize
+    MinIngestionTime=tostring(min(ingestion_time())),
+    MaxIngestionTime=tostring(max(ingestion_time()))
 ";
-                    var properties = new ClientRequestProperties();
-
-                    properties.SetParameter(CURSOR_START_PARAM, cursorStart);
-                    properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
-
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
-                        properties,
+                        EMPTY_PROPERTIES,
                         ct);
                     var result = reader
                         .ToEnumerable(r => new IngestionTimeInterval(
-                            r["MinIngestionTime"].To<DateTime>(),
-                            r["MaxIngestionTime"].To<DateTime>()))
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"]))
                         .First();
 
                     return result;
@@ -140,9 +132,9 @@ BaseData
             string cursorStart,
             string cursorEnd,
             //  This is excluded
-            DateTime lowerIngestionTime,
-            //  This is included
-            DateTime upperIngestionTime,
+            string? lastIngestionTime,
+            //  This is used to compute the upper bound
+            string lowerIngestionTime,
             long maxRowCount,
             CancellationToken ct)
         {
@@ -150,25 +142,24 @@ BaseData
                 priority,
                 async () =>
                 {
-                    const string LOWER_INGESTION_TIME_PARAM = "LowerIngestionTime";
-                    const string UPPER_INGESTION_TIME_PARAM = "UpperIngestionTime";
                     const int MAX_INTERVAL_COUNT = 25000;
 
                     var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
                     var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
                     ? string.Empty
                     : $@"| where cursor_after(""{cursorStart}"")";
+                    var lowerIngestionTimeFilter = string.IsNullOrWhiteSpace(lastIngestionTime)
+                    ? string.Empty
+                    : $@"| where ingestion_time()>todatetime('{lastIngestionTime}')";
                     var query = @$"
-declare query_parameters(
-    {LOWER_INGESTION_TIME_PARAM}:datetime,
-    {UPPER_INGESTION_TIME_PARAM}:datetime);
 let MaxIntervalCount = {MAX_INTERVAL_COUNT};
 let MaxRowCount = {maxRowCount};
+let upperIngestionTimeFilter = todatetime('{lowerIngestionTime}')+1d;
 let BaseData = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at(""{cursorEnd}"")
-    | where ingestion_time()>todatetime({LOWER_INGESTION_TIME_PARAM})
-    | where ingestion_time()<=todatetime({UPPER_INGESTION_TIME_PARAM})
+    {lowerIngestionTimeFilter}
+    | where ingestion_time()<=upperIngestionTimeFilter
     {kqlQuery}
     ;
 //  Fetch a batch of ingestion-time interval with extent IDs
@@ -187,6 +178,7 @@ let ExtentsWithIngestionTimeIntervals = materialize(BaseData
     | extend ExtentId=tostring(ExtentId));
 //  Build a .show command to get the extent id creation time
 let ExtentIds = ExtentsWithIngestionTimeIntervals
+    | distinct ExtentId
     | summarize make_list(ExtentId);
 let ShowCommand = strcat(
     "".show table ['{tableName}'] extents ("",
@@ -209,25 +201,23 @@ ExtentsWithIngestionTimeIntervals
             GroupId = iff(s.PrevDay == DayCreatedOn and s.RunningSum + RowCount <= MaxRowCount, s.GroupId, s.GroupId+1),
             PrevDay=DayCreatedOn;
     )
-| summarize IngestionTimeStart=min(IngestionTimeStart), IngestionTimeEnd=max(IngestionTimeEnd),
-    RowCount=sum(RowCount), CreatedOn=min(CreatedOn), MaxIntervalNumber=max(MaxIntervalNumber) by GroupId
+| summarize
+    IngestionTimeStart=tostring(min(IngestionTimeStart)),
+    IngestionTimeEnd=tostring(max(IngestionTimeEnd)),
+    RowCount=sum(RowCount), CreatedOn=min(CreatedOn), MaxIntervalNumber=max(MaxIntervalNumber)
+    by GroupId
 | project-away GroupId
 ";
-                    var properties = new ClientRequestProperties();
-
-                    properties.SetParameter(LOWER_INGESTION_TIME_PARAM, lowerIngestionTime);
-                    properties.SetParameter(UPPER_INGESTION_TIME_PARAM, upperIngestionTime);
-
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
-                        properties,
+                        EMPTY_PROPERTIES,
                         ct);
                     var intervals = reader
                         .ToEnumerable(r => new
                         {
-                            IngestionTimeStart = (DateTime)r["IngestionTimeStart"],
-                            IngestionTimeEnd = (DateTime)r["IngestionTimeEnd"],
+                            IngestionTimeStart = (string)r["IngestionTimeStart"],
+                            IngestionTimeEnd = (string)r["IngestionTimeEnd"],
                             RowCount = (long)r["RowCount"],
                             CreatedOn = r["CreatedOn"].To<DateTime>(),
                             MaxIntervalNumber = (long)r["MaxIntervalNumber"]

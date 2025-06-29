@@ -6,5 +6,10 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto.Data
 {
-    internal record IngestionTimeInterval(DateTime? MinIngestionTime, DateTime? MaxIngestionTime);
+    /// <summary>
+    /// Date time are exposed as text to avoid conversion in .NET losing precision.
+    /// </summary>>
+    /// <param name="MinIngestionTime"></param>
+    /// <param name="MaxIngestionTime"></param>
+    internal record IngestionTimeInterval(string MinIngestionTime, string MaxIngestionTime);
 }
