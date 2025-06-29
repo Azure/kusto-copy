@@ -164,6 +164,7 @@ namespace KustoCopyConsole.Runner
                             activityParam,
                             lastBlock?.IngestionTimeEnd.ToString(),
                             lastBlock?.IngestionTimeEnd.ToString() ?? ingestionTimeInterval.MinIngestionTime,
+                            ingestionTimeInterval.MaxIngestionTime,
                             queryClient,
                             dbCommandClient,
                             ct);
@@ -172,17 +173,18 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task PlanBlocksBatchAsync(
+        private async Task<bool> PlanBlocksBatchAsync(
             ActivityRowItem activityItem,
             IterationRowItem iterationItem,
             ActivityParameterization activityParam,
             string? lastIngestionTime,
             string lowerIngestionTime,
+            string upperIngestionTime,
             DbQueryClient queryClient,
             DbCommandClient dbCommandClient,
             CancellationToken ct)
         {
-            var distributions = await queryClient.GetRecordDistributionAsync(
+            var distribution = await queryClient.GetRecordDistributionAsync(
                 new KustoPriority(iterationItem.GetIterationKey()),
                 activityItem.SourceTable.TableName,
                 activityParam.KqlQuery,
@@ -190,24 +192,26 @@ namespace KustoCopyConsole.Runner
                 iterationItem.CursorEnd,
                 lastIngestionTime,
                 lowerIngestionTime,
+                upperIngestionTime,
                 RECORDS_PER_BLOCK,
                 ct);
 
             //  Check for racing condition where extents got merged and extent ids didn't exist
             //  when retrieving extent creation date
-            if (distributions.Any(d => d.MinCreatedOn == null))
+            if (distribution.RecordGroups.Any(d => d.MinCreatedOn == null))
             {
-                await PlanBlocksBatchAsync(
+                return await PlanBlocksBatchAsync(
                     activityItem,
                     iterationItem,
                     activityParam,
                     lastIngestionTime,
                     lowerIngestionTime,
+                    upperIngestionTime,
                     queryClient,
                     dbCommandClient,
                     ct);
             }
-            else if (distributions.Any())
+            else if (distribution.RecordGroups.Any())
             {
                 //var blockItem = new BlockRowItem
                 //{
@@ -223,6 +227,8 @@ namespace KustoCopyConsole.Runner
                 //};
                 throw new NotImplementedException();
             }
+
+            return distribution.HasReachedUpperIngestionTime;
         }
     }
 }

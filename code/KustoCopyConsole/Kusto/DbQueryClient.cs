@@ -125,7 +125,7 @@ BaseData
                 });
         }
 
-        public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
+        public async Task<RecordDistribution> GetRecordDistributionAsync(
             KustoPriority priority,
             string tableName,
             string? kqlQuery,
@@ -135,6 +135,7 @@ BaseData
             string? lastIngestionTime,
             //  This is used to compute the upper bound
             string lowerIngestionTime,
+            string upperIngestionTime,
             long maxRowCount,
             CancellationToken ct)
         {
@@ -155,12 +156,13 @@ BaseData
                     var query = @$"
 let MaxIntervalCount = {MAX_INTERVAL_COUNT};
 let MaxRowCount = {maxRowCount};
-let upperIngestionTimeFilter = todatetime('{lowerIngestionTime}')+1d;
+let TimeHorizon = 1d;
+let UpperIngestionTimeFilter = todatetime('{lowerIngestionTime}')+TimeHorizon;
 let BaseData = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at(""{cursorEnd}"")
     {lowerIngestionTimeFilter}
-    | where ingestion_time()<=upperIngestionTimeFilter
+    | where ingestion_time()<=UpperIngestionTimeFilter
     {kqlQuery}
     ;
 //  Fetch a batch of ingestion-time interval with extent IDs
@@ -218,15 +220,19 @@ ExtentsWithIngestionTimeIntervals
     IngestionTimeEnd=tostring(max(IngestionTimeEnd)),
     RowCount=sum(RowCount), MinCreatedOn=min(CreatedOn), MaxCreatedOn=max(CreatedOn)
     by GroupId
-| project-away GroupId
+| project-away GroupId;
+print todatetime('{upperIngestionTime}') <=
+    coalesce(
+        toscalar(ExtentsWithIngestionTimeIntervals | summarize max(IngestionTimeEnd)),
+        UpperIngestionTimeFilter);
 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
                         EMPTY_PROPERTIES,
                         ct);
-                    var intervals = reader
-                        .ToEnumerable(r => new RecordDistribution(
+                    var groups = reader
+                        .ToEnumerable(r => new RecordGroup(
                             (string)r["IngestionTimeStart"],
                             (string)r["IngestionTimeEnd"],
                             (long)r["RowCount"],
@@ -234,7 +240,12 @@ ExtentsWithIngestionTimeIntervals
                             r["MaxCreatedOn"].To<DateTime>()))
                         .ToImmutableArray();
 
-                    return intervals;
+                    reader.NextResult();
+
+                    var hasReachedUpperIngestionTime =
+                        Convert.ToBoolean(reader.ToScalar<sbyte>());
+
+                    return new RecordDistribution(groups, hasReachedUpperIngestionTime);
                 });
         }
     }

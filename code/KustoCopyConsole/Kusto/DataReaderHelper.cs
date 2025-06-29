@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Kusto
             }
         }
 
-        public static T GetScalar<T>(this IDataReader reader)
+        public static T ToScalar<T>(this IDataReader reader)
         {
             if (reader.Read())
             {
