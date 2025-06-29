@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Runner
 {
     internal class PlanningRunner : RunnerBase
     {
-        private const long RECORDS_PER_BLOCK = 8*1048576;
+        private const long RECORDS_PER_BLOCK = 8 * 1048576;
 
         public PlanningRunner(
             MainJobParameterization parameterization,
@@ -157,8 +157,7 @@ namespace KustoCopyConsole.Runner
                         var lastBlock = blockMap.Any()
                             ? blockMap.Values.ArgMax(b => b.RowItem.BlockId).RowItem
                             : null;
-                        
-                        await PlanBlocksBatchAsync(
+                        var hasReachedUpperIngestionTime = await PlanBlocksBatchAsync(
                             activityItem,
                             iterationItem,
                             activityParam,
@@ -168,6 +167,13 @@ namespace KustoCopyConsole.Runner
                             queryClient,
                             dbCommandClient,
                             ct);
+
+                        if (hasReachedUpperIngestionTime)
+                        {
+                            RowItemGateway.Append(iterationItem.ChangeState(IterationState.Planned));
+
+                            return;
+                        }
                     }
                 }
             }
