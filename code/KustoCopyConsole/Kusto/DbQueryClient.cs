@@ -141,7 +141,8 @@ BaseData
             return await _queue.RequestRunAsync(
                 priority,
                 async () =>
-                {
+                {   //  Max interval is based on the string size of the extent IDs
+                    //  They must all fit in a string for the .show command
                     const int MAX_INTERVAL_COUNT = 25000;
 
                     var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
@@ -163,6 +164,7 @@ let BaseData = ['{tableName}']
     {kqlQuery}
     ;
 //  Fetch a batch of ingestion-time interval with extent IDs
+//  Do a first pass by merging ingestion time in the same extent id (regardless of row count)
 let ExtentsWithIngestionTimeIntervals = materialize(BaseData
     | summarize RowCount=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
     //  We top number of intervals so the list of extent ids can fit in a 1MB string
@@ -174,7 +176,10 @@ let ExtentsWithIngestionTimeIntervals = materialize(BaseData
         ExtentId=take_any(ExtentId), RowCount=sum(RowCount),
         MaxIntervalNumber=max(IntervalNumber)
         by Rank
-    | project-away Rank
+    //  We clip the MAX_INTERVAL_COUNT's interval as it may contain only parts of the
+    //  data pertaining to its ingestion_time
+    | where MaxIntervalNumber!={MAX_INTERVAL_COUNT}
+    | project-away Rank, MaxIntervalNumber
     | extend ExtentId=tostring(ExtentId));
 //  Build a .show command to get the extent id creation time
 let ExtentIds = ExtentsWithIngestionTimeIntervals
@@ -188,23 +193,30 @@ let ShowCommand = strcat(
 let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
     | extend ExtentId=tostring(ExtentId)
     | project-rename CreatedOn=MinCreatedOn;
-//  Join the two information and merge intervals for creation time within the same day
+//  Join the two information and merge intervals for creation time within the same hour
+//  (while keeping row count under a threshold)
 ExtentsWithIngestionTimeIntervals
 | lookup kind=leftouter ExtentIdCreationTime on ExtentId
-| extend DayCreatedOn=bin(CreatedOn, 1d)
+| extend GroupCreatedOn=bin(CreatedOn, 1d)
 | order by IngestionTimeStart asc, IngestionTimeEnd asc
 //  Fuse the records together
-| scan declare (GroupId:long = 1, RunningSum:long = 0, PrevDay:datetime = datetime(null))
+| scan declare (GroupId:long = 1, RunningSum:long = 0, PrevGroup:datetime = datetime(null))
     with (
         step s: true => 
-            RunningSum = iff(s.PrevDay == DayCreatedOn and s.RunningSum + RowCount <= MaxRowCount, s.RunningSum + RowCount, RowCount),
-            GroupId = iff(s.PrevDay == DayCreatedOn and s.RunningSum + RowCount <= MaxRowCount, s.GroupId, s.GroupId+1),
-            PrevDay=DayCreatedOn;
+            RunningSum = iff(
+                s.PrevGroup == GroupCreatedOn and s.RunningSum + RowCount <= MaxRowCount,
+                s.RunningSum + RowCount,
+                RowCount),
+            GroupId = iff(
+                s.PrevGroup == GroupCreatedOn and s.RunningSum + RowCount <= MaxRowCount,
+                s.GroupId,
+                s.GroupId+1),
+            PrevGroup=GroupCreatedOn;
     )
 | summarize
     IngestionTimeStart=tostring(min(IngestionTimeStart)),
     IngestionTimeEnd=tostring(max(IngestionTimeEnd)),
-    RowCount=sum(RowCount), CreatedOn=min(CreatedOn), MaxIntervalNumber=max(MaxIntervalNumber)
+    RowCount=sum(RowCount), MinCreatedOn=min(CreatedOn), MaxCreatedOn=max(CreatedOn)
     by GroupId
 | project-away GroupId
 ";
@@ -214,24 +226,15 @@ ExtentsWithIngestionTimeIntervals
                         EMPTY_PROPERTIES,
                         ct);
                     var intervals = reader
-                        .ToEnumerable(r => new
-                        {
-                            IngestionTimeStart = (string)r["IngestionTimeStart"],
-                            IngestionTimeEnd = (string)r["IngestionTimeEnd"],
-                            RowCount = (long)r["RowCount"],
-                            CreatedOn = r["CreatedOn"].To<DateTime>(),
-                            MaxIntervalNumber = (long)r["MaxIntervalNumber"]
-                        })
+                        .ToEnumerable(r => new RecordDistribution(
+                            (string)r["IngestionTimeStart"],
+                            (string)r["IngestionTimeEnd"],
+                            (long)r["RowCount"],
+                            r["MinCreatedOn"].To<DateTime>(),
+                            r["MaxCreatedOn"].To<DateTime>()))
                         .ToImmutableArray();
 
-                    return intervals
-                    .Where(i => i.MaxIntervalNumber < MAX_INTERVAL_COUNT - 1)
-                    .Select(i => new RecordDistribution(
-                        i.IngestionTimeStart,
-                        i.IngestionTimeEnd,
-                        i.RowCount,
-                        i.CreatedOn))
-                    .ToImmutableArray();
+                    return intervals;
                 });
         }
     }

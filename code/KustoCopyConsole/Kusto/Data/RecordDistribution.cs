@@ -10,5 +10,6 @@ namespace KustoCopyConsole.Kusto.Data
         string IngestionTimeStart,
         string IngestionTimeEnd,
         long RowCount,
-        DateTime? CreatedOn);
+        DateTime? MinCreatedOn,
+        DateTime? MaxCreatedOn);
 }
