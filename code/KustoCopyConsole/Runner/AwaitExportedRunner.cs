@@ -181,12 +181,10 @@ namespace KustoCopyConsole.Runner
                     });
                 var newBlock = block.ChangeState(BlockState.Exported);
 
-                newBlock.ReplannedBlockIds = block.ReplannedBlockIds.Clear();
                 newBlock.ExportOperationId = string.Empty;
-                newBlock.ExportDuration = status.Duration;
                 newBlock.ExportedRowCount = details.Sum(d => d.RecordCount);
-                Trace.TraceInformation($"Exported block {block.GetBlockKey()}:  {urls.Count()} " +
-                    $"urls in {newBlock.ExportDuration}");
+                Trace.TraceInformation(
+                    $"Exported block {block.GetBlockKey()}:  {urls.Count()} urls");
                 RowItemGateway.Append(urls);
                 RowItemGateway.Append(newBlock);
                 ValidatePlannedRowCount(block);

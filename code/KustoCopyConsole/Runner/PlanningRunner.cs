@@ -161,6 +161,7 @@ namespace KustoCopyConsole.Runner
                             activityItem,
                             iterationItem,
                             activityParam,
+                            lastBlock == null ? 1 : lastBlock.BlockId + 1,
                             lastBlock?.IngestionTimeEnd.ToString(),
                             lastBlock?.IngestionTimeEnd.ToString() ?? ingestionTimeInterval.MinIngestionTime,
                             ingestionTimeInterval.MaxIngestionTime,
@@ -183,6 +184,7 @@ namespace KustoCopyConsole.Runner
             ActivityRowItem activityItem,
             IterationRowItem iterationItem,
             ActivityParameterization activityParam,
+            long nextBlockId,
             string? lastIngestionTime,
             string lowerIngestionTime,
             string upperIngestionTime,
@@ -210,6 +212,7 @@ namespace KustoCopyConsole.Runner
                     activityItem,
                     iterationItem,
                     activityParam,
+                    nextBlockId,
                     lastIngestionTime,
                     lowerIngestionTime,
                     upperIngestionTime,
@@ -219,19 +222,22 @@ namespace KustoCopyConsole.Runner
             }
             else if (distribution.RecordGroups.Any())
             {
-                //var blockItem = new BlockRowItem
-                //{
-                //    State = BlockState.Planned,
-                //    ActivityName = activityName,
-                //    IterationId = iterationId,
-                //    BlockId = ++lastBlockId,
-                //    //IngestionTimeStart = block.IngestionTimeStart,
-                //    //IngestionTimeEnd = block.IngestionTimeEnd,
-                //    MinCreationTime = block.MinCreationTime,
-                //    MaxCreationTime = block.MaxCreationTime,
-                //    PlannedRowCount = block.RowCount
-                //};
-                throw new NotImplementedException();
+                var blockItems = distribution.RecordGroups
+                    .Select(r => new BlockRowItem
+                    {
+                        State = BlockState.Planned,
+                        ActivityName = activityItem.ActivityName,
+                        IterationId = iterationItem.IterationId,
+                        BlockId = nextBlockId++,
+                        IngestionTimeStart = r.IngestionTimeStart,
+                        IngestionTimeEnd = r.IngestionTimeEnd,
+                        MinCreationTime = r.MinCreatedOn!.Value,
+                        MaxCreationTime = r.MaxCreatedOn!.Value,
+                        PlannedRowCount = r.RowCount
+                    })
+                    .ToImmutableArray();
+
+                RowItemGateway.Append(blockItems);
             }
 
             return distribution.HasReachedUpperIngestionTime;

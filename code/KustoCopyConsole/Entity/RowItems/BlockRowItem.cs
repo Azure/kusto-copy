@@ -19,9 +19,9 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public long BlockId { get; set; }
 
-        public DateTime IngestionTimeStart { get; set; } = DateTime.MinValue;
+        public string IngestionTimeStart { get; set; } = string.Empty;
 
-        public DateTime IngestionTimeEnd { get; set; } = DateTime.MinValue;
+        public string IngestionTimeEnd { get; set; } = string.Empty;
 
         public DateTime MinCreationTime { get; set; } = DateTime.MinValue;
 
@@ -33,11 +33,7 @@ namespace KustoCopyConsole.Entity.RowItems
 
         public string ExportOperationId { get; set; } = string.Empty;
 
-        public TimeSpan? ExportDuration { get; set; }
-
         public string BlockTag { get; set; } = string.Empty;
-
-        public IImmutableList<long> ReplannedBlockIds { get; set; } = ImmutableArray<long>.Empty;
 
         public override void Validate()
         {
@@ -55,12 +51,12 @@ namespace KustoCopyConsole.Entity.RowItems
                 throw new InvalidDataException(
                     $"{nameof(BlockId)} should be positive but is {BlockId}");
             }
-            if (IngestionTimeStart == DateTime.MinValue)
+            if (string.IsNullOrWhiteSpace(IngestionTimeStart))
             {
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeStart)} hasn't been populated");
             }
-            if (IngestionTimeEnd == DateTime.MinValue)
+            if (string.IsNullOrWhiteSpace(IngestionTimeEnd))
             {
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeEnd)} hasn't been populated");
@@ -100,11 +96,6 @@ namespace KustoCopyConsole.Entity.RowItems
                 && string.IsNullOrWhiteSpace(BlockTag))
             {
                 throw new InvalidDataException($"{nameof(BlockTag)} should not be empty");
-            }
-            if (State != BlockState.Exporting && ReplannedBlockIds.Any())
-            {
-                throw new InvalidDataException(
-                    $"{nameof(ReplannedBlockIds)} should be empty with state '{State}'");
             }
         }
 
