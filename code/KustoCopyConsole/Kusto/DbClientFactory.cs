@@ -124,7 +124,7 @@ namespace KustoCopyConsole.Kusto
                 var queue = _allClusterQueryQueueMap[clusterUri];
                 var provider = _providerFactory.GetQueryProvider(clusterUri);
 
-                return new DbQueryClient(provider, queue, database);
+                return new DbQueryClient(provider, queue, clusterUri, database);
             }
             catch (KeyNotFoundException ex)
             {

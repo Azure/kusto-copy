@@ -169,10 +169,8 @@ namespace KustoCopyConsole.Runner
         {
             const int MIN_STAT_COUNT = 5;
             const long MIN_ROW_COUNT_STATS = 100000;
-            const long MAX_ROW_COUNT = 16000000;
-            const int LEAP_RATIO = 3;
-            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(4);
 
+            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(4);
             var latestBlocks = RowItemGateway.InMemoryCache
                 .ActivityMap[iterationKey.ActivityName]
                 .IterationMap[iterationKey.IterationId]
@@ -186,85 +184,11 @@ namespace KustoCopyConsole.Runner
                 .Take(MIN_STAT_COUNT)
                 .ToImmutableArray();
 
-            if (latestBlocks.Length == MIN_STAT_COUNT)
-            {   //  Replan blocks
-                var totalDuration = latestBlocks.Sum(b => b.ExportDuration!.Value.TotalSeconds);
-                var totalRows = latestBlocks.Sum(b => b.ExportedRowCount);
-                var maxRowCount = latestBlocks.Max(b => b.ExportedRowCount);
-                var averageDurationPerRow = TimeSpan.FromSeconds(totalDuration / totalRows);
-                var targetRowCount = Math.Max(
-                    1,
-                    Math.Min(
-                        Math.Min(MAX_ROW_COUNT, LEAP_RATIO * maxRowCount),
-                        MAX_EXPORT_DURATION / averageDurationPerRow));
-
-                return GetReplannedLineup(candidates, targetRowCount, freeCapacity);
-            }
-            else
-            {   //  Just return the top blocks
-                return candidates
-                    .OrderBy(b => b.IngestionTimeStart)
-                    .Take(freeCapacity)
-                    .ToImmutableArray();
-            }
-        }
-
-        private IEnumerable<BlockRowItem> GetReplannedLineup(
-            IEnumerable<BlockRowItem> candidates,
-            double targetRowCount,
-            int freeCapacity)
-        {
-            //  Stack them upside down
-            var candidateStack =
-                new Stack<BlockRowItem>(candidates.OrderByDescending(c => c.IngestionTimeStart));
-            var lineup = new List<BlockRowItem>(freeCapacity);
-
-            while (freeCapacity - lineup.Count > 0 && candidateStack.Any())
-            {
-                var first = candidateStack.Pop();
-
-                if (candidateStack.Any())
-                {
-                    var second = candidateStack.Pop();
-                    var merge = new BlockRowItem
-                    {
-                        State = first.State,
-                        ActivityName = first.ActivityName,
-                        IterationId = first.IterationId,
-                        BlockId = first.BlockId,
-                        IngestionTimeStart = first.IngestionTimeStart,
-                        IngestionTimeEnd = second.IngestionTimeEnd,
-                        MinCreationTime = first.MinCreationTime < second.MinCreationTime
-                        ? first.MinCreationTime
-                        : second.MinCreationTime,
-                        MaxCreationTime = first.MaxCreationTime > second.MaxCreationTime
-                        ? first.MaxCreationTime
-                        : second.MaxCreationTime,
-                        PlannedRowCount = first.PlannedRowCount + second.PlannedRowCount,
-                        ReplannedBlockIds = first.ReplannedBlockIds
-                        .Concat(second.ReplannedBlockIds)
-                        .Append(second.BlockId)
-                        .ToImmutableArray(),
-                    };
-
-                    if (merge.PlannedRowCount <= targetRowCount
-                        && (merge.MaxCreationTime - merge.MinCreationTime < TimeSpan.FromDays(1)))
-                    {
-                        candidateStack.Push(merge);
-                    }
-                    else
-                    {
-                        lineup.Add(first);
-                        candidateStack.Push(second);
-                    }
-                }
-                else
-                {
-                    lineup.Add(first);
-                }
-            }
-
-            return lineup;
+            //  Just return the top blocks
+            return candidates
+                .OrderBy(b => b.IngestionTimeStart)
+                .Take(freeCapacity)
+                .ToImmutableArray();
         }
 
         private async Task StartExportAsync(BlockRowItem item, CancellationToken ct)

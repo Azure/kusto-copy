@@ -44,9 +44,6 @@ namespace KustoCopyConsole.Entity.InMemory
         {
             var newBlockMap = BlockMap.SetItem(block.RowItem.BlockId, block);
 
-            //  Remove replanned block IDs
-            newBlockMap = newBlockMap.RemoveRange(block.RowItem.ReplannedBlockIds);
-
             return new IterationCache(RowItem, TempTable, newBlockMap);
         }
     }

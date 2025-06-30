@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,8 +8,6 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Kusto.Data
 {
     internal record RecordDistribution(
-        DateTime IngestionTimeStart,
-        DateTime IngestionTimeEnd,
-        string ExtentId,
-        long RowCount);
+        IImmutableList<RecordGroup> RecordGroups,
+        bool HasReachedUpperIngestionTime);
 }

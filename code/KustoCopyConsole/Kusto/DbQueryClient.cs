@@ -1,6 +1,7 @@
 ﻿using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
+using System;
 using System.Collections.Immutable;
 using System.Data;
 
@@ -12,15 +13,18 @@ namespace KustoCopyConsole.Kusto
             new ClientRequestProperties();
         private readonly ICslQueryProvider _provider;
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
+        private readonly Uri _queryUri;
         private readonly string _databaseName;
 
         public DbQueryClient(
             ICslQueryProvider provider,
             PriorityExecutionQueue<KustoPriority> queue,
+            Uri queryUri,
             string databaseName)
         {
             _provider = provider;
             _queue = queue;
+            _queryUri = queryUri;
             _databaseName = databaseName;
         }
 
@@ -73,7 +77,7 @@ BaseData
                         properties,
                         ct);
                     var result = reader
-                        .ToEnumerable(r => (long) r[0])
+                        .ToEnumerable(r => (long)r[0])
                         .First();
                     var hasNull = result != 0;
 
@@ -81,83 +85,167 @@ BaseData
                 });
         }
 
-        public async Task<IImmutableList<RecordDistribution>> GetRecordDistributionAsync(
+        public async Task<IngestionTimeInterval> GetIngestionTimeIntervalAsync(
             KustoPriority priority,
             string tableName,
             string? kqlQuery,
             string cursorStart,
             string cursorEnd,
-            DateTime? ingestionTimeStart,
-            int maxStatCount,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
                 priority,
                 async () =>
                 {
-                    const string CURSOR_START_PARAM = "CursorStart";
-                    const string CURSOR_END_PARAM = "CursorEnd";
-                    const string INGESTION_TIME_START_PARAM = "IngestionTimeStart";
-
                     var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
                     ? string.Empty
-                    : $"| where cursor_after({CURSOR_START_PARAM})";
-                    var ingestionTimeStartFilter = ingestionTimeStart==null
-                    ? string.Empty
-                    : $"| where ingestion_time()>todatetime({INGESTION_TIME_START_PARAM})";
+                    : $"| where cursor_after('{cursorStart}')";
                     var query = @$"
-declare query_parameters(
-    {CURSOR_START_PARAM}:string,
-    {CURSOR_END_PARAM}:string,
-    {INGESTION_TIME_START_PARAM}:datetime=datetime(null));
-let ['{tableName}'] = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at({CURSOR_END_PARAM})
-    {ingestionTimeStartFilter};
 let BaseData = ['{tableName}']
-{kqlQuery}
-;
-//  Cut the ingestion time away
-let MaxIngestionTime = toscalar(
-    BaseData
-    | summarize by IngestionTime=ingestion_time(), ExtentId=tostring(extent_id())
-    | top {maxStatCount} by IngestionTime asc
-    | summarize max(IngestionTime));
-//  Reuse the cut-away value in case the maxStatCount cut in the middle of a constant ingestion time sequence
+    {cursorStartFilter}
+    | where cursor_before_or_at('{cursorEnd}')
+    {kqlQuery};
 BaseData
-| summarize RowCount=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
-| where IngestionTime <= MaxIngestionTime
-| order by IngestionTime asc
-| extend Rank=row_rank_dense(ExtentId)
-| summarize IngestionTimeStart=min(IngestionTime), IngestionTimeEnd=max(IngestionTime),
-    ExtentId=take_any(ExtentId), RowCount=sum(RowCount)
-    by Rank
-| project-away Rank
-| extend ExtentId=iif(ExtentId==guid('00000000-0000-0000-0000-000000000000'), '', tostring(ExtentId))
+| summarize
+    MinIngestionTime=tostring(min(ingestion_time())),
+    MaxIngestionTime=tostring(max(ingestion_time()))
 ";
-                    var properties = new ClientRequestProperties();
-
-                    properties.SetParameter(CURSOR_START_PARAM, cursorStart);
-                    properties.SetParameter(CURSOR_END_PARAM, cursorEnd);
-                    if (ingestionTimeStart != null)
-                    {
-                        properties.SetParameter(INGESTION_TIME_START_PARAM, ingestionTimeStart.Value);
-                    }
-
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
-                        properties,
+                        EMPTY_PROPERTIES,
                         ct);
                     var result = reader
-                        .ToEnumerable(r => new RecordDistribution(
-                            (DateTime)(r["IngestionTimeStart"]),
-                            (DateTime)(r["IngestionTimeEnd"]),
-                            (string)(r["ExtentId"]),
-                            (long)r["RowCount"]))
-                        .ToImmutableArray();
+                        .ToEnumerable(r => new IngestionTimeInterval(
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"]))
+                        .First();
 
                     return result;
+                });
+        }
+
+        public async Task<RecordDistribution> GetRecordDistributionAsync(
+            KustoPriority priority,
+            string tableName,
+            string? kqlQuery,
+            string cursorStart,
+            string cursorEnd,
+            //  This is excluded
+            string? lastIngestionTime,
+            //  This is used to compute the upper bound
+            string lowerIngestionTime,
+            string upperIngestionTime,
+            long maxRowCount,
+            CancellationToken ct)
+        {
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {   //  Max interval is based on the string size of the extent IDs
+                    //  They must all fit in a string for the .show command
+                    const int MAX_INTERVAL_COUNT = 25000;
+
+                    var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
+                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var lowerIngestionTimeFilter = string.IsNullOrWhiteSpace(lastIngestionTime)
+                    ? string.Empty
+                    : $@"| where ingestion_time()>todatetime('{lastIngestionTime}')";
+                    var query = @$"
+let MaxIntervalCount = {MAX_INTERVAL_COUNT};
+let MaxRowCount = {maxRowCount};
+let TimeHorizon = 1d;
+let UpperIngestionTimeFilter = todatetime('{lowerIngestionTime}')+TimeHorizon;
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    {lowerIngestionTimeFilter}
+    | where ingestion_time()<=UpperIngestionTimeFilter
+    {kqlQuery}
+    ;
+//  Fetch a batch of ingestion-time interval with extent IDs
+//  Do a first pass by merging ingestion time in the same extent id (regardless of row count)
+let ExtentsWithIngestionTimeIntervals = materialize(BaseData
+    | summarize RowCount=count() by IngestionTime=ingestion_time(), ExtentId=extent_id()
+    //  We top number of intervals so the list of extent ids can fit in a 1MB string
+    | top {MAX_INTERVAL_COUNT} by IngestionTime asc
+    //  We keep the interval number so that if it matches MaxIntervals, corresponding ingestion time end should be dropped
+    | extend IntervalNumber=row_number(0)
+    | extend Rank=row_rank_dense(ExtentId)
+    | summarize IngestionTimeStart=min(IngestionTime), IngestionTimeEnd=max(IngestionTime),
+        ExtentId=take_any(ExtentId), RowCount=sum(RowCount),
+        MaxIntervalNumber=max(IntervalNumber)
+        by Rank
+    //  We clip the MAX_INTERVAL_COUNT's interval as it may contain only parts of the
+    //  data pertaining to its ingestion_time
+    | where MaxIntervalNumber!={MAX_INTERVAL_COUNT}
+    | project-away Rank, MaxIntervalNumber
+    | extend ExtentId=tostring(ExtentId));
+//  Build a .show command to get the extent id creation time
+let ExtentIds = ExtentsWithIngestionTimeIntervals
+    | distinct ExtentId
+    | summarize make_list(ExtentId);
+let ShowCommand = strcat(
+    "".show table ['{tableName}'] extents ("",
+    strcat_array(toscalar(ExtentIds), ','),
+    "") | project ExtentId, MinCreatedOn""
+);
+let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
+    | extend ExtentId=tostring(ExtentId)
+    | project-rename CreatedOn=MinCreatedOn;
+//  Join the two information and merge intervals for creation time within the same hour
+//  (while keeping row count under a threshold)
+ExtentsWithIngestionTimeIntervals
+| lookup kind=leftouter ExtentIdCreationTime on ExtentId
+| extend GroupCreatedOn=bin(CreatedOn, 1d)
+| order by IngestionTimeStart asc, IngestionTimeEnd asc
+//  Fuse the records together
+| scan declare (GroupId:long = 1, RunningSum:long = 0, PrevGroup:datetime = datetime(null))
+    with (
+        step s: true => 
+            RunningSum = iff(
+                s.PrevGroup == GroupCreatedOn and s.RunningSum + RowCount <= MaxRowCount,
+                s.RunningSum + RowCount,
+                RowCount),
+            GroupId = iff(
+                s.PrevGroup == GroupCreatedOn and s.RunningSum + RowCount <= MaxRowCount,
+                s.GroupId,
+                s.GroupId+1),
+            PrevGroup=GroupCreatedOn;
+    )
+| summarize
+    IngestionTimeStart=tostring(min(IngestionTimeStart)),
+    IngestionTimeEnd=tostring(max(IngestionTimeEnd)),
+    RowCount=sum(RowCount), MinCreatedOn=min(CreatedOn), MaxCreatedOn=max(CreatedOn)
+    by GroupId
+| project-away GroupId;
+print todatetime('{upperIngestionTime}') <=
+    coalesce(
+        toscalar(ExtentsWithIngestionTimeIntervals | summarize max(IngestionTimeEnd)),
+        UpperIngestionTimeFilter);
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var groups = reader
+                        .ToEnumerable(r => new RecordGroup(
+                            (string)r["IngestionTimeStart"],
+                            (string)r["IngestionTimeEnd"],
+                            (long)r["RowCount"],
+                            r["MinCreatedOn"].To<DateTime>(),
+                            r["MaxCreatedOn"].To<DateTime>()))
+                        .ToImmutableArray();
+
+                    reader.NextResult();
+
+                    var hasReachedUpperIngestionTime =
+                        Convert.ToBoolean(reader.ToScalar<sbyte>());
+
+                    return new RecordDistribution(groups, hasReachedUpperIngestionTime);
                 });
         }
     }
