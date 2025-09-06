@@ -1,5 +1,6 @@
 ﻿using Kusto.Data.Common;
 using Kusto.Ingest;
+using Kusto.Ingest.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
