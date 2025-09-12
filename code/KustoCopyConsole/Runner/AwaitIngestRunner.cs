@@ -1,4 +1,5 @@
 ﻿using Azure.Core;
+using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
@@ -17,12 +18,14 @@ namespace KustoCopyConsole.Runner
         public AwaitIngestRunner(
             MainJobParameterization parameterization,
             TokenCredential credential,
+            TrackDatabase database,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
             IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
                  credential,
+                 database,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,

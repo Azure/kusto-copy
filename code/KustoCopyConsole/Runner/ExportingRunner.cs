@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Kusto.Cloud.Platform.Utils;
+using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.RowItems.Keys;
@@ -24,12 +25,14 @@ namespace KustoCopyConsole.Runner
         public ExportingRunner(
             MainJobParameterization parameterization,
             TokenCredential credential,
+            TrackDatabase database,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
             IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
                  credential,
+                 database,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,

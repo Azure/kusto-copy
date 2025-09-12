@@ -10,12 +10,16 @@ namespace KustoCopyConsole.Db
 {
     internal class TrackDatabase : IAsyncDisposable
     {
+        private const string ACTIVITY_TABLE = "Activity";
+
         #region Constructor
         public static async Task<TrackDatabase> CreateAsync()
         {
-            var db = Database.CreateAsync(
+            var db = await Database.CreateAsync(
                 new DatabasePolicies(),
-                TypedTableSchema<>.FromConstructor());
+                TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE));
+
+            return new TrackDatabase(db);
         }
 
         private TrackDatabase(Database database)
@@ -24,11 +28,14 @@ namespace KustoCopyConsole.Db
         }
         #endregion
 
+        async ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            await ((IAsyncDisposable)Database).DisposeAsync();
+        }
+
         public Database Database { get; }
 
-        ValueTask IAsyncDisposable.DisposeAsync()
-        {
-            throw new NotImplementedException();
-        }
+        public TypedTable<ActivityRecord> Activity =>
+            Database.GetTypedTable<ActivityRecord>(ACTIVITY_TABLE);
     }
 }

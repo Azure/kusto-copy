@@ -1,5 +1,6 @@
 ﻿using Azure.Core;
 using Azure.Storage.Files.DataLake;
+using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -16,12 +17,14 @@ namespace KustoCopyConsole.Runner
         public IterationCompletingRunner(
             MainJobParameterization parameterization,
             TokenCredential credential,
+            TrackDatabase database,
             RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
             IStagingBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
                  credential,
+                 database,
                  rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,
