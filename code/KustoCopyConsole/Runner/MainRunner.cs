@@ -162,6 +162,7 @@ namespace KustoCopyConsole.Runner
                 {
                     var paramActivity = Parameterization.Activities[name];
                     var activity = new ActivityRecord(
+                        ActivityState.Active,
                         paramActivity.ActivityName,
                         paramActivity.Source.GetTableIdentity(),
                         paramActivity.Destination.GetTableIdentity());

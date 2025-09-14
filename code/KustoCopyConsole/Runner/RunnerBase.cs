@@ -5,6 +5,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Diagnostics;
+using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
@@ -13,6 +14,8 @@ namespace KustoCopyConsole.Runner
         private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
 
         private readonly TimeSpan _wakePeriod;
+        private readonly TaskCompletionSource _allActivityCompletedSource
+            = new TaskCompletionSource();
 
         public RunnerBase(
             MainJobParameterization parameterization,
@@ -46,15 +49,21 @@ namespace KustoCopyConsole.Runner
 
         protected bool AllActivitiesCompleted()
         {
-            return !RowItemGateway.InMemoryCache.ActivityMap
-                .Values
-                .Where(a => a.RowItem.State == ActivityState.Active)
+            var allCompleted = !Database.Activities.Query()
+                .Where(Database.Activities.PredicateFactory.Equal(a => a.State, ActivityState.Active))
                 .Any();
+
+            if (allCompleted)
+            {
+                _allActivityCompletedSource.TrySetResult();
+            }
+
+            return allCompleted;
         }
 
         protected async Task SleepAsync(CancellationToken ct)
         {
-            await Task.Delay(_wakePeriod, ct);
+            await Task.WhenAny(_allActivityCompletedSource.Task, Task.Delay(_wakePeriod, ct));
         }
 
         protected void TraceWarning(string text)

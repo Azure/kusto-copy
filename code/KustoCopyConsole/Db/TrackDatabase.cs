@@ -12,6 +12,7 @@ namespace KustoCopyConsole.Db
     {
         private const string ACTIVITY_TABLE = "Activity";
         private const string ITERATION_TABLE = "Iteration";
+        private const string BLOCK_TABLE = "Block";
 
         #region Constructor
         public static async Task<TrackDatabase> CreateAsync()
@@ -19,7 +20,8 @@ namespace KustoCopyConsole.Db
             var db = await Database.CreateAsync(
                 new DatabasePolicies(),
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE),
-                TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE));
+                TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE),
+                TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE));
 
             return new TrackDatabase(db);
         }
@@ -42,5 +44,8 @@ namespace KustoCopyConsole.Db
 
         public TypedTable<IterationRecord> Iterations =>
             Database.GetTypedTable<IterationRecord>(ITERATION_TABLE);
+
+        public TypedTable<BlockRecord> Blocks =>
+            Database.GetTypedTable<BlockRecord>(BLOCK_TABLE);
     }
 }

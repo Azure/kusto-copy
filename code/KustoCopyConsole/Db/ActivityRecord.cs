@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Db
 {
     internal record ActivityRecord(
+        ActivityState State,
         string ActivityName,
         TableIdentity SourceTable,
         TableIdentity DestinationTable) : RecordBase
