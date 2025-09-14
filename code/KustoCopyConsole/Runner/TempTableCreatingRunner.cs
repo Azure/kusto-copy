@@ -1,13 +1,13 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.InMemory;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
 {
@@ -33,116 +33,94 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var taskMap = new Dictionary<IterationKey, Task>();
-
-            while (taskMap.Any() || !AllActivitiesCompleted())
+            while (!AllActivitiesCompleted())
             {
-                var newIterations = RowItemGateway.InMemoryCache.ActivityMap
-                     .Values
-                     .SelectMany(a => a.IterationMap.Values)
-                     .Where(i => i.RowItem.State >= IterationState.Planning)
-                     .Where(i => i.TempTable == null
-                     || i.TempTable.State == TempTableState.Creating)
-                     .Select(i => new
-                     {
-                         Key = i.RowItem.GetIterationKey(),
-                         Iteration = i
-                     })
-                     .Where(o => !taskMap.ContainsKey(o.Key));
+                var tempTables = Database.TempTables.Query()
+                    .Where(Database.TempTables.PredicateFactory.In(
+                        t => t.State,
+                        [TempTableState.Required, TempTableState.Creating]))
+                    .ToImmutableArray();
+                var tasks = tempTables
+                    .Select(t => EnsureTempTableCreatedAsync(t, ct))
+                    .ToImmutableArray();
 
-                foreach (var o in newIterations)
-                {
-                    taskMap.Add(o.Key, EnsureTempTableCreatedAsync(o.Iteration, ct));
-                }
-                await CleanTaskMapAsync(taskMap);
+                await Task.WhenAll(tasks);
                 //  Sleep
                 await SleepAsync(ct);
             }
         }
 
-        private async Task CleanTaskMapAsync(IDictionary<IterationKey, Task> taskMap)
-        {
-            foreach (var taskKey in taskMap.Keys.ToImmutableArray())
-            {
-                var task = taskMap[taskKey];
-
-                if (task.IsCompleted)
-                {
-                    await task;
-                    taskMap.Remove(taskKey);
-                }
-            }
-        }
-
         private async Task EnsureTempTableCreatedAsync(
-            IterationCache iteration,
+            TempTableRecord tempTableRecord,
             CancellationToken ct)
         {
-            var doesPreExist = iteration.TempTable != null;
-
-            if (!doesPreExist)
-            {
-                await PrepareTempTableAsync(iteration.RowItem, ct);
-                iteration = RowItemGateway.InMemoryCache
-                    .ActivityMap[iteration.RowItem.ActivityName]
-                    .IterationMap[iteration.RowItem.IterationId];
-            }
-            if (iteration.TempTable!.State == TempTableState.Creating)
-            {
-                await CreateTempTableAsync(iteration.TempTable, doesPreExist, ct);
-            }
-        }
-
-        private async Task PrepareTempTableAsync(
-            IterationRowItem iterationItem,
-            CancellationToken ct)
-        {
-            var activity = RowItemGateway.InMemoryCache
-                .ActivityMap[iterationItem.ActivityName]
-                .RowItem;
-            var tempTableName =
-                $"kc-{activity.DestinationTable.TableName}-{Guid.NewGuid().ToString("N")}";
-            var tempTableItem = new TempTableRowItem
-            {
-                State = TempTableState.Creating,
-                ActivityName = iterationItem.ActivityName,
-                IterationId = iterationItem.IterationId,
-                TempTableName = tempTableName
-            };
-
-            //  We want to ensure the item is appended before creating a temp table so
-            //  we don't lose track of the table
-            await RowItemGateway.AppendAndPersistAsync(tempTableItem, ct);
-        }
-
-        private async Task CreateTempTableAsync(
-            TempTableRowItem tempTableItem,
-            bool doesPreExist,
-            CancellationToken ct)
-        {
-            var activity = RowItemGateway.InMemoryCache
-                .ActivityMap[tempTableItem.ActivityName]
-                .RowItem;
+            var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
+            var destination = activity.Destination.GetTableIdentity();
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
-                activity.DestinationTable.ClusterUri,
-                activity.DestinationTable.DatabaseName);
-            var priority = new KustoPriority(tempTableItem.GetIterationKey());
+                destination.ClusterUri,
+                destination.DatabaseName);
+            var priority = new KustoPriority(tempTableRecord.IterationKey);
 
-            if (doesPreExist)
+            if (tempTableRecord.State == TempTableState.Creating
+                && string.IsNullOrWhiteSpace(tempTableRecord.TempTableName))
             {
                 await dbCommandClient.DropTableIfExistsAsync(
                     priority,
-                    tempTableItem.TempTableName,
+                    tempTableRecord.TempTableName,
                     ct);
             }
+            tempTableRecord = await PrepareTempTableAsync(tempTableRecord, destination, ct);
+            tempTableRecord = await CreateTempTableAsync(
+                dbCommandClient,
+                priority,
+                destination,
+                tempTableRecord,
+                ct);
+        }
+
+        private async Task<TempTableRecord> PrepareTempTableAsync(
+            TempTableRecord tempTableRecord,
+            TableIdentity destination,
+            CancellationToken ct)
+        {
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
+
+                tempTableRecord = tempTableRecord with
+                {
+                    State = TempTableState.Creating,
+                    TempTableName = tempTableName
+                };
+
+                //  We want to ensure record is persisted (logged) before creating a temp table so
+                //  we don't lose track of the table name
+                await tx.CompleteAndLogAsync();
+
+                return tempTableRecord;
+            }
+        }
+
+        private async Task<TempTableRecord> CreateTempTableAsync(
+            DbCommandClient dbCommandClient,
+            KustoPriority priority,
+            TableIdentity destination,
+            TempTableRecord tempTableRecord,
+            CancellationToken ct)
+        {
             await dbCommandClient.CreateTempTableAsync(
                 priority,
-                activity.DestinationTable.TableName,
-                tempTableItem.TempTableName,
+                destination.TableName,
+                tempTableRecord.TempTableName,
                 ct);
+            tempTableRecord = tempTableRecord with
+            {
+                State = TempTableState.Created
+            };
 
-            tempTableItem = tempTableItem.ChangeState(TempTableState.Created);
-            RowItemGateway.Append(tempTableItem);
+            Database.TempTables.AppendRecord(tempTableRecord);
+
+            return tempTableRecord;
         }
     }
 }

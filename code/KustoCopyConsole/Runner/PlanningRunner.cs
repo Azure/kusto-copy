@@ -7,6 +7,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Kusto.Data;
 using KustoCopyConsole.Storage;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using TrackDb.Lib;
@@ -92,27 +93,39 @@ namespace KustoCopyConsole.Runner
                     new KustoPriority(iterationRecord.IterationKey),
                     ct);
 
-                iterationRecord = iterationRecord with
+                using (var tx = Database.Database.CreateTransaction())
                 {
-                    State = IterationState.Planning,
-                    CursorEnd = cursor
-                };
-                UpdateIteration(iterationRecord);
+                    iterationRecord = iterationRecord with
+                    {
+                        State = IterationState.Planning,
+                        CursorEnd = cursor
+                    };
+                    UpdateIteration(iterationRecord);
+                    Database.TempTables.AppendRecord(new TempTableRecord(
+                        TempTableState.Required,
+                        iterationRecord.IterationKey,
+                        string.Empty));
+
+                    tx.Complete();
+                }
             }
             await ValidateIngestionTimeAsync(queryClient, activity, iterationRecord, ct);
             await PlanBlocksAsync(queryClient, dbCommandClient, activity, iterationRecord, ct);
         }
 
-        private void UpdateIteration(IterationRecord iterationRecord)
+        private void UpdateIteration(
+            IterationRecord iterationRecord,
+            TransactionContext? txParam = null)
         {
             using (var tx = Database.Database.CreateTransaction())
             {
-                Database.Iterations.Query(tx)
+                txParam = txParam ?? tx;
+                Database.Iterations.Query(txParam)
                     .Where(Database.Iterations.PredicateFactory.Equal(
                         i => i.IterationKey,
                         iterationRecord.IterationKey))
                     .Delete();
-                Database.Iterations.AppendRecord(iterationRecord, tx);
+                Database.Iterations.AppendRecord(iterationRecord, txParam);
 
                 tx.Complete();
             }
