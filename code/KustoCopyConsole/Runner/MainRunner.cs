@@ -2,12 +2,14 @@
 using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
 using System.Collections.Immutable;
+using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
 {
@@ -86,14 +88,10 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            DisplayExistingIterations();
+            SyncActivities();
+            EnsureIterations();
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
-                SyncActivities();
-                foreach (var a in Parameterization.Activities.Values)
-                {
-                    EnsureIteration(a);
-                }
                 var iterationRunner = new PlanningRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var tempTableRunner = new TempTableCreatingRunner(
@@ -120,37 +118,11 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private static void DisplayIteration(IterationRowItem item, bool isNew)
-        {
-            var iterationAge = isNew
-                ? "New"
-                : "Existing";
-
-            Console.WriteLine(
-                $"{iterationAge} iteration {item.GetIterationKey()}:  " +
-                $"['{item.CursorStart}', '{item.CursorEnd}']");
-        }
-
-        private void DisplayExistingIterations()
-        {
-            var cache = RowItemGateway.InMemoryCache;
-            var existingIterations = cache.ActivityMap
-                .Values
-                .SelectMany(a => a.IterationMap.Values)
-                .Select(i => i.RowItem)
-                .Where(i => i.State != IterationState.Completed);
-
-            foreach (var iteration in existingIterations)
-            {
-                DisplayIteration(iteration, false);
-            }
-        }
-
         private void SyncActivities()
         {
             using (var tx = Database.Database.CreateTransaction())
             {
-                var allActivities = Database.Activity.Query(tx)
+                var allActivities = Database.Activities.Query(tx)
                     .ToImmutableArray();
                 var newActivityNames = Parameterization.Activities.Keys.Except(
                     allActivities.Select(a => a.ActivityName));
@@ -186,7 +158,7 @@ namespace KustoCopyConsole.Runner
                             false);
                     }
                 }
-                foreach(var name in newActivityNames)
+                foreach (var name in newActivityNames)
                 {
                     var paramActivity = Parameterization.Activities[name];
                     var activity = new ActivityRecord(
@@ -194,7 +166,7 @@ namespace KustoCopyConsole.Runner
                         paramActivity.Source.GetTableIdentity(),
                         paramActivity.Destination.GetTableIdentity());
 
-                    Database.Activity.AppendRecord(activity);
+                    Database.Activities.AppendRecord(activity, tx);
                     Console.WriteLine($"New activity:  '{name}'");
                 }
 
@@ -202,51 +174,39 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void EnsureIteration(ActivityParameterization activityParam)
+        private void EnsureIterations()
         {
-            if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
+            using (var tx = Database.Database.CreateTransaction())
             {
-                throw new NotSupportedException(
-                    $"'{activityParam.TableOption.ExportMode}' isn't supported yet");
-            }
-
-            var cache = RowItemGateway.InMemoryCache;
-            var cachedIterations = cache.ActivityMap.ContainsKey(activityParam.ActivityName)
-                ? cache.ActivityMap[activityParam.ActivityName].IterationMap.Values
-                : Array.Empty<IterationCache>();
-            var completedIterations = cachedIterations
-                .Select(c => c.RowItem)
-                .Where(i => i.State == IterationState.Completed);
-            var activeIterations = cachedIterations
-                .Select(c => c.RowItem)
-                .Where(i => i.State != IterationState.Completed);
-            var isBackfillOnly =
-                activityParam.TableOption.ExportMode == ExportMode.BackfillOnly;
-
-            //  Start new iteration if need to
-            if (!cachedIterations.Any())
-            {
-                var lastIteration = cachedIterations.Any()
-                    ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
-                    : null;
-                var newIterationId = lastIteration != null
-                    ? lastIteration.IterationId + 1
-                    : 1;
-                var cursorStart = lastIteration != null
-                    ? lastIteration.CursorEnd
-                    : string.Empty;
-                var newIterationItem = new IterationRowItem
+                foreach (var name in Parameterization.Activities.Keys)
                 {
-                    State = IterationState.Starting,
-                    ActivityName = activityParam.ActivityName,
-                    IterationId = newIterationId,
-                    CursorStart = cursorStart,
-                    CursorEnd = string.Empty
-                };
-                var iterationKey = newIterationItem.GetIterationKey();
+                    var lastIteration = Database.Iterations.Query(tx)
+                        .Where(Database.Iterations.PredicateFactory.Equal(
+                            t => t.IterationKey.ActivityName, name))
+                        .OrderByDesc(t => t.IterationKey.IterationId)
+                        .Take(1)
+                        .FirstOrDefault();
 
-                RowItemGateway.Append(newIterationItem);
-                DisplayIteration(newIterationItem, true);
+                    if (lastIteration != null)
+                    {   //  An iteration already exist, nothing to do
+                    }
+                    else
+                    {   //  Create an iteration
+                        var newIterationId = lastIteration != null
+                            ? lastIteration.IterationKey.IterationId + 1
+                            : 1;
+                        var cursorStart = lastIteration != null
+                            ? lastIteration.CursorEnd
+                            : string.Empty;
+                        var newIterationRecord = new IterationRecord(
+                            IterationState.Starting,
+                            new IterationKey(name, newIterationId),
+                            cursorStart,
+                            string.Empty);
+
+                        Database.Iterations.AppendRecord(newIterationRecord, tx);
+                    }
+                }
             }
         }
     }

@@ -11,13 +11,15 @@ namespace KustoCopyConsole.Db
     internal class TrackDatabase : IAsyncDisposable
     {
         private const string ACTIVITY_TABLE = "Activity";
+        private const string ITERATION_TABLE = "Iteration";
 
         #region Constructor
         public static async Task<TrackDatabase> CreateAsync()
         {
             var db = await Database.CreateAsync(
                 new DatabasePolicies(),
-                TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE));
+                TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE),
+                TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE));
 
             return new TrackDatabase(db);
         }
@@ -35,7 +37,10 @@ namespace KustoCopyConsole.Db
 
         public Database Database { get; }
 
-        public TypedTable<ActivityRecord> Activity =>
+        public TypedTable<ActivityRecord> Activities =>
             Database.GetTypedTable<ActivityRecord>(ACTIVITY_TABLE);
+
+        public TypedTable<IterationRecord> Iterations =>
+            Database.GetTypedTable<IterationRecord>(ITERATION_TABLE);
     }
 }
