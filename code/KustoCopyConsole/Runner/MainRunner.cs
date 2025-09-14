@@ -92,7 +92,7 @@ namespace KustoCopyConsole.Runner
             EnsureIterations();
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
-                var iterationRunner = new PlanningRunner(
+                var planningRunner = new PlanningRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var tempTableRunner = new TempTableCreatingRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
@@ -108,7 +108,7 @@ namespace KustoCopyConsole.Runner
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
 
                 await TaskHelper.WhenAllWithErrors(
-                    Task.Run(() => iterationRunner.RunAsync(ct)),
+                    Task.Run(() => planningRunner.RunAsync(ct)),
                     Task.Run(() => tempTableRunner.RunAsync(ct)),
                     Task.Run(() => exportingRunner.RunAsync(ct)),
                     Task.Run(() => awaitExportedRunner.RunAsync(ct)),
