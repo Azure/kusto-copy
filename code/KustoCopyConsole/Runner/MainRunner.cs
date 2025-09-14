@@ -207,6 +207,7 @@ namespace KustoCopyConsole.Runner
                         Database.Iterations.AppendRecord(newIterationRecord, tx);
                     }
                 }
+                tx.Complete();
             }
         }
     }
