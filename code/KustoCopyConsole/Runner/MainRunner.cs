@@ -7,6 +7,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
+using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
@@ -88,9 +89,9 @@ namespace KustoCopyConsole.Runner
             DisplayExistingIterations();
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
+                SyncActivities();
                 foreach (var a in Parameterization.Activities.Values)
                 {
-                    EnsureActivity(a);
                     EnsureIteration(a);
                 }
                 var iterationRunner = new PlanningRunner(
@@ -145,6 +146,62 @@ namespace KustoCopyConsole.Runner
             }
         }
 
+        private void SyncActivities()
+        {
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                var allActivities = Database.Activity.Query(tx)
+                    .ToImmutableArray();
+                var newActivityNames = Parameterization.Activities.Keys.Except(
+                    allActivities.Select(a => a.ActivityName));
+
+                foreach (var a in allActivities)
+                {
+                    if (Parameterization.Activities.TryGetValue(
+                        a.ActivityName,
+                        out var paramActivity))
+                    {
+                        if (paramActivity.Source.GetTableIdentity() != a.SourceTable)
+                        {
+                            throw new CopyException(
+                                $"Activity '{a.ActivityName}' has mistmached source table ; " +
+                                $"configuration is {paramActivity.Source} while" +
+                                $"logs is {a.SourceTable}",
+                                false);
+                        }
+                        else if (paramActivity.Destination.GetTableIdentity() != a.DestinationTable)
+                        {
+                            throw new CopyException(
+                                $"Activity '{a.ActivityName}' has mistmached destination table ; " +
+                                $"configuration is {paramActivity.Destination} while" +
+                                $"logs is {a.DestinationTable}",
+                                false);
+                        }
+                    }
+                    else
+                    {
+                        throw new CopyException(
+                            $"Activity '{a.ActivityName}' is present in logs but not in " +
+                            $"configuration",
+                            false);
+                    }
+                }
+                foreach(var name in newActivityNames)
+                {
+                    var paramActivity = Parameterization.Activities[name];
+                    var activity = new ActivityRecord(
+                        paramActivity.ActivityName,
+                        paramActivity.Source.GetTableIdentity(),
+                        paramActivity.Destination.GetTableIdentity());
+
+                    Database.Activity.AppendRecord(activity);
+                    Console.WriteLine($"New activity:  '{name}'");
+                }
+
+                tx.Complete();
+            }
+        }
+
         private void EnsureIteration(ActivityParameterization activityParam)
         {
             if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
@@ -190,23 +247,6 @@ namespace KustoCopyConsole.Runner
 
                 RowItemGateway.Append(newIterationItem);
                 DisplayIteration(newIterationItem, true);
-            }
-        }
-
-        private void EnsureActivity(ActivityParameterization activityParam)
-        {
-            if (!RowItemGateway.InMemoryCache.ActivityMap.ContainsKey(activityParam.ActivityName))
-            {
-                var activity = new ActivityRowItem
-                {
-                    State = ActivityState.Active,
-                    ActivityName = activityParam.ActivityName,
-                    SourceTable = activityParam.Source.GetTableIdentity(),
-                    DestinationTable = activityParam.GetEffectiveDestinationTableIdentity()
-                };
-
-                RowItemGateway.Append(activity);
-                Console.WriteLine($"New activity:  '{activity.ActivityName}'");
             }
         }
     }

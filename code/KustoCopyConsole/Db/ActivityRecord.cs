@@ -1,4 +1,4 @@
-﻿using KustoCopyConsole.Entity.State;
+﻿using KustoCopyConsole.Entity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,10 +8,9 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Db
 {
     internal record ActivityRecord(
-        ActivityState State,
         string ActivityName,
-        TableId SourceTable,
-        TableId DestinationTable) : RecordBase
+        TableIdentity SourceTable,
+        TableIdentity DestinationTable) : RecordBase
     {
         public override void Validate()
         {
