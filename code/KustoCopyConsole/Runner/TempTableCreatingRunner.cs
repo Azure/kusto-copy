@@ -1,14 +1,12 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Linq;
-using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
 {
@@ -89,7 +87,8 @@ namespace KustoCopyConsole.Runner
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
 
                 Database.TempTables.Query(tx)
-                    .Where(pf => pf.Equal(t => t.TempTableName, tempTableRecord.TempTableName));
+                    .Where(pf => pf.Equal(t => t.TempTableName, tempTableRecord.TempTableName))
+                    .Delete();
                 tempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,

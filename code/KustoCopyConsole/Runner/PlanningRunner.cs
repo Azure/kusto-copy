@@ -1,6 +1,5 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -11,9 +10,6 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using TrackDb.Lib;
-using TrackDb.Lib.Predicate;
-using YamlDotNet.Core;
-using YamlDotNet.Core.Tokens;
 
 namespace KustoCopyConsole.Runner
 {
