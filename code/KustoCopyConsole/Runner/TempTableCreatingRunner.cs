@@ -7,6 +7,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
+using System.Linq;
 using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
@@ -87,11 +88,16 @@ namespace KustoCopyConsole.Runner
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
 
+                Database.TempTables.Query(tx)
+                    .Where(Database.TempTables.PredicateFactory.Equal(
+                        t => t.TempTableName,
+                        tempTableRecord.TempTableName));
                 tempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,
                     TempTableName = tempTableName
                 };
+                Database.TempTables.AppendRecord(tempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
@@ -117,8 +123,16 @@ namespace KustoCopyConsole.Runner
             {
                 State = TempTableState.Created
             };
-
-            Database.TempTables.AppendRecord(tempTableRecord);
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                Database.TempTables.Query(tx)
+                    .Where(Database.TempTables.PredicateFactory.Equal(
+                        t => t.TempTableName,
+                        tempTableRecord.TempTableName));
+                Database.TempTables.AppendRecord(tempTableRecord);
+                
+                tx.Complete();
+            }
 
             return tempTableRecord;
         }

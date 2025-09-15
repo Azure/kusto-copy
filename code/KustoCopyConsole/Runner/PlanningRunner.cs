@@ -69,7 +69,7 @@ namespace KustoCopyConsole.Runner
                 }
 
                 //  Sleep
-                await SleepAsync(ct);
+                //await SleepAsync(ct);
             }
         }
 
