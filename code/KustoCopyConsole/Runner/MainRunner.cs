@@ -182,7 +182,7 @@ namespace KustoCopyConsole.Runner
                 foreach (var name in Parameterization.Activities.Keys)
                 {
                     var lastIteration = Database.Iterations.Query(tx)
-                        .Where(Database.Iterations.PredicateFactory.Equal(
+                        .Where(pf => pf.Equal(
                             t => t.IterationKey.ActivityName, name))
                         .OrderByDesc(t => t.IterationKey.IterationId)
                         .Take(1)

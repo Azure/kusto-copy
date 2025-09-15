@@ -37,7 +37,7 @@ namespace KustoCopyConsole.Runner
             while (!AllActivitiesCompleted())
             {
                 var tempTables = Database.TempTables.Query()
-                    .Where(Database.TempTables.PredicateFactory.In(
+                    .Where(pf => pf.In(
                         t => t.State,
                         [TempTableState.Required, TempTableState.Creating]))
                     .ToImmutableArray();
@@ -89,9 +89,7 @@ namespace KustoCopyConsole.Runner
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
 
                 Database.TempTables.Query(tx)
-                    .Where(Database.TempTables.PredicateFactory.Equal(
-                        t => t.TempTableName,
-                        tempTableRecord.TempTableName));
+                    .Where(pf => pf.Equal(t => t.TempTableName, tempTableRecord.TempTableName));
                 tempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,
@@ -126,7 +124,7 @@ namespace KustoCopyConsole.Runner
             using (var tx = Database.Database.CreateTransaction())
             {
                 Database.TempTables.Query(tx)
-                    .Where(Database.TempTables.PredicateFactory.Equal(
+                    .Where(pf => pf.Equal(
                         t => t.TempTableName,
                         tempTableRecord.TempTableName));
                 Database.TempTables.AppendRecord(tempTableRecord);

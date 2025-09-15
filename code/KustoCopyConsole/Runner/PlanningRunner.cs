@@ -55,12 +55,8 @@ namespace KustoCopyConsole.Runner
             while (!AllActivitiesCompleted())
             {
                 var newIteration = Database.Iterations.Query()
-                    .Where(Database.Iterations.PredicateFactory.Equal(
-                        i => i.IterationKey.ActivityName,
-                        activityName)
-                    .And(Database.Iterations.PredicateFactory.Equal(
-                        i => i.State,
-                        IterationState.Planning)))
+                    .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                    .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
                     .FirstOrDefault();
 
                 if (newIteration != null)
@@ -121,9 +117,7 @@ namespace KustoCopyConsole.Runner
             {
                 txParam = txParam ?? tx;
                 Database.Iterations.Query(txParam)
-                    .Where(Database.Iterations.PredicateFactory.Equal(
-                        i => i.IterationKey,
-                        iterationRecord.IterationKey))
+                    .Where(pf => pf.Equal(i => i.IterationKey, iterationRecord.IterationKey))
                     .Delete();
                 Database.Iterations.AppendRecord(iterationRecord, txParam);
 
@@ -204,12 +198,12 @@ namespace KustoCopyConsole.Runner
             while (iterationRecord.State == IterationState.Planning)
             {
                 var lastBlock = Database.Blocks.Query()
-                    .Where(Database.Blocks.PredicateFactory.Equal(
+                    .Where(pf => pf.Equal(
                         b => b.BlockKey.ActivityName,
-                        iterationRecord.IterationKey.ActivityName)
-                    .And(Database.Blocks.PredicateFactory.Equal(
+                        iterationRecord.IterationKey.ActivityName))
+                    .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationId,
-                        iterationRecord.IterationKey.IterationId)))
+                        iterationRecord.IterationKey.IterationId))
                     .OrderByDesc(b => b.BlockKey.BlockId)
                     .Take(1)
                     .FirstOrDefault();

@@ -50,7 +50,7 @@ namespace KustoCopyConsole.Runner
         protected bool AllActivitiesCompleted()
         {
             var allCompleted = !Database.Activities.Query()
-                .Where(Database.Activities.PredicateFactory.Equal(a => a.State, ActivityState.Active))
+                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Any();
 
             if (allCompleted)
