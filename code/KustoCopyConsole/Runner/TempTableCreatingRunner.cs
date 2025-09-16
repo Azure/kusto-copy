@@ -86,14 +86,17 @@ namespace KustoCopyConsole.Runner
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
 
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.Equal(t => t.TempTableName, tempTableRecord.TempTableName))
-                    .Delete();
                 tempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,
                     TempTableName = tempTableName
                 };
+                Database.TempTables.Query(tx)
+                    .Where(pf => pf.MatchKeys(
+                        tempTableRecord,
+                        t => t.IterationKey.ActivityName,
+                        t => t.IterationKey.IterationId))
+                    .Delete();
                 Database.TempTables.AppendRecord(tempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
@@ -123,9 +126,11 @@ namespace KustoCopyConsole.Runner
             using (var tx = Database.Database.CreateTransaction())
             {
                 Database.TempTables.Query(tx)
-                    .Where(pf => pf.Equal(
-                        t => t.TempTableName,
-                        tempTableRecord.TempTableName));
+                    .Where(pf => pf.MatchKeys(
+                        tempTableRecord,
+                        t => t.IterationKey.ActivityName,
+                        t => t.IterationKey.IterationId))
+                    .Delete();
                 Database.TempTables.AppendRecord(tempTableRecord);
                 
                 tx.Complete();

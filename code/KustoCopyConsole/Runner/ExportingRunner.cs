@@ -1,5 +1,4 @@
 ﻿using Azure.Core;
-using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Db;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;

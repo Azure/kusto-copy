@@ -113,7 +113,10 @@ namespace KustoCopyConsole.Runner
             {
                 txParam = txParam ?? tx;
                 Database.Iterations.Query(txParam)
-                    .Where(pf => pf.Equal(i => i.IterationKey, iterationRecord.IterationKey))
+                    .Where(pf => pf.MatchKeys(
+                        iterationRecord,
+                        i => i.IterationKey.ActivityName,
+                        i => i.IterationKey.IterationId))
                     .Delete();
                 Database.Iterations.AppendRecord(iterationRecord, txParam);
 
