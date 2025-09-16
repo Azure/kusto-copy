@@ -47,6 +47,26 @@ namespace KustoCopyConsole.Runner
 
         protected IStagingBlobUriProvider StagingBlobUriProvider { get; }
 
+        protected bool IsActivityCompleted(string activityName)
+        {
+            var isCompleted = Database.Activities.Query()
+                .Where(pf => pf.Equal(a => a.ActivityName, activityName))
+                .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
+                .Count() == 1;
+
+            return isCompleted;
+        }
+
+        protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
+        {
+            var isCompleted = Database.Activities.Query()
+                .Where(pf => pf.In(a => a.ActivityName, activityNames))
+                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
+                .Count() == 0;
+
+            return isCompleted;
+        }
+
         protected bool AllActivitiesCompleted()
         {
             var allCompleted = !Database.Activities.Query()

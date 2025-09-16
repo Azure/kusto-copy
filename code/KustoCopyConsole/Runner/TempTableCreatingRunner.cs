@@ -44,8 +44,10 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableArray();
 
                 await Task.WhenAll(tasks);
-                //  Sleep
-                await SleepAsync(ct);
+                if (!tasks.Any())
+                {
+                    await SleepAsync(ct);
+                }
             }
         }
 
@@ -101,7 +103,7 @@ namespace KustoCopyConsole.Runner
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
-                await tx.CompleteAndLogAsync();
+                await tx.LogAndCompleteAsync();
 
                 return tempTableRecord;
             }
@@ -132,7 +134,7 @@ namespace KustoCopyConsole.Runner
                         t => t.IterationKey.IterationId))
                     .Delete();
                 Database.TempTables.AppendRecord(tempTableRecord);
-                
+
                 tx.Complete();
             }
 

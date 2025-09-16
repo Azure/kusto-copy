@@ -48,20 +48,20 @@ namespace KustoCopyConsole.Runner
 
         private async Task PlanActivityAsync(string activityName, CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (!IsActivityCompleted(activityName))
             {
-                var newIteration = Database.Iterations.Query()
+                var newIterations = Database.Iterations.Query()
                     .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
-                    .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
-                    .FirstOrDefault();
+                    .Where(pf => pf.Equal(i => i.State, IterationState.Planning));
+                var iterationTasks = newIterations
+                    .Select(i => PlanIterationAsync(i, ct))
+                    .ToImmutableArray();
 
-                if (newIteration != null)
+                await Task.WhenAll(iterationTasks);
+                if (!iterationTasks.Any())
                 {
-                    await PlanIterationAsync(newIteration, ct);
+                    await SleepAsync(ct);
                 }
-
-                //  Sleep
-                //await SleepAsync(ct);
             }
         }
 

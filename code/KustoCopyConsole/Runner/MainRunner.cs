@@ -7,6 +7,7 @@ using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
 using KustoCopyConsole.Storage.AzureStorage;
 using System.Collections.Immutable;
+using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -85,8 +86,13 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            SyncActivities();
-            EnsureIterations();
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                SyncActivities(tx);
+                EnsureIterations(tx);
+
+                tx.Complete();
+            }
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
                 var planningRunner = new PlanningRunner(
@@ -115,97 +121,87 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void SyncActivities()
+        private void SyncActivities(TransactionContext tx)
         {
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                var allActivities = Database.Activities.Query(tx)
-                    .ToImmutableArray();
-                var newActivityNames = Parameterization.Activities.Keys.Except(
-                    allActivities.Select(a => a.ActivityName));
+            var allActivities = Database.Activities.Query(tx)
+                .ToImmutableArray();
+            var newActivityNames = Parameterization.Activities.Keys.Except(
+                allActivities.Select(a => a.ActivityName));
 
-                foreach (var a in allActivities)
+            foreach (var a in allActivities)
+            {
+                if (Parameterization.Activities.TryGetValue(
+                    a.ActivityName,
+                    out var paramActivity))
                 {
-                    if (Parameterization.Activities.TryGetValue(
-                        a.ActivityName,
-                        out var paramActivity))
-                    {
-                        if (paramActivity.Source.GetTableIdentity() != a.SourceTable)
-                        {
-                            throw new CopyException(
-                                $"Activity '{a.ActivityName}' has mistmached source table ; " +
-                                $"configuration is {paramActivity.Source} while" +
-                                $"logs is {a.SourceTable}",
-                                false);
-                        }
-                        else if (paramActivity.Destination.GetTableIdentity() != a.DestinationTable)
-                        {
-                            throw new CopyException(
-                                $"Activity '{a.ActivityName}' has mistmached destination table ; " +
-                                $"configuration is {paramActivity.Destination} while" +
-                                $"logs is {a.DestinationTable}",
-                                false);
-                        }
-                    }
-                    else
+                    if (paramActivity.Source.GetTableIdentity() != a.SourceTable)
                     {
                         throw new CopyException(
-                            $"Activity '{a.ActivityName}' is present in logs but not in " +
-                            $"configuration",
+                            $"Activity '{a.ActivityName}' has mistmached source table ; " +
+                            $"configuration is {paramActivity.Source} while" +
+                            $"logs is {a.SourceTable}",
+                            false);
+                    }
+                    else if (paramActivity.Destination.GetTableIdentity() != a.DestinationTable)
+                    {
+                        throw new CopyException(
+                            $"Activity '{a.ActivityName}' has mistmached destination table ; " +
+                            $"configuration is {paramActivity.Destination} while" +
+                            $"logs is {a.DestinationTable}",
                             false);
                     }
                 }
-                foreach (var name in newActivityNames)
+                else
                 {
-                    var paramActivity = Parameterization.Activities[name];
-                    var activity = new ActivityRecord(
-                        ActivityState.Active,
-                        paramActivity.ActivityName,
-                        paramActivity.Source.GetTableIdentity(),
-                        paramActivity.Destination.GetTableIdentity());
-
-                    Database.Activities.AppendRecord(activity, tx);
-                    Console.WriteLine($"New activity:  '{name}'");
+                    throw new CopyException(
+                        $"Activity '{a.ActivityName}' is present in logs but not in " +
+                        $"configuration",
+                        false);
                 }
+            }
+            foreach (var name in newActivityNames)
+            {
+                var paramActivity = Parameterization.Activities[name];
+                var activity = new ActivityRecord(
+                    ActivityState.Active,
+                    paramActivity.ActivityName,
+                    paramActivity.Source.GetTableIdentity(),
+                    paramActivity.Destination.GetTableIdentity());
 
-                tx.Complete();
+                Database.Activities.AppendRecord(activity, tx);
+                Console.WriteLine($"New activity:  '{name}'");
             }
         }
 
-        private void EnsureIterations()
+        private void EnsureIterations(TransactionContext tx)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            foreach (var name in Parameterization.Activities.Keys)
             {
-                foreach (var name in Parameterization.Activities.Keys)
-                {
-                    var lastIteration = Database.Iterations.Query(tx)
-                        .Where(pf => pf.Equal(
-                            t => t.IterationKey.ActivityName, name))
-                        .OrderByDesc(t => t.IterationKey.IterationId)
-                        .Take(1)
-                        .FirstOrDefault();
+                var lastIteration = Database.Iterations.Query(tx)
+                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
+                    .OrderByDesc(t => t.IterationKey.IterationId)
+                    .Take(1)
+                    .FirstOrDefault();
 
-                    if (lastIteration != null)
-                    {   //  An iteration already exist, nothing to do
-                    }
-                    else
-                    {   //  Create an iteration
-                        var newIterationId = lastIteration != null
-                            ? lastIteration.IterationKey.IterationId + 1
-                            : 1;
-                        var cursorStart = lastIteration != null
-                            ? lastIteration.CursorEnd
-                            : string.Empty;
-                        var newIterationRecord = new IterationRecord(
-                            IterationState.Starting,
-                            new IterationKey(name, newIterationId),
-                            cursorStart,
-                            string.Empty);
-
-                        Database.Iterations.AppendRecord(newIterationRecord, tx);
-                    }
+                if (lastIteration != null)
+                {   //  An iteration already exist, nothing to do
                 }
-                tx.Complete();
+                else
+                {   //  Create an iteration
+                    var newIterationId = lastIteration != null
+                        ? lastIteration.IterationKey.IterationId + 1
+                        : 1;
+                    var cursorStart = lastIteration != null
+                        ? lastIteration.CursorEnd
+                        : string.Empty;
+                    var newIterationRecord = new IterationRecord(
+                        IterationState.Starting,
+                        new IterationKey(name, newIterationId),
+                        cursorStart,
+                        string.Empty);
+
+                    Database.Iterations.AppendRecord(newIterationRecord, tx);
+                }
             }
         }
     }
