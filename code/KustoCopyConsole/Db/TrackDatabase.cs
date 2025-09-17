@@ -14,6 +14,7 @@ namespace KustoCopyConsole.Db
         private const string ITERATION_TABLE = "Iteration";
         private const string BLOCK_TABLE = "Block";
         private const string TEMP_TABLE_TABLE = "TempTable";
+        private const string BLOB_URL_TABLE = "BlobUrl";
 
         #region Constructor
         public static async Task<TrackDatabase> CreateAsync()
@@ -23,7 +24,8 @@ namespace KustoCopyConsole.Db
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE),
                 TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE),
                 TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE),
-                TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE));
+                TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE),
+                TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE));
 
             return new TrackDatabase(db);
         }
@@ -52,5 +54,8 @@ namespace KustoCopyConsole.Db
 
         public TypedTable<TempTableRecord> TempTables =>
             Database.GetTypedTable<TempTableRecord>(TEMP_TABLE_TABLE);
+
+        public TypedTable<BlobUrlRecord> BlobUrls =>
+            Database.GetTypedTable<BlobUrlRecord>(BLOB_URL_TABLE);
     }
 }

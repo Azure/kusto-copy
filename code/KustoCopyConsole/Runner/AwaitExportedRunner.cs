@@ -10,15 +10,12 @@ using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
     internal class AwaitExportedRunner : RunnerBase
     {
-        #region Inner Types
-        private record ClusterBlocks(Uri ClusterUri, IEnumerable<BlockRowItem> BlockItems);
-        #endregion
-
         private const int MAX_OPERATIONS = 200;
         private static readonly IImmutableSet<string> FAILED_STATUS =
             ImmutableHashSet.Create(
@@ -52,42 +49,50 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
-            {
-                var clusterBlocks = GetClusterBlocks();
-                var tasks = clusterBlocks
-                    .Select(o => UpdateOperationsAsync(o.ClusterUri, o.BlockItems, ct))
-                    .ToImmutableArray();
+            var tasks = Parameterization.Activities.Values
+                .GroupBy(a => a.Source.GetTableIdentity().ClusterUri)
+                .Select(g => Task.Run(() => RunActivitiesAsync(
+                    g.Key,
+                    g.Select(a => a.ActivityName).ToImmutableArray(),
+                    ct)))
+                .ToImmutableList();
 
-                await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
+        }
+
+        private async Task RunActivitiesAsync(
+            Uri sourceClusterUri,
+            IImmutableList<string> activityNames,
+            CancellationToken ct)
+        {
+            while (!AreActivitiesCompleted(activityNames))
+            {
+                var blockRecords = GetExportingBlocks(activityNames);
+
+                await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
                 //  Sleep
                 await SleepAsync(ct);
             }
         }
 
-        private IEnumerable<ClusterBlocks> GetClusterBlocks()
+        private IImmutableList<BlockRecord> GetExportingBlocks(IEnumerable<string> activityNames)
         {
-            var hierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                a => a.RowItem.State != ActivityState.Completed,
-                i => i.RowItem.State != IterationState.Completed);
-            var exportingBlocks = hierarchy
-                .Where(h => h.Block.State == BlockState.Exporting);
-            var clusterBlocks = exportingBlocks
-                .GroupBy(h => h.Activity.SourceTable.ClusterUri)
-                .Select(g => new ClusterBlocks(
-                    g.Key,
-                    g.Select(h => h.Block).OrderBy(b => b.Updated).Take(MAX_OPERATIONS)));
+            var blockRecords = Database.Blocks.Query()
+                .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
+                .Take(MAX_OPERATIONS)
+                .ToImmutableArray();
 
-            return clusterBlocks;
+            return blockRecords;
         }
 
         private async Task UpdateOperationsAsync(
             Uri clusterUri,
-            IEnumerable<BlockRowItem> blockItems,
+            IEnumerable<BlockRecord> blockRecords,
             CancellationToken ct)
         {
             var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
-            var operationIdMap = blockItems
+            var operationIdMap = blockRecords
                 .ToImmutableDictionary(b => b.ExportOperationId);
             var statuses = await dbClient.ShowOperationsAsync(
                 KustoPriority.HighestPriority,
@@ -101,10 +106,12 @@ namespace KustoCopyConsole.Runner
 
         #region Handle Operations
         private void DetectLostOperationIds(
-            IImmutableDictionary<string, BlockRowItem> operationIdMap,
+            IImmutableDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> status)
         {
-            var statusOperationIdBag = status.Select(s => s.OperationId).ToHashSet();
+            var statusOperationIdBag = status
+                .Select(s => s.OperationId)
+                .ToHashSet();
 
             foreach (var id in operationIdMap.Keys)
             {
@@ -112,18 +119,34 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    TraceWarning($"Warning!  Operation ID lost:  '{id}' for " +
-                        $"block {block.BlockId} (Iteration={block.IterationId}, " +
-                        $"Activity='{block.ActivityName}') ; block marked for reprocessing");
-                    block.ExportOperationId = string.Empty;
-                    block.ChangeState(BlockState.Planned);
-                    RowItemGateway.Append(block);
+                    TraceWarning(
+                        $"Warning!  Operation ID lost:  '{id}' for " +
+                        $"block {block.BlockKey.BlockId} (Iteration={block.BlockKey.IterationId}, " +
+                        $"Activity='{block.BlockKey.ActivityName}') ; block marked for reprocessing");
+                    block = block with
+                    {
+                        ExportOperationId = string.Empty,
+                        State = BlockState.Planned
+                    };
+                    using (var tx = Database.Database.CreateTransaction())
+                    {
+                        Database.Blocks.Query(tx)
+                            .Where(pf => pf.MatchKeys(
+                                block,
+                                b => b.BlockKey.ActivityName,
+                                b => b.BlockKey.IterationId,
+                                b => b.BlockKey.BlockId))
+                            .Delete();
+                        Database.Blocks.AppendRecord(block, tx);
+
+                        tx.Complete();
+                    }
                 }
             }
         }
 
         private void DetectFailures(
-            IImmutableDictionary<string, BlockRowItem> operationIdMap,
+            IImmutableDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> statuses)
         {
             var failedStatuses = statuses
@@ -137,15 +160,30 @@ namespace KustoCopyConsole.Runner
                     : "block can't be re-exported";
                 var warning = $"Warning!  Operation ID in state '{status.State}', " +
                     $"status '{status.Status}' " +
-                    $"block {block.BlockId} (Iteration={block.IterationId}, " +
-                    $"Activity='{block.ActivityName}') ; {message}";
+                    $"block {block.BlockKey.BlockId} (Iteration={block.BlockKey.IterationId}, " +
+                    $"Activity='{block.BlockKey.ActivityName}') ; {message}";
 
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    block.ExportOperationId = string.Empty;
-                    block = block.ChangeState(BlockState.Planned);
-                    RowItemGateway.Append(block);
+                    block = block with
+                    {
+                        ExportOperationId = string.Empty,
+                        State = BlockState.Planned
+                    };
+                    using (var tx = Database.Database.CreateTransaction())
+                    {
+                        Database.Blocks.Query(tx)
+                            .Where(pf => pf.MatchKeys(
+                                block,
+                                b => b.BlockKey.ActivityName,
+                                b => b.BlockKey.IterationId,
+                                b => b.BlockKey.BlockId))
+                            .Delete();
+                        Database.Blocks.AppendRecord(block, tx);
+
+                        tx.Complete();
+                    }
                 }
                 else
                 {
@@ -153,67 +191,77 @@ namespace KustoCopyConsole.Runner
                 }
             }
         }
+
         private async Task CompleteOperationsAsync(
-            IImmutableDictionary<string, BlockRowItem> operationIdMap,
+            IImmutableDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> statuses,
             CancellationToken ct)
         {
-            async Task ProcessOperationAsync(
-                ExportOperationStatus status,
-                BlockRowItem block,
-                CancellationToken ct)
-            {
-                var activity =
-                    RowItemGateway.InMemoryCache.ActivityMap[block.ActivityName].RowItem;
-                var dbClient = DbClientFactory.GetDbCommandClient(
-                    activity.SourceTable.ClusterUri,
-                    activity.SourceTable.DatabaseName);
-                var details = await dbClient.ShowExportDetailsAsync(
-                    new KustoPriority(block.GetBlockKey()),
-                    status.OperationId,
-                    ct);
-                var urls = details
-                    .Select(d => new UrlRowItem
-                    {
-                        State = UrlState.Exported,
-                        ActivityName = block.ActivityName,
-                        IterationId = block.IterationId,
-                        BlockId = block.BlockId,
-                        Url = d.BlobUri.ToString(),
-                        RowCount = d.RecordCount
-                    });
-                var newBlock = block.ChangeState(BlockState.Exported);
-
-                newBlock.ExportOperationId = string.Empty;
-                newBlock.ExportedRowCount = details.Sum(d => d.RecordCount);
-                Trace.TraceInformation(
-                    $"Exported block {block.GetBlockKey()}:  {urls.Count()} urls");
-                RowItemGateway.Append(urls);
-                RowItemGateway.Append(newBlock);
-                ValidatePlannedRowCount(block);
-            }
-
             var tasks = statuses
-                .Where(s => s.State == "Completed")
-                .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
-                .ToImmutableArray();
+                    .Where(s => s.State == "Completed")
+                    .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
+                    .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(tasks);
         }
 
-        private void ValidatePlannedRowCount(BlockRowItem block)
+        private async Task ProcessOperationAsync(
+            ExportOperationStatus status,
+            BlockRecord block,
+            CancellationToken ct)
         {
-            var cachedBlock = RowItemGateway.InMemoryCache
-                .ActivityMap[block.ActivityName]
-                .IterationMap[block.IterationId]
-                .BlockMap[block.BlockId];
-            var exportedRowCount = cachedBlock.UrlMap.Values.Sum(u => u.RowItem.RowCount);
-
-            if (cachedBlock.RowItem.PlannedRowCount != exportedRowCount)
+            var activityParam = Parameterization.Activities[block.BlockKey.ActivityName];
+            var sourceTable = activityParam.Source.GetTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                sourceTable.ClusterUri,
+                sourceTable.DatabaseName);
+            var details = await dbClient.ShowExportDetailsAsync(
+                new KustoPriority(block.BlockKey),
+                status.OperationId,
+                ct);
+            var urls = details
+                .Select(d => new BlobUrlRecord(
+                    UrlState.Exported,
+                    block.BlockKey,
+                    d.BlobUri,
+                    d.RecordCount,
+                    string.Empty))
+                .ToImmutableArray();
+            var newBlock = block with
             {
-                TraceWarning($"Warning!  For block ID {block.BlockId} " +
-                    $"(activity '{block.ActivityName}', iteration {block.IterationId}) " +
-                    $"had planned row count of {cachedBlock.RowItem.PlannedRowCount} but " +
+                State = BlockState.Exported,
+                ExportOperationId = string.Empty,
+                ExportedRowCount = details.Sum(d => d.RecordCount)
+            };
+
+            Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.MatchKeys(
+                        newBlock,
+                        b => b.BlockKey.ActivityName,
+                        b => b.BlockKey.IterationId,
+                        b => b.BlockKey.BlockId))
+                    .Delete();
+                Database.BlobUrls.AppendRecords(urls, tx);
+                Database.Blocks.AppendRecord(newBlock, tx);
+
+                tx.Complete();
+            }
+            ValidatePlannedRowCount(newBlock, urls);
+        }
+
+        private void ValidatePlannedRowCount(
+            BlockRecord block,
+            IImmutableList<BlobUrlRecord> urls)
+        {
+            var exportedRowCount = urls.Sum(u => u.RowCount);
+
+            if (block.PlannedRowCount != exportedRowCount)
+            {
+                TraceWarning($"Warning!  Block {block.BlockKey} " +
+                    $"had planned row count of {block.PlannedRowCount} but " +
                     $"exported {exportedRowCount} rows");
             }
         }

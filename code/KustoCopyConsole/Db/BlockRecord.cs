@@ -1,5 +1,4 @@
-﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
