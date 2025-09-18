@@ -107,6 +107,8 @@ namespace KustoCopyConsole.Runner
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var awaitIngestRunner = new AwaitIngestRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var moveExtentRunner = new MoveExtentRunner(
+                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var iterationCompletingRunner = new IterationCompletingRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
 
@@ -117,6 +119,7 @@ namespace KustoCopyConsole.Runner
                     Task.Run(() => awaitExportedRunner.RunAsync(ct)),
                     Task.Run(() => queueIngestRunner.RunAsync(ct)),
                     Task.Run(() => awaitIngestRunner.RunAsync(ct)),
+                    Task.Run(() => moveExtentRunner.RunAsync(ct)),
                     Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
             }
         }

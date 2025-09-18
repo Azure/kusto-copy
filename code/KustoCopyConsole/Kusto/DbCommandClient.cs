@@ -250,6 +250,7 @@ let ['{tableName}'] = ['{tableName}']
 
         public async Task<IImmutableList<ExtentRowCount>> GetExtentRowCountsAsync(
             KustoPriority priority,
+            IEnumerable<string> tags,
             string tempTableName,
             CancellationToken ct)
         {
@@ -257,6 +258,11 @@ let ['{tableName}'] = ['{tableName}']
                priority,
                async () =>
                {
+                   if(tags.Any())
+                   {
+                       throw new NotImplementedException("Tags");
+                   }
+
                    var commandText = @$"
 .show table ['{tempTableName}'] extents
 | project ExtentId, RowCount, Tags
