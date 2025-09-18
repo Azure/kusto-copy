@@ -35,120 +35,138 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            //  Clean half-queued URLs
-            CleanQueuingUrls();
-            while (!AllActivitiesCompleted())
+            var tasks = Parameterization.Activities.Keys
+                .Select(a => RunActivityAsync(a, ct))
+                .ToImmutableList();
+
+            await Task.WhenAll(tasks);
+        }
+
+        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        {
+            var destinationTable = Parameterization.Activities[activityName].Destination
+                .GetTableIdentity();
+
+            while (!IsActivityCompleted(activityName))
             {
-                var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                    a => a.RowItem.State != ActivityState.Completed,
-                    i => i.RowItem.State != IterationState.Completed);
-                var exportedBlocks = allBlocks
-                    .Where(h => h.Block.State == BlockState.Exported);
-                var ingestionTasks = exportedBlocks
-                    .OrderBy(h => h.Activity.ActivityName)
-                    .ThenBy(h => h.Block.IterationId)
-                    .ThenBy(h => h.Block.BlockId)
-                    .Select(h => QueueIngestBlockAsync(h, ct))
-                    .ToImmutableArray();
+                var block = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
+                    .OrderBy(b => b.BlockKey.IterationId)
+                    .ThenBy(b => b.BlockKey.BlockId)
+                    .Take(1)
+                    .FirstOrDefault();
 
-                await TaskHelper.WhenAllWithErrors(ingestionTasks);
-
-                if (!ingestionTasks.Any())
+                if (block != null)
                 {
-                    //  Sleep
+                    var tempTable = Database.TempTables.Query()
+                        .Where(pf => pf.Equal(
+                            t => t.IterationKey,
+                            block.BlockKey.ToIterationKey()))
+                        .FirstOrDefault();
+
+                    //  It's possible, although unlikely, the temp table hasn't been created yet
+                    //  If so, we'll process this block later
+                    if (tempTable == null)
+                    {
+                        await SleepAsync(ct);
+                    }
+                    else
+                    {
+                        var ingestClient = DbClientFactory.GetIngestClient(
+                            destinationTable.ClusterUri,
+                            destinationTable.DatabaseName,
+                            tempTable.TempTableName);
+
+                        await QueueIngestBlockAsync(block, ingestClient, ct);
+                    }
+                }
+                else
+                {
                     await SleepAsync(ct);
                 }
             }
         }
 
-        private void CleanQueuingUrls()
-        {
-            var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                a => a.RowItem.State != ActivityState.Completed,
-                i => i.RowItem.State != IterationState.Completed);
-            var queuingBlocks = allBlocks
-                .Where(h => h.Block.State == BlockState.Exported)
-                .Where(h => h.Urls.Any(u => u.State == UrlState.Queued));
-            var queuingUrls = queuingBlocks
-                .SelectMany(h => h.Urls);
-
-            foreach (var block in queuingBlocks)
-            {
-                foreach (var url in block.Urls.Where(u => u.State == UrlState.Queued))
-                {
-                    var newUrlItem = url.ChangeState(UrlState.Exported);
-
-                    RowItemGateway.Append(newUrlItem);
-                }
-            }
-        }
-
-        private async Task QueueIngestBlockAsync(ActivityFlatHierarchy item, CancellationToken ct)
-        {
-            UrlRowItem MarkUrlAsQueued(UrlRowItem url, string serializedQueueResult)
-            {
-                var newUrl = url.ChangeState(UrlState.Queued);
-
-                newUrl.SerializedQueuedResult = serializedQueueResult;
-
-                return newUrl;
-            }
-
-            //  It's possible, although unlikely, the temp table hasn't been created yet
-            //  If so, we'll process this block later
-            if (item.TempTable != null)
-            {
-                var ingestClient = DbClientFactory.GetIngestClient(
-                    item.Activity.DestinationTable.ClusterUri,
-                    item.Activity.DestinationTable.DatabaseName,
-                    item.TempTable!.TempTableName);
-                var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
-                var newBlockItem = item.Block.ChangeState(BlockState.Queued);
-
-                newBlockItem.BlockTag = blockTag;
-                Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  ingest " +
-                    $"{item.Urls.Count()} urls");
-
-                var queuingTasks = item
-                    .Urls
-                    .Select(u => new
-                    {
-                        Url = u,
-                        Task = QueueIngestUrlAsync(
-                            ingestClient,
-                            newBlockItem,
-                            new Uri(u.Url),
-                            ct)
-                    })
-                    .ToImmutableArray();
-
-                await TaskHelper.WhenAllWithErrors(queuingTasks.Select(o => o.Task));
-
-                var newUrlItems = queuingTasks
-                    .Select(o => MarkUrlAsQueued(o.Url, o.Task.Result));
-
-                RowItemGateway.Append(newUrlItems);
-                RowItemGateway.Append(newBlockItem);
-                Trace.TraceInformation($"Block {item.Block.GetBlockKey()}:  " +
-                    $"{item.Urls.Count()} urls queued");
-            }
-        }
-
-        private async Task<string> QueueIngestUrlAsync(
+        private async Task QueueIngestBlockAsync(
+            BlockRecord block,
             IngestClient ingestClient,
-            BlockRowItem block,
-            Uri blobUrl,
             CancellationToken ct)
         {
-            var uri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl, ct);
+            var urlRecords = Database.BlobUrls.Query()
+                .Where(pf => pf.Equal(u => u.BlockKey.ActivityName, block.BlockKey.ActivityName))
+                .Where(pf => pf.Equal(u => u.BlockKey.IterationId, block.BlockKey.IterationId))
+                .Where(pf => pf.Equal(u => u.BlockKey.BlockId, block.BlockKey.BlockId))
+                .ToImmutableArray();
+
+            Trace.TraceInformation($"Block {block.BlockKey}:  ingest {urlRecords.Length} urls");
+
+            var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
+            var queuingTasks = urlRecords
+                .Select(u => QueueIngestUrlAsync(
+                    ingestClient,
+                    u,
+                    blockTag,
+                    block.MinCreationTime,
+                    ct))
+                .ToImmutableArray();
+
+            await TaskHelper.WhenAllWithErrors(queuingTasks);
+            CommitQueuedBlobs(
+                queuingTasks.Select(o => o.Result),
+                block with
+                {
+                    State = BlockState.Queued,
+                    BlockTag = blockTag
+                });
+
+            Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
+        }
+
+        private async Task<BlobUrlRecord> QueueIngestUrlAsync(
+            IngestClient ingestClient,
+            BlobUrlRecord blobUrl,
+            string blockTag,
+            DateTime? creationTime,
+            CancellationToken ct)
+        {
+            var authorizedUri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
             var serializedQueueResult = await ingestClient.QueueBlobAsync(
-                new KustoPriority(block.GetBlockKey()),
-                uri,
-                block.BlockTag,
-                block.MinCreationTime,
+                new KustoPriority(blobUrl.BlockKey),
+                authorizedUri,
+                blockTag,
+                creationTime,
                 ct);
 
-            return serializedQueueResult;
+            return blobUrl with
+            {
+                State = UrlState.Queued,
+                SerializedQueuedResult = serializedQueueResult
+            };
+        }
+
+        private void CommitQueuedBlobs(IEnumerable<BlobUrlRecord> blobUrls, BlockRecord block)
+        {
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                Database.BlobUrls.Query(tx)
+                    .Where(pf => pf.MatchKeys(
+                        blobUrls.First(),
+                        u => u.BlockKey.ActivityName,
+                        u => u.BlockKey.IterationId,
+                        u => u.BlockKey.BlockId))
+                    .Delete();
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.MatchKeys(
+                        block,
+                        b => b.BlockKey.ActivityName,
+                        b => b.BlockKey.IterationId,
+                        b => b.BlockKey.BlockId))
+                    .Delete();
+
+                Database.BlobUrls.AppendRecords(blobUrls, tx);
+                Database.Blocks.AppendRecord(block, tx);
+            }
         }
     }
 }
