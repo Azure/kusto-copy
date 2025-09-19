@@ -52,17 +52,18 @@ namespace KustoCopyConsole.Runner
             IImmutableList<string> activityNames,
             CancellationToken ct)
         {
-            var capacityCache =
-                new CapacityCache(DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD), 0);
+            var capacityCache = new CapacityCache(
+                DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD),
+                0);
 
             while (!AreActivitiesCompleted(activityNames))
             {
                 //  Ensures capacity of source cluster
-                capacityCache = capacityCache.CachedTime < DateTime.Now
-                    ? capacityCache
-                    : new CapacityCache(
+                capacityCache = capacityCache.CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now
+                    ? new CapacityCache(
                         DateTime.Now,
-                        await FetchCapacityAsync(sourceClusterUri, ct));
+                        await FetchCapacityAsync(sourceClusterUri, ct))
+                    : capacityCache;
 
                 var plannedBlocks = FetchPlannedBlocks(activityNames, capacityCache.CachedCapacity);
 

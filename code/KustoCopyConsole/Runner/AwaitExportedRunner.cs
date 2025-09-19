@@ -64,9 +64,14 @@ namespace KustoCopyConsole.Runner
             {
                 var blockRecords = GetExportingBlocks(activityNames);
 
-                await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
-                //  Sleep
-                await SleepAsync(ct);
+                if (blockRecords.Any())
+                {
+                    await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
+                }
+                else
+                {
+                    await SleepAsync(ct);
+                }
             }
         }
 
