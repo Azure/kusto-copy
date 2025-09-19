@@ -4,7 +4,6 @@
     {
         Required,
         Creating,
-        Created,
-        Dropped
+        Created
     }
 }

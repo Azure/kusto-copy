@@ -111,6 +111,8 @@ namespace KustoCopyConsole.Runner
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var iterationCompletingRunner = new IterationCompletingRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var activityCompletingRunner = new ActivityCompletingRunner(
+                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
 
                 await TaskHelper.WhenAllWithErrors(
                     Task.Run(() => planningRunner.RunAsync(ct)),
@@ -120,7 +122,8 @@ namespace KustoCopyConsole.Runner
                     Task.Run(() => queueIngestRunner.RunAsync(ct)),
                     Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                     Task.Run(() => moveExtentRunner.RunAsync(ct)),
-                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
+                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
+                    Task.Run(() => activityCompletingRunner.RunAsync(ct)));
             }
         }
 

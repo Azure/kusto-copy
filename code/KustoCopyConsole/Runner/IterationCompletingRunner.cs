@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class IterationCompletingRunner : ActivityRunnerBase
+    internal class IterationCompletingRunner : RunnerBase
     {
         public IterationCompletingRunner(
             MainJobParameterization parameterization,
@@ -30,75 +30,90 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
+        public async Task RunAsync(CancellationToken ct)
         {
-            await CompleteIterationsAsync(ct);
-            CompleteActivities();
+            while (!AllActivitiesCompleted())
+            {
+                await CompleteIterationsAsync(ct);
 
-            return true;
+                await SleepAsync(ct);
+            }
         }
 
         private async Task CompleteIterationsAsync(CancellationToken ct)
         {
-            var completingIterations = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                //  The iteration is planned, hence all its blocks are in place
-                .Where(i => i.RowItem.State == IterationState.Planned)
-                //  All blocks in the iteration are moved
-                .Where(i => !i.BlockMap.Any()
-                || !i.BlockMap.Values.Any(b => b.RowItem.State != BlockState.ExtentMoved));
+            var candidateIterations = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.State, IterationState.Planned))
+                .ToImmutableArray();
 
-            foreach (var iteration in completingIterations)
+            foreach (var iteration in candidateIterations)
             {
-                if (iteration.TempTable != null
-                    && iteration.TempTable.State == TempTableState.Created)
+                var unmovedBlocks = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, iteration.IterationKey.ActivityName))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationId, iteration.IterationKey.IterationId))
+                    .Where(pf => pf.NotEqual(b => b.State, BlockState.ExtentMoved))
+                    .Count();
+
+                if (unmovedBlocks == 0)
                 {
-                    var tableId = RowItemGateway.InMemoryCache
-                        .ActivityMap[iteration.RowItem.ActivityName]
-                        .RowItem
-                        .DestinationTable;
+                    var tempTable = GetTempTable(iteration.IterationKey);
+                    var destinationTable = Parameterization
+                        .Activities[iteration.IterationKey.ActivityName]
+                        .Destination
+                        .GetTableIdentity();
                     var dbClient = DbClientFactory.GetDbCommandClient(
-                        tableId.ClusterUri,
-                        tableId.DatabaseName);
-                    var iterationKey = iteration.RowItem.GetIterationKey();
+                        destinationTable.ClusterUri,
+                        destinationTable.DatabaseName);
 
                     await dbClient.DropTableIfExistsAsync(
-                        new KustoPriority(iterationKey),
-                        iteration.TempTable.TempTableName,
+                        new KustoPriority(iteration.IterationKey),
+                        tempTable.TempTableName,
                         ct);
-                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(iterationKey, ct);
+                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(
+                        iteration.IterationKey,
+                        ct);
+                    CommitCompleteIteration(iteration);
                 }
-                var newIteration = iteration.RowItem.ChangeState(IterationState.Completed);
-
-                RowItemGateway.Append(newIteration);
             }
         }
 
-        private void CompleteActivities()
+        private void CommitCompleteIteration(IterationRecord iteration)
         {
-            var candidateActivities = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                //  There is at least one iteration:  exclude iteration-less activities
-                .Where(a => a.IterationMap.Any())
-                //  All iterations are completed
-                .Where(a => !a.IterationMap.Values.Any(i => i.RowItem.State != IterationState.Completed))
-                .Select(a => a.RowItem);
-
-            foreach (var activity in candidateActivities)
+            using (var tx = Database.Database.CreateTransaction())
             {
-                if (!Parameterization.IsContinuousRun
-                    || Parameterization.Activities[activity.ActivityName].TableOption.ExportMode
-                    == ExportMode.BackfillOnly)
-                {
-                    var newActivity = activity.ChangeState(ActivityState.Completed);
+                Database.Iterations.Query(tx)
+                    .Where(pf => pf.Equal(
+                        i => i.IterationKey.ActivityName,
+                        iteration.IterationKey.ActivityName))
+                    .Where(pf => pf.Equal(
+                        i => i.IterationKey.IterationId,
+                        iteration.IterationKey.IterationId))
+                    .Delete();
+                Database.TempTables.Query(tx)
+                    .Where(pf => pf.Equal(
+                        i => i.IterationKey.ActivityName,
+                        iteration.IterationKey.ActivityName))
+                    .Where(pf => pf.Equal(
+                        i => i.IterationKey.IterationId,
+                        iteration.IterationKey.IterationId))
+                    .Delete();
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.ActivityName,
+                        iteration.IterationKey.ActivityName))
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.IterationId,
+                        iteration.IterationKey.IterationId))
+                    .Delete();
 
-                    RowItemGateway.Append(newActivity);
-                }
+                Database.Iterations.AppendRecord(
+                    iteration with
+                    {
+                        State = IterationState.Completed
+                    },
+                    tx);
+
+                tx.Complete();
             }
         }
     }
