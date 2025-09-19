@@ -1,9 +1,11 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
+using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 
@@ -80,5 +82,31 @@ namespace KustoCopyConsole.Runner
         {
             _traceSource.TraceEvent(TraceEventType.Warning, 0, text);
         }
+
+        #region Temp Table
+        protected TempTableRecord? TryGetTempTable(IterationKey iterationKey)
+        {
+            var tempTable = Database.TempTables.Query()
+                .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
+                .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
+                .Take(1)
+                .FirstOrDefault();
+
+            return tempTable;
+        }
+
+        protected TempTableRecord GetTempTable(IterationKey iterationKey)
+        {
+            var tempTable = TryGetTempTable(iterationKey);
+
+            if (tempTable == null)
+            {
+                throw new InvalidDataException(
+                    $"TempTable for iteration {iterationKey} should exist by now");
+            }
+
+            return tempTable;
+        }
+        #endregion
     }
 }

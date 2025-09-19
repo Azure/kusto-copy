@@ -47,17 +47,13 @@ namespace KustoCopyConsole.Runner
 
             if (block != null)
             {
-                var tempTable = Database.TempTables.Query()
-                    .Where(pf => pf.Equal(
-                        t => t.IterationKey,
-                        block.BlockKey.ToIterationKey()))
-                    .FirstOrDefault();
+                var tempTable = TryGetTempTable(block.BlockKey.ToIterationKey());
 
                 //  It's possible, although unlikely, the temp table hasn't been created yet
                 //  If so, we'll process this block later
                 if (tempTable == null)
                 {
-                    return true;
+                    return false;
                 }
                 else
                 {
@@ -68,12 +64,12 @@ namespace KustoCopyConsole.Runner
 
                     await QueueIngestBlockAsync(block, ingestClient, ct);
 
-                    return false;
+                    return true;
                 }
             }
             else
             {
-                return true;
+                return false;
             }
         }
 

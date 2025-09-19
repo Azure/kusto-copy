@@ -76,20 +76,7 @@ namespace KustoCopyConsole.Runner
 
             if (queuedBlockByBlockId.Any())
             {
-                var tempTable = Database.TempTables.Query()
-                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
-                    .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
-                    .Take(1)
-                    .FirstOrDefault();
-
-                if (tempTable == null)
-                {
-                    throw new InvalidDataException(
-                        $"TempTable for iteration " +
-                        $"{queuedBlockByBlockId.Values.First().BlockKey.ToIterationKey()}" +
-                        $" should exist by now");
-                }
-
+                var tempTable = GetTempTable(iterationKey);
                 var extents = await DetectIngestedBlocksAsync(
                     queuedBlockByBlockId.Values,
                     dbClient,
@@ -197,18 +184,7 @@ namespace KustoCopyConsole.Runner
 
             if (oldestQueuedBlock != null)
             {
-                var tempTable = Database.TempTables.Query()
-                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
-                    .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
-                    .Take(1)
-                    .FirstOrDefault();
-
-                if (tempTable == null)
-                {
-                    throw new InvalidDataException(
-                        $"TempTable for iteration {iterationKey} should exist by now");
-                }
-
+                var tempTable = GetTempTable(iterationKey);
                 var ingestClient = DbClientFactory.GetIngestClient(
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName,
