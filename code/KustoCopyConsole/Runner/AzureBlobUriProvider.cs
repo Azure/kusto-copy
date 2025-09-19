@@ -5,7 +5,7 @@ using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using Azure.Storage.Sas;
 using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Entity.RowItems.Keys;
+using KustoCopyConsole.Db.Keys;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -13,9 +13,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Storage.AzureStorage
+namespace KustoCopyConsole.Runner
 {
-    internal class AzureBlobUriProvider : IStagingBlobUriProvider
+    internal class AzureBlobUriProvider
     {
         #region Inner Types
         private class DirectoryProvider
@@ -118,7 +118,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
                 .ToImmutableDictionary(p => p.RootDirectoryUri.ToString(), p => p);
         }
 
-        async Task<IEnumerable<Uri>> IStagingBlobUriProvider.GetWritableFolderUrisAsync(
+        public async Task<IEnumerable<Uri>> GetWritableFolderUrisAsync(
             BlockKey blockKey,
             CancellationToken ct)
         {
@@ -136,7 +136,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             return uris;
         }
 
-        async Task<Uri> IStagingBlobUriProvider.AuthorizeUriAsync(Uri uri, CancellationToken ct)
+        public async Task<Uri> AuthorizeUriAsync(Uri uri, CancellationToken ct)
         {
             var storageRoot = _providerMap.Keys
                 .Where(k => uri.ToString().StartsWith(k))
@@ -154,7 +154,7 @@ namespace KustoCopyConsole.Storage.AzureStorage
             }
         }
 
-        async Task IStagingBlobUriProvider.DeleteStagingDirectoryAsync(
+        public async Task DeleteStagingDirectoryAsync(
             IterationKey iterationKey,
             CancellationToken ct)
         {

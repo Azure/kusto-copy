@@ -1,9 +1,8 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.Db.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -16,14 +15,12 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             TokenCredential credential,
             TrackDatabase database,
-            RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
+            AzureBlobUriProvider stagingBlobUriProvider)
            : base(
                  parameterization,
                  credential,
                  database,
-                 rowItemGateway,
                  dbClientFactory,
                  stagingBlobUriProvider,
                  TimeSpan.FromSeconds(5))

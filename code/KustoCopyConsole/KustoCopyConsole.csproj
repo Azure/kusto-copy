@@ -18,9 +18,6 @@
     <NoWarn>IL2124</NoWarn>
     <NoWarn>IL2026</NoWarn>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Remove="Storage\LocalDisk\LocalAppendStorage.cs" />
-  </ItemGroup>
 
   <!--  Disable trimming on Kusto library  -->
   <ItemGroup>
@@ -28,9 +25,6 @@
     <TrimmerRootAssembly Include="Kusto.Data" />
     <TrimmerRootAssembly Include="Kusto.Ingest" />
     <EmbeddedResource Include="rd.xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Storage\LocalDisk\LocalAppendStorage.cs" />
   </ItemGroup>
 
   <ItemGroup>

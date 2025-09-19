@@ -1,10 +1,9 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.RowItems.Keys;
-using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.Db.Keys;
+using KustoCopyConsole.Db.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -23,15 +22,13 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             TokenCredential credential,
             TrackDatabase database,
-            RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider,
+            AzureBlobUriProvider stagingBlobUriProvider,
             TimeSpan wakePeriod)
         {
             Parameterization = parameterization;
             Credential = credential;
             Database = database;
-            RowItemGateway = rowItemGateway;
             DbClientFactory = dbClientFactory;
             StagingBlobUriProvider = stagingBlobUriProvider;
             _wakePeriod = wakePeriod;
@@ -43,11 +40,9 @@ namespace KustoCopyConsole.Runner
 
         protected TrackDatabase Database { get; }
 
-        protected RowItemGateway RowItemGateway { get; }
-
         protected DbClientFactory DbClientFactory { get; }
 
-        protected IStagingBlobUriProvider StagingBlobUriProvider { get; }
+        protected AzureBlobUriProvider StagingBlobUriProvider { get; }
 
         protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
         {

@@ -1,11 +1,9 @@
 ﻿using Azure.Core;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.RowItems.Keys;
-using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.Db.Keys;
+using KustoCopyConsole.Db.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
-using KustoCopyConsole.Storage.AzureStorage;
 using System.Collections.Immutable;
 using TrackDb.Lib;
 
@@ -21,21 +19,8 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var fileSystem = new AzureBlobFileSystem(
-                parameterization.StagingStorageDirectories.First(),
-                credentials);
             var database = await TrackDatabase.CreateAsync();
 
-            Console.Write("Initialize storage...");
-
-            var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
-
-            Console.WriteLine("  Done");
-            Console.Write("Reading checkpoint logs...");
-
-            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, ct);
-
-            Console.WriteLine("  Done");
             Console.Write("Initialize Kusto connections...");
 
             var dbClientFactory = await DbClientFactory.CreateAsync(
@@ -54,7 +39,6 @@ namespace KustoCopyConsole.Runner
                 parameterization,
                 credentials,
                 database,
-                rowItemGateway,
                 dbClientFactory,
                 stagingBlobUriProvider);
         }
@@ -63,14 +47,12 @@ namespace KustoCopyConsole.Runner
             MainJobParameterization parameterization,
             TokenCredential credential,
             TrackDatabase database,
-            RowItemGateway rowItemGateway,
             DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
+            AzureBlobUriProvider stagingBlobUriProvider)
             : base(
                   parameterization,
                   credential,
                   database,
-                  rowItemGateway,
                   dbClientFactory,
                   stagingBlobUriProvider,
                   TimeSpan.Zero)
@@ -80,7 +62,7 @@ namespace KustoCopyConsole.Runner
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await ((IAsyncDisposable)RowItemGateway).DisposeAsync();
+            await ((IAsyncDisposable)Database).DisposeAsync();
             ((IDisposable)DbClientFactory).Dispose();
         }
 
@@ -93,38 +75,38 @@ namespace KustoCopyConsole.Runner
 
                 tx.Complete();
             }
-            await using (var progressBar = new ProgressBar(RowItemGateway, ct))
-            {
-                var planningRunner = new PlanningRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var tempTableRunner = new TempTableCreatingRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var exportingRunner = new ExportingRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var awaitExportedRunner = new AwaitExportedRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var queueIngestRunner = new QueueIngestRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var awaitIngestRunner = new AwaitIngestRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var moveExtentRunner = new MoveExtentRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var iterationCompletingRunner = new IterationCompletingRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var activityCompletingRunner = new ActivityCompletingRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+            var progressRunner = new ProgressRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var planningRunner = new PlanningRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var tempTableRunner = new TempTableCreatingRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var exportingRunner = new ExportingRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var awaitExportedRunner = new AwaitExportedRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var queueIngestRunner = new QueueIngestRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var awaitIngestRunner = new AwaitIngestRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var moveExtentRunner = new MoveExtentRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var iterationCompletingRunner = new IterationCompletingRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var activityCompletingRunner = new ActivityCompletingRunner(
+                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
 
-                await TaskHelper.WhenAllWithErrors(
-                    Task.Run(() => planningRunner.RunAsync(ct)),
-                    Task.Run(() => tempTableRunner.RunAsync(ct)),
-                    Task.Run(() => exportingRunner.RunAsync(ct)),
-                    Task.Run(() => awaitExportedRunner.RunAsync(ct)),
-                    Task.Run(() => queueIngestRunner.RunAsync(ct)),
-                    Task.Run(() => awaitIngestRunner.RunAsync(ct)),
-                    Task.Run(() => moveExtentRunner.RunAsync(ct)),
-                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                    Task.Run(() => activityCompletingRunner.RunAsync(ct)));
-            }
+            await TaskHelper.WhenAllWithErrors(
+                Task.Run(() => progressRunner.RunAsync(ct)),
+                Task.Run(() => planningRunner.RunAsync(ct)),
+                Task.Run(() => tempTableRunner.RunAsync(ct)),
+                Task.Run(() => exportingRunner.RunAsync(ct)),
+                Task.Run(() => awaitExportedRunner.RunAsync(ct)),
+                Task.Run(() => queueIngestRunner.RunAsync(ct)),
+                Task.Run(() => awaitIngestRunner.RunAsync(ct)),
+                Task.Run(() => moveExtentRunner.RunAsync(ct)),
+                Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
+                Task.Run(() => activityCompletingRunner.RunAsync(ct)));
         }
 
         private void SyncActivities(TransactionContext tx)

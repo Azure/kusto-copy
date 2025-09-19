@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Entity.RowItems.Keys
+﻿namespace KustoCopyConsole.Db.Keys
 {
     internal record BlockKey(string ActivityName, long IterationId, long BlockId)
     {
