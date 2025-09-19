@@ -40,7 +40,7 @@ namespace KustoCopyConsole.Runner
                         [TempTableState.Required, TempTableState.Creating]))
                     .ToImmutableArray();
                 var tasks = tempTables
-                    .Select(t => EnsureTempTableCreatedAsync(t, ct))
+                    .Select(t => Task.Run(() => EnsureTempTableCreatedAsync(t, ct)))
                     .ToImmutableArray();
 
                 await Task.WhenAll(tasks);

@@ -37,16 +37,17 @@ namespace KustoCopyConsole.Runner
 
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
-            var newIterations = Database.Iterations.Query()
+            var iterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
-                .Where(pf => pf.Equal(i => i.State, IterationState.Planning));
-            var iterationTasks = newIterations
-                .Select(i => PlanIterationAsync(i, ct))
+                .Where(pf => pf.LessThanOrEqual(i => i.State, IterationState.Planning))
                 .ToImmutableArray();
 
-            await Task.WhenAll(iterationTasks);
-
-            return !iterationTasks.Any();
+            foreach(var iteration in iterations)
+            {
+                await PlanIterationAsync(iteration, ct);
+            }
+            
+            return iterations.Any();
         }
 
         private async Task PlanIterationAsync(
