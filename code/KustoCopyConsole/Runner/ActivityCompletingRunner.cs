@@ -42,25 +42,40 @@ namespace KustoCopyConsole.Runner
 
         private void CompleteActivities()
         {
-            var candidateActivities = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                //  There is at least one iteration:  exclude iteration-less activities
-                .Where(a => a.IterationMap.Any())
-                //  All iterations are completed
-                .Where(a => !a.IterationMap.Values.Any(i => i.RowItem.State != IterationState.Completed))
-                .Select(a => a.RowItem);
+            var completedIterations = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.State, IterationState.Completed))
+                .ToImmutableArray();
 
-            foreach (var activity in candidateActivities)
+            foreach (var iteration in completedIterations)
             {
-                if (!Parameterization.IsContinuousRun
-                    || Parameterization.Activities[activity.ActivityName].TableOption.ExportMode
-                    == ExportMode.BackfillOnly)
-                {
-                    var newActivity = activity.ChangeState(ActivityState.Completed);
+                var activityParam = Parameterization.Activities[iteration.IterationKey.ActivityName];
 
-                    RowItemGateway.Append(newActivity);
+                if (!Parameterization.IsContinuousRun
+                    || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly
+                    || activityParam.TableOption.ExportMode == ExportMode.NewOnly)
+                {
+                    using (var tx = Database.Database.CreateTransaction())
+                    {
+                        var activity = Database.Activities.Query(tx)
+                            .Where(pf => pf.Equal(
+                                a => a.ActivityName,
+                                iteration.IterationKey.ActivityName))
+                            .First();
+
+                        Database.Activities.Query(tx)
+                            .Where(pf => pf.Equal(
+                                a => a.ActivityName,
+                                iteration.IterationKey.ActivityName))
+                            .Delete();
+                        Database.Activities.AppendRecord(
+                            activity with
+                            {
+                                State = ActivityState.Completed
+                            },
+                            tx);
+
+                        tx.Complete();
+                    }
                 }
             }
         }
