@@ -31,49 +31,49 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task<bool> RunActivityAsync(
+            string activityName,
+            CancellationToken ct)
         {
             var destinationTable = Parameterization.Activities[activityName].Destination
                 .GetTableIdentity();
+            var block = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
+                .OrderBy(b => b.BlockKey.IterationId)
+                .ThenBy(b => b.BlockKey.BlockId)
+                .Take(1)
+                .FirstOrDefault();
 
-            while (!IsActivityCompleted(activityName))
+            if (block != null)
             {
-                var block = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
-                    .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
-                    .OrderBy(b => b.BlockKey.IterationId)
-                    .ThenBy(b => b.BlockKey.BlockId)
-                    .Take(1)
+                var tempTable = Database.TempTables.Query()
+                    .Where(pf => pf.Equal(
+                        t => t.IterationKey,
+                        block.BlockKey.ToIterationKey()))
                     .FirstOrDefault();
 
-                if (block != null)
+                //  It's possible, although unlikely, the temp table hasn't been created yet
+                //  If so, we'll process this block later
+                if (tempTable == null)
                 {
-                    var tempTable = Database.TempTables.Query()
-                        .Where(pf => pf.Equal(
-                            t => t.IterationKey,
-                            block.BlockKey.ToIterationKey()))
-                        .FirstOrDefault();
-
-                    //  It's possible, although unlikely, the temp table hasn't been created yet
-                    //  If so, we'll process this block later
-                    if (tempTable == null)
-                    {
-                        await SleepAsync(ct);
-                    }
-                    else
-                    {
-                        var ingestClient = DbClientFactory.GetIngestClient(
-                            destinationTable.ClusterUri,
-                            destinationTable.DatabaseName,
-                            tempTable.TempTableName);
-
-                        await QueueIngestBlockAsync(block, ingestClient, ct);
-                    }
+                    return true;
                 }
                 else
                 {
-                    await SleepAsync(ct);
+                    var ingestClient = DbClientFactory.GetIngestClient(
+                        destinationTable.ClusterUri,
+                        destinationTable.DatabaseName,
+                        tempTable.TempTableName);
+
+                    await QueueIngestBlockAsync(block, ingestClient, ct);
+
+                    return false;
                 }
+            }
+            else
+            {
+                return true;
             }
         }
 

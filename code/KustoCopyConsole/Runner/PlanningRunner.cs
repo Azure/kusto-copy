@@ -35,23 +35,18 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
-            while (!IsActivityCompleted(activityName))
-            {
-                var newIterations = Database.Iterations.Query()
-                    .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
-                    .Where(pf => pf.Equal(i => i.State, IterationState.Planning));
-                var iterationTasks = newIterations
-                    .Select(i => PlanIterationAsync(i, ct))
-                    .ToImmutableArray();
+            var newIterations = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                .Where(pf => pf.Equal(i => i.State, IterationState.Planning));
+            var iterationTasks = newIterations
+                .Select(i => PlanIterationAsync(i, ct))
+                .ToImmutableArray();
 
-                await Task.WhenAll(iterationTasks);
-                if (!iterationTasks.Any())
-                {
-                    await SleepAsync(ct);
-                }
-            }
+            await Task.WhenAll(iterationTasks);
+
+            return !iterationTasks.Any();
         }
 
         private async Task PlanIterationAsync(

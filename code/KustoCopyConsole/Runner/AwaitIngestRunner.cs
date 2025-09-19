@@ -36,34 +36,28 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
                 Parameterization.Activities[activityName].Destination.GetTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
+            var iterationIds = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                .Where(pf => pf.LessThan(i => i.State, IterationState.Completed))
+                .Select(i => i.IterationKey.IterationId)
+                .ToImmutableArray();
 
-            while (!IsActivityCompleted(activityName))
+            foreach (var iterationId in iterationIds)
             {
-                var iterationIds = Database.Iterations.Query()
-                    .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
-                    .Where(pf => pf.LessThan(i => i.State, IterationState.Completed))
-                    .Select(i => i.IterationKey.IterationId)
-                    .ToImmutableArray();
+                var iterationKey = new IterationKey(activityName, iterationId);
 
-                foreach (var iterationId in iterationIds)
-                {
-                    var iterationKey = new IterationKey(activityName, iterationId);
-
-                    await UpdateIngestedAsync(iterationKey, dbClient, ct);
-                    await FailureDetectionAsync(iterationKey, destinationTable, ct);
-                }
-                if (iterationIds.Any())
-                {
-                    await SleepAsync(ct);
-                }
+                await UpdateIngestedAsync(iterationKey, dbClient, ct);
+                await FailureDetectionAsync(iterationKey, destinationTable, ct);
             }
+         
+            return iterationIds.Any();
         }
 
         #region Update Ingested

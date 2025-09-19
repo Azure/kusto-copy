@@ -33,15 +33,13 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task<bool> RunActivityAsync(
+            string activityName,
+            CancellationToken ct)
         {
-            while (!IsActivityCompleted(activityName))
-            {
-                await MoveAsync(ct);
+            await MoveAsync(ct);
 
-                //  Sleep
-                await SleepAsync(ct);
-            }
+            return true;
         }
 
         private async Task MoveAsync(CancellationToken ct)
