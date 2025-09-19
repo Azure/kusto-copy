@@ -1,7 +1,5 @@
 ﻿using Azure.Core;
-using Azure.Storage.Files.DataLake;
 using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.RowItems.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -12,7 +10,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class IterationCompletingRunner : RunnerBase
+    internal class IterationCompletingRunner : ActivityRunnerBase
     {
         public IterationCompletingRunner(
             MainJobParameterization parameterization,
@@ -32,7 +30,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             while (!AllActivitiesCompleted())
             {

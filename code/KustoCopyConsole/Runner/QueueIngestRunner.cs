@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class QueueIngestRunner : RunnerBase
+    internal class QueueIngestRunner : ActivityRunnerBase
     {
 
         public QueueIngestRunner(
@@ -31,16 +31,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
-        {
-            var tasks = Parameterization.Activities.Keys
-                .Select(a => RunActivityAsync(a, ct))
-                .ToImmutableList();
-
-            await Task.WhenAll(tasks);
-        }
-
-        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable = Parameterization.Activities[activityName].Destination
                 .GetTableIdentity();

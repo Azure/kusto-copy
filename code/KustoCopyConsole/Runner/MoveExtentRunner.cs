@@ -11,7 +11,7 @@ using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class MoveExtentRunner : RunnerBase
+    internal class MoveExtentRunner : ActivityRunnerBase
     {
         private const int MAXIMUM_EXTENT_MOVING = 100;
 
@@ -33,16 +33,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
-        {
-            var tasks = Parameterization.Activities.Keys
-                .Select(a => RunActivityAsync(a, ct))
-                .ToImmutableList();
-
-            await Task.WhenAll(tasks);
-        }
-
-        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             while (!IsActivityCompleted(activityName))
             {

@@ -95,33 +95,42 @@ namespace KustoCopyConsole.Runner
             }
             await using (var progressBar = new ProgressBar(RowItemGateway, ct))
             {
-                var planningRunner = new PlanningRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var tempTableRunner = new TempTableCreatingRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var exportingRunner = new ExportingRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
                 var awaitExportedRunner = new AwaitExportedRunner(
                     Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var queueIngestRunner = new QueueIngestRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var awaitIngestRunner = new AwaitIngestRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var moveExtentRunner = new MoveExtentRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var iterationCompletingRunner = new IterationCompletingRunner(
-                    Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+                var activityTasks = Parameterization.Activities.Keys
+                    .Select(a => Task.Run(() => RunActivityAsync(a, ct)))
+                    .ToImmutableList();
 
-                await TaskHelper.WhenAllWithErrors(
-                    Task.Run(() => planningRunner.RunAsync(ct)),
-                    Task.Run(() => tempTableRunner.RunAsync(ct)),
-                    Task.Run(() => exportingRunner.RunAsync(ct)),
-                    Task.Run(() => awaitExportedRunner.RunAsync(ct)),
-                    Task.Run(() => queueIngestRunner.RunAsync(ct)),
-                    Task.Run(() => awaitIngestRunner.RunAsync(ct)),
-                    Task.Run(() => moveExtentRunner.RunAsync(ct)),
-                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
+                await TaskHelper.WhenAllWithErrors(activityTasks
+                    .Append(Task.Run(() => tempTableRunner.RunAsync(ct)))
+                    .Append(Task.Run(() => exportingRunner.RunAsync(ct)))
+                    .Append(Task.Run(() => awaitExportedRunner.RunAsync(ct))));
             }
+        }
+
+        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        {
+            var planningRunner = new PlanningRunner(
+                Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+            var queueIngestRunner = new QueueIngestRunner(
+                Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+            var awaitIngestRunner = new AwaitIngestRunner(
+                Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+            var moveExtentRunner = new MoveExtentRunner(
+                Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+            var iterationCompletingRunner = new IterationCompletingRunner(
+                Parameterization, Credential, Database, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
+
+            await TaskHelper.WhenAllWithErrors(
+                Task.Run(() => planningRunner.RunActivityAsync(activityName, ct)),
+                Task.Run(() => queueIngestRunner.RunActivityAsync(activityName, ct)),
+                Task.Run(() => awaitIngestRunner.RunActivityAsync(activityName, ct)),
+                Task.Run(() => moveExtentRunner.RunActivityAsync(activityName, ct)),
+                Task.Run(() => iterationCompletingRunner.RunActivityAsync(activityName, ct)));
         }
 
         private void SyncActivities(TransactionContext tx)

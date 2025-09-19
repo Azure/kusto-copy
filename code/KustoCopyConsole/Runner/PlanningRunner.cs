@@ -13,7 +13,7 @@ using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class PlanningRunner : RunnerBase
+    internal class PlanningRunner : ActivityRunnerBase
     {
         private const long RECORDS_PER_BLOCK = 8 * 1048576;
 
@@ -35,18 +35,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
-        {
-            var tasks = Parameterization
-                .Activities
-                .Keys
-                .Select(a => Task.Run(() => PlanActivityAsync(a, ct)))
-                .ToImmutableArray();
-
-            await TaskHelper.WhenAllWithErrors(tasks);
-        }
-
-        private async Task PlanActivityAsync(string activityName, CancellationToken ct)
+        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             while (!IsActivityCompleted(activityName))
             {

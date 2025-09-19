@@ -14,7 +14,7 @@ using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class AwaitIngestRunner : RunnerBase
+    internal class AwaitIngestRunner : ActivityRunnerBase
     {
         private const int MAX_BLOCK_COUNT = 25;
 
@@ -36,16 +36,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
-        {
-            var tasks = Parameterization.Activities.Keys
-                .Select(a => RunActivityAsync(a, ct))
-                .ToImmutableList();
-
-            await Task.WhenAll(tasks);
-        }
-
-        private async Task RunActivityAsync(string activityName, CancellationToken ct)
+        public override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
                 Parameterization.Activities[activityName].Destination.GetTableIdentity();

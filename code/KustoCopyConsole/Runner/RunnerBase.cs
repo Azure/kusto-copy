@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class RunnerBase
+    internal abstract class RunnerBase
     {
         private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
 
@@ -46,16 +46,6 @@ namespace KustoCopyConsole.Runner
         protected DbClientFactory DbClientFactory { get; }
 
         protected IStagingBlobUriProvider StagingBlobUriProvider { get; }
-
-        protected bool IsActivityCompleted(string activityName)
-        {
-            var isCompleted = Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.ActivityName, activityName))
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
-                .Count() == 1;
-
-            return isCompleted;
-        }
 
         protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
         {
