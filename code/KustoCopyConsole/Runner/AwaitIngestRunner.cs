@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Db;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.InMemory;
 using KustoCopyConsole.Entity.RowItems;
 using KustoCopyConsole.Entity.RowItems.Keys;
@@ -62,8 +63,10 @@ namespace KustoCopyConsole.Runner
 
                 foreach (var iterationId in iterationIds)
                 {
-                    await UpdateIngestedAsync(new IterationKey(activityName, iterationId), dbClient, ct);
-                    await FailureDetectionAsync(ct);
+                    var iterationKey = new IterationKey(activityName, iterationId);
+
+                    await UpdateIngestedAsync(iterationKey, dbClient, ct);
+                    await FailureDetectionAsync(iterationKey, destinationTable, ct);
                 }
                 if (iterationIds.Any())
                 {
@@ -72,6 +75,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
+        #region Update Ingested
         private async Task UpdateIngestedAsync(
             IterationKey iterationKey,
             DbCommandClient dbClient,
@@ -109,15 +113,19 @@ namespace KustoCopyConsole.Runner
 
                 using (var tx = Database.Database.CreateTransaction())
                 {
-                    var ingestedBlocks = extents
+                    var ingestedBlockIds = extents
                         .Select(e => e.BlockKey.BlockId)
-                        .Distinct()
+                        .Distinct();
+                    var ingestedBlocks = ingestedBlockIds
                         .Select(id => queuedBlockByBlockId[id])
                         .Select(block => block with
                         {
                             State = BlockState.Ingested
                         });
 
+                    Database.Blocks.Query(tx)
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                        .Delete();
                     Database.Blocks.AppendRecords(ingestedBlocks, tx);
                     Database.Extents.AppendRecords(extents, tx);
 
@@ -186,57 +194,58 @@ namespace KustoCopyConsole.Runner
 
             return extents;
         }
+        #endregion
 
-        private async Task FailureDetectionAsync(CancellationToken ct)
-        {
-            var activeIterations = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed);
-            var iterationTasks = activeIterations
-                .Select(i => IterationFailureDetectionAsync(i, ct))
-                .ToImmutableArray();
-
-            await TaskHelper.WhenAllWithErrors(iterationTasks);
-        }
-
-        private async Task IterationFailureDetectionAsync(
-            IterationCache iterationCache,
+        #region Failure detection
+        private async Task FailureDetectionAsync(
+            IterationKey iterationKey,
+            TableIdentity destinationTable,
             CancellationToken ct)
         {
-            var queuedBlocks = iterationCache
-                .BlockMap
-                .Values
-                .Where(b => b.RowItem.State == BlockState.Queued);
+            var oldestQueuedBlock = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, iterationKey.ActivityName))
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationId, iterationKey.IterationId))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
+                .OrderBy(b => b.BlockKey.BlockId)
+                .Take(1)
+                .FirstOrDefault();
 
-            if (queuedBlocks.Any())
+            if (oldestQueuedBlock != null)
             {
-                var activityItem = RowItemGateway.InMemoryCache
-                    .ActivityMap[iterationCache.RowItem.ActivityName]
-                    .RowItem;
-                var ingestClient = DbClientFactory.GetIngestClient(
-                    activityItem.DestinationTable.ClusterUri,
-                    activityItem.DestinationTable.DatabaseName,
-                    iterationCache.TempTable!.TempTableName);
-                var oldestBlock = queuedBlocks
-                    .ArgMin(b => b.RowItem.Updated);
+                var tempTable = Database.TempTables.Query()
+                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
+                    .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
+                    .Take(1)
+                    .FirstOrDefault();
 
-                foreach (var urlItem in oldestBlock.UrlMap.Values.Select(u => u.RowItem))
+                if (tempTable == null)
+                {
+                    throw new InvalidDataException(
+                        $"TempTable for iteration {iterationKey} should exist by now");
+                }
+
+                var ingestClient = DbClientFactory.GetIngestClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName,
+                    tempTable.TempTableName);
+                var blobUrls = Database.BlobUrls.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, iterationKey.ActivityName))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationId, iterationKey.IterationId))
+                    .Where(pf => pf.Equal(b => b.BlockKey.BlockId, oldestQueuedBlock.BlockKey.BlockId))
+                    .ToImmutableArray();
+
+                foreach (var blobUrl in blobUrls)
                 {
                     var failure = await ingestClient.FetchIngestionFailureAsync(
-                        urlItem.SerializedQueuedResult);
+                        blobUrl.SerializedQueuedResult);
 
                     if (failure != null)
                     {
                         TraceWarning(
                             $"Warning!  Ingestion failed with status '{failure.Status}'" +
-                            $"and detail '{failure.Details}' for blob {urlItem.Url} in block " +
-                            $"{oldestBlock.RowItem.BlockId}, iteration " +
-                            $"{oldestBlock.RowItem.IterationId}, activity " +
-                            $"{oldestBlock.RowItem.ActivityName} ; block will be re-exported");
-                        ReturnToPlanned(oldestBlock);
+                            $"and detail '{failure.Details}' for blob {blobUrl.Url} in block " +
+                            $"{oldestQueuedBlock.BlockKey} ; block will be re-exported");
+                        ReturnToPlanned(oldestQueuedBlock);
 
                         return;
                     }
@@ -244,13 +253,32 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void ReturnToPlanned(BlockCache oldestBlock)
+        private void ReturnToPlanned(BlockRecord block)
         {
-            var newBlock = oldestBlock.RowItem.ChangeState(BlockState.Planned);
+            block = block with
+            {
+                State = BlockState.Planned,
+                ExportOperationId = string.Empty,
+                BlockTag = string.Empty
+            };
 
-            newBlock.ExportOperationId = string.Empty;
-            newBlock.BlockTag = string.Empty;
-            RowItemGateway.Append(newBlock);
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, block.BlockKey.ActivityName))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationId, block.BlockKey.IterationId))
+                    .Where(pf => pf.Equal(b => b.BlockKey.BlockId, block.BlockKey.BlockId))
+                    .Delete();
+                Database.BlobUrls.Query(tx)
+                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, block.BlockKey.ActivityName))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationId, block.BlockKey.IterationId))
+                    .Where(pf => pf.Equal(b => b.BlockKey.BlockId, block.BlockKey.BlockId))
+                    .Delete();
+                Database.Blocks.AppendRecord(block, tx);
+
+                tx.Complete();
+            }
         }
+        #endregion
     }
 }
