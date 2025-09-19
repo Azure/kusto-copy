@@ -1,4 +1,4 @@
-﻿using KustoCopyConsole.Db.Keys;
+﻿using KustoCopyConsole.Entity.Keys;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Tracing;

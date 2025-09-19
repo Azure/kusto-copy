@@ -1,11 +1,11 @@
-﻿using KustoCopyConsole.Db.Keys;
+﻿using KustoCopyConsole.Entity.Keys;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Db
+namespace KustoCopyConsole.Entity
 {
     internal record ExtentRecord(
         BlockKey BlockKey,

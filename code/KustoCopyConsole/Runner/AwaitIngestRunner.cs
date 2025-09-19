@@ -1,8 +1,8 @@
 ﻿using Azure.Core;
 using Kusto.Cloud.Platform.Utils;
-using KustoCopyConsole.Db;
-using KustoCopyConsole.Db.Keys;
-using KustoCopyConsole.Db.State;
+using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
+using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;

@@ -1,4 +1,4 @@
-﻿namespace KustoCopyConsole.Db.State
+﻿namespace KustoCopyConsole.Entity.State
 {
     public enum ActivityState
     {

@@ -1,11 +1,11 @@
-﻿using KustoCopyConsole.Db.State;
+﻿using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Db
+namespace KustoCopyConsole.Entity
 {
     internal record ActivityRecord(
         ActivityState State,

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using TrackDb.Lib;
 using TrackDb.Lib.Policies;
 
-namespace KustoCopyConsole.Db
+namespace KustoCopyConsole.Entity
 {
     internal class TrackDatabase : IAsyncDisposable
     {

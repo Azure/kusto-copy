@@ -5,7 +5,7 @@ using Azure.Storage.Blobs.Specialized;
 using Azure.Storage.Files.DataLake;
 using Azure.Storage.Sas;
 using KustoCopyConsole.Concurrency;
-using KustoCopyConsole.Db.Keys;
+using KustoCopyConsole.Entity.Keys;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

@@ -1,12 +1,12 @@
-﻿using KustoCopyConsole.Db.Keys;
-using KustoCopyConsole.Db.State;
+﻿using KustoCopyConsole.Entity.Keys;
+using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KustoCopyConsole.Db
+namespace KustoCopyConsole.Entity
 {
     internal record BlobUrlRecord(
         UrlState State,

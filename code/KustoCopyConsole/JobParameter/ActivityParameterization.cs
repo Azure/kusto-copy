@@ -1,4 +1,4 @@
-﻿using KustoCopyConsole.Db;
+﻿using KustoCopyConsole.Entity;
 using System.Collections.Immutable;
 
 namespace KustoCopyConsole.JobParameter

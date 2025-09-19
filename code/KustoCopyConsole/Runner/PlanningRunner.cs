@@ -1,7 +1,7 @@
 ﻿using Azure.Core;
-using KustoCopyConsole.Db;
-using KustoCopyConsole.Db.Keys;
-using KustoCopyConsole.Db.State;
+using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
+using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Kusto.Data;
