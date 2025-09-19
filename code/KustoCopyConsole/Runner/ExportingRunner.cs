@@ -69,19 +69,20 @@ namespace KustoCopyConsole.Runner
 
                 if (plannedBlocks.Any())
                 {
-                    var iterationKeys = plannedBlocks
-                        .Select(b => b.BlockKey.ToIterationKey());
-                    var iterationRecordMap = Database.Iterations.Query()
-                        .Where(pf => pf.In(i => i.IterationKey, iterationKeys))
-                        .ToImmutableDictionary(i => i.IterationKey);
+                    var iterationKey = plannedBlocks.First().BlockKey.ToIterationKey();
+                    var iteration = Database.Iterations.Query()
+                        .Where(pf => pf.Equal(
+                            i => i.IterationKey.ActivityName,
+                            iterationKey.ActivityName))
+                        .Where(pf => pf.Equal(
+                            i => i.IterationKey.IterationId,
+                            iterationKey.IterationId))
+                        .First();
                     var startExportTasks = plannedBlocks
-                        .Select(b => Task.Run(() => StartExportAsync(
-                            b,
-                            iterationRecordMap[b.BlockKey.ToIterationKey()],
-                            ct)))
+                        .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
                         .ToImmutableArray();
 
-                    await Task.WhenAll(startExportTasks);
+                    await TaskHelper.WhenAllWithErrors(startExportTasks);
                 }
                 else
                 {
@@ -93,32 +94,46 @@ namespace KustoCopyConsole.Runner
         private IEnumerable<BlockRecord> FetchPlannedBlocks(
             IEnumerable<string> activityNames,
             int cachedCapacity)
-        {
-            //  Fetch a batch of blocks ready to export
-            var plannedBlocks = Database.Blocks.Query()
+        {   //  The first (by priority) block will determine the activity and iteration
+            //  we'll work on
+            var firstPlannedBlocks = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                 .OrderBy(b => b.BlockKey.ActivityName)
                 .ThenBy(b => b.BlockKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(BLOCK_BATCH)
-                .ToImmutableArray();
+                .Take(1)
+                .FirstOrDefault();
 
-            if (plannedBlocks.Any())
+            if (firstPlannedBlocks != null)
             {
                 //  Fetch all blocks being in 'exporting' state
                 var exportingCount = (int)Database.Blocks.Query()
                     .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                     .Count();
-
                 //  Cap the blocks with available capacity
-                return plannedBlocks
-                    .Take(Math.Max(0, cachedCapacity - exportingCount));
+                var maxExporting =
+                    Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
+                var plannedBlocks = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.ActivityName,
+                        firstPlannedBlocks.BlockKey.ActivityName))
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.IterationId,
+                        firstPlannedBlocks.BlockKey.IterationId))
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.BlockId,
+                        firstPlannedBlocks.BlockKey.BlockId))
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
+                    .OrderBy(b => b.BlockKey.BlockId)
+                    .ToImmutableArray();
+
+                return plannedBlocks;
             }
             else
             {
-                return plannedBlocks;
+                return Array.Empty<BlockRecord>();
             }
         }
 
