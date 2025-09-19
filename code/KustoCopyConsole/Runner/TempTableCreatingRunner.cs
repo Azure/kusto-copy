@@ -52,7 +52,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
-            var destination = activity.Destination.GetTableIdentity();
+            var destination = activity.GetDestinationTableIdentity();
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 destination.ClusterUri,
                 destination.DatabaseName);

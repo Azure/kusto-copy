@@ -52,8 +52,8 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var activity = Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
-            var source = activity.Source.GetTableIdentity();
-            var destination = activity.Destination.GetTableIdentity();
+            var source = activity.GetSourceTableIdentity();
+            var destination = activity.GetDestinationTableIdentity();
             var queryClient = DbClientFactory.GetDbQueryClient(
                 source.ClusterUri,
                 source.DatabaseName);
@@ -114,7 +114,7 @@ namespace KustoCopyConsole.Runner
         {
             var hasNullIngestionTime = await queryClient.HasNullIngestionTime(
                 new KustoPriority(iterationRecord.IterationKey),
-                activity.Source.GetTableIdentity().TableName,
+                activity.GetSourceTableIdentity().TableName,
                 activity.KqlQuery,
                 ct);
 
@@ -139,7 +139,7 @@ namespace KustoCopyConsole.Runner
             {
                 var ingestionTimeInterval = await queryClient.GetIngestionTimeIntervalAsync(
                     new KustoPriority(iterationRecord.IterationKey),
-                    activity.Source.GetTableIdentity().TableName,
+                    activity.GetSourceTableIdentity().TableName,
                     activity.KqlQuery,
                     iterationRecord.CursorStart,
                     iterationRecord.CursorEnd,
@@ -225,7 +225,7 @@ namespace KustoCopyConsole.Runner
         {
             var distribution = await queryClient.GetRecordDistributionAsync(
                 new KustoPriority(iterationRecord.IterationKey),
-                activity.Source.GetTableIdentity().TableName,
+                activity.GetSourceTableIdentity().TableName,
                 activity.KqlQuery,
                 iterationRecord.CursorStart,
                 iterationRecord.CursorEnd,

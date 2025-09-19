@@ -122,19 +122,19 @@ namespace KustoCopyConsole.Runner
                     a.ActivityName,
                     out var paramActivity))
                 {
-                    if (paramActivity.Source.GetTableIdentity() != a.SourceTable)
+                    if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
                     {
                         throw new CopyException(
                             $"Activity '{a.ActivityName}' has mistmached source table ; " +
-                            $"configuration is {paramActivity.Source} while" +
+                            $"configuration is {paramActivity.GetSourceTableIdentity()} while" +
                             $"logs is {a.SourceTable}",
                             false);
                     }
-                    else if (paramActivity.Destination.GetTableIdentity() != a.DestinationTable)
+                    else if (paramActivity.GetDestinationTableIdentity() != a.DestinationTable)
                     {
                         throw new CopyException(
                             $"Activity '{a.ActivityName}' has mistmached destination table ; " +
-                            $"configuration is {paramActivity.Destination} while" +
+                            $"configuration is {paramActivity.GetDestinationTableIdentity()} while" +
                             $"logs is {a.DestinationTable}",
                             false);
                     }
@@ -153,8 +153,8 @@ namespace KustoCopyConsole.Runner
                 var activity = new ActivityRecord(
                     ActivityState.Active,
                     paramActivity.ActivityName,
-                    paramActivity.Source.GetTableIdentity(),
-                    paramActivity.Destination.GetTableIdentity());
+                    paramActivity.GetSourceTableIdentity(),
+                    paramActivity.GetDestinationTableIdentity());
 
                 Database.Activities.AppendRecord(activity, tx);
                 Console.WriteLine($"New activity:  '{name}'");

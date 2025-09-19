@@ -32,8 +32,8 @@ namespace KustoCopyConsole.Runner
             string activityName,
             CancellationToken ct)
         {
-            var destinationTable = Parameterization.Activities[activityName].Destination
-                .GetTableIdentity();
+            var destinationTable = Parameterization.Activities[activityName]
+                .GetDestinationTableIdentity();
             var block = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))

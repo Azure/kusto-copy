@@ -45,7 +45,7 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(CancellationToken ct)
         {
             var tasks = Parameterization.Activities.Values
-                .GroupBy(a => a.Source.GetTableIdentity().ClusterUri)
+                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
                     g.Select(a => a.ActivityName).ToImmutableArray(),
@@ -206,7 +206,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var activityParam = Parameterization.Activities[block.BlockKey.ActivityName];
-            var sourceTable = activityParam.Source.GetTableIdentity();
+            var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);

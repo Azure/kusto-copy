@@ -54,8 +54,8 @@ namespace KustoCopyConsole.Runner
             var firstBlock = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
                 .OrderBy(b => b.BlockKey.ActivityName)
-                .OrderBy(b => b.BlockKey.IterationId)
-                .OrderBy(b => b.BlockKey.BlockId)
+                .ThenBy(b => b.BlockKey.IterationId)
+                .ThenBy(b => b.BlockKey.BlockId)
                 .Take(1)
                 .FirstOrDefault();
 
@@ -106,8 +106,7 @@ namespace KustoCopyConsole.Runner
             var iterationKey = blockExtentsToMove.First().Block.BlockKey.ToIterationKey();
             var tempTableName = GetTempTable(iterationKey).TempTableName;
             var destinationTable = Parameterization.Activities[iterationKey.ActivityName]
-                .Destination
-                .GetTableIdentity();
+                .GetDestinationTableIdentity();
             var commandClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);

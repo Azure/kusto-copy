@@ -33,7 +33,7 @@ namespace KustoCopyConsole.Runner
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
-                Parameterization.Activities[activityName].Destination.GetTableIdentity();
+                Parameterization.Activities[activityName].GetDestinationTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
