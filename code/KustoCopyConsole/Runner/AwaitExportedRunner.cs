@@ -198,9 +198,9 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var tasks = statuses
-                    .Where(s => s.State == "Completed")
-                    .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
-                    .ToImmutableArray();
+                .Where(s => s.State == "Completed")
+                .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
+                .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(tasks);
         }

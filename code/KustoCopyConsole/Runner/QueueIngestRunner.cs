@@ -148,6 +148,8 @@ namespace KustoCopyConsole.Runner
 
                 Database.BlobUrls.AppendRecords(blobUrls, tx);
                 Database.Blocks.AppendRecord(block, tx);
+
+                tx.Complete();
             }
         }
     }
