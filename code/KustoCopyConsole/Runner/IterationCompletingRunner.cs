@@ -46,8 +46,7 @@ namespace KustoCopyConsole.Runner
             foreach (var iteration in candidateIterations)
             {
                 var unmovedBlocks = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, iteration.IterationKey.ActivityName))
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationId, iteration.IterationKey.IterationId))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Where(pf => pf.NotEqual(b => b.State, BlockState.ExtentMoved))
                     .Count();
 
@@ -77,32 +76,15 @@ namespace KustoCopyConsole.Runner
         {
             using (var tx = Database.Database.CreateTransaction())
             {
-                Database.Iterations.Query(tx)
-                    .Where(pf => pf.Equal(
-                        i => i.IterationKey.ActivityName,
-                        iteration.IterationKey.ActivityName))
-                    .Where(pf => pf.Equal(
-                        i => i.IterationKey.IterationId,
-                        iteration.IterationKey.IterationId))
-                    .Delete();
                 Database.TempTables.Query(tx)
-                    .Where(pf => pf.Equal(
-                        i => i.IterationKey.ActivityName,
-                        iteration.IterationKey.ActivityName))
-                    .Where(pf => pf.Equal(
-                        i => i.IterationKey.IterationId,
-                        iteration.IterationKey.IterationId))
+                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                     .Delete();
                 Database.Blocks.Query(tx)
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.ActivityName,
-                        iteration.IterationKey.ActivityName))
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.IterationId,
-                        iteration.IterationKey.IterationId))
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Delete();
 
-                Database.Iterations.AppendRecord(
+                Database.Iterations.UpdateRecord(
+                    iteration,
                     iteration with
                     {
                         State = IterationState.Completed

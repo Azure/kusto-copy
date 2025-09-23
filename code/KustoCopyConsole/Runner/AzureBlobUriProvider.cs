@@ -176,9 +176,8 @@ namespace KustoCopyConsole.Runner
 
         private string GetSubDirectory(BlockKey blockKey)
         {
-            var iterationKey = new IterationKey(blockKey.ActivityName, blockKey.IterationId);
             var subDirectoryPath =
-                $"{GetSubDirectory(iterationKey)}/blocks/{blockKey.BlockId:D20}";
+                $"{GetSubDirectory(blockKey.IterationKey)}/blocks/{blockKey.BlockId:D20}";
 
             return subDirectoryPath;
         }

@@ -22,12 +22,20 @@ namespace KustoCopyConsole.Entity
         {
             var db = await Database.CreateAsync(
                 new DatabasePolicies(),
-                TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE),
-                TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE),
-                TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE),
-                TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE),
-                TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE),
-                TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE));
+                TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
+                .AddPrimaryKeyProperty(a => a.ActivityName),
+                TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE)
+                .AddPrimaryKeyProperty(i => i.IterationKey),
+                TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE)
+                .AddPrimaryKeyProperty(b => b.BlockKey),
+                TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
+                .AddPrimaryKeyProperty(t => t.IterationKey),
+                TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
+                .AddPrimaryKeyProperty(b => b.BlockKey)
+                .AddPrimaryKeyProperty(b => b.Url),
+                TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE)
+                .AddPrimaryKeyProperty(e => e.BlockKey)
+                .AddPrimaryKeyProperty(e => e.ExtentId));
 
             return new TrackDatabase(db);
         }

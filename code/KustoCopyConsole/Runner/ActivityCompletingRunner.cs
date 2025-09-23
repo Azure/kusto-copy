@@ -51,28 +51,18 @@ namespace KustoCopyConsole.Runner
                     || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly
                     || activityParam.TableOption.ExportMode == ExportMode.NewOnly)
                 {
-                    using (var tx = Database.Database.CreateTransaction())
-                    {
-                        var activity = Database.Activities.Query(tx)
-                            .Where(pf => pf.Equal(
-                                a => a.ActivityName,
-                                iteration.IterationKey.ActivityName))
-                            .First();
+                    var activity = Database.Activities.Query()
+                        .Where(pf => pf.Equal(
+                            a => a.ActivityName,
+                            iteration.IterationKey.ActivityName))
+                        .First();
 
-                        Database.Activities.Query(tx)
-                            .Where(pf => pf.Equal(
-                                a => a.ActivityName,
-                                iteration.IterationKey.ActivityName))
-                            .Delete();
-                        Database.Activities.AppendRecord(
-                            activity with
-                            {
-                                State = ActivityState.Completed
-                            },
-                            tx);
-
-                        tx.Complete();
-                    }
+                    Database.Activities.UpdateRecord(
+                        activity,
+                        activity with
+                        {
+                            State = ActivityState.Completed
+                        });
                 }
             }
         }

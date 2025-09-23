@@ -35,16 +35,16 @@ namespace KustoCopyConsole.Runner
             var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
             var block = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
-                .OrderBy(b => b.BlockKey.IterationId)
+                .OrderBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
                 .Take(1)
                 .FirstOrDefault();
 
             if (block != null)
             {
-                var tempTable = TryGetTempTable(block.BlockKey.ToIterationKey());
+                var tempTable = TryGetTempTable(block.BlockKey.IterationKey);
 
                 //  It's possible, although unlikely, the temp table hasn't been created yet
                 //  If so, we'll process this block later
@@ -76,9 +76,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var urlRecords = Database.BlobUrls.Query()
-                .Where(pf => pf.Equal(u => u.BlockKey.ActivityName, block.BlockKey.ActivityName))
-                .Where(pf => pf.Equal(u => u.BlockKey.IterationId, block.BlockKey.IterationId))
-                .Where(pf => pf.Equal(u => u.BlockKey.BlockId, block.BlockKey.BlockId))
+                .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
                 .ToImmutableArray();
 
             Trace.TraceInformation($"Block {block.BlockKey}:  ingest {urlRecords.Length} urls");
@@ -94,13 +92,25 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(queuingTasks);
-            CommitQueuedBlobs(
-                queuingTasks.Select(o => o.Result),
-                block with
-                {
-                    State = BlockState.Queued,
-                    BlockTag = blockTag
-                });
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                var newBlobUrls = queuingTasks.Select(o => o.Result);
+
+                Database.BlobUrls.Query(tx)
+                    .Where(pf => pf.Equal(u => u.BlockKey, newBlobUrls.First().BlockKey))
+                    .Delete();
+                Database.BlobUrls.AppendRecords(newBlobUrls, tx);
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with
+                    {
+                        State = BlockState.Queued,
+                        BlockTag = blockTag
+                    },
+                    tx);
+
+                tx.Complete();
+            }
 
             Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
         }
@@ -125,32 +135,6 @@ namespace KustoCopyConsole.Runner
                 State = UrlState.Queued,
                 SerializedQueuedResult = serializedQueueResult
             };
-        }
-
-        private void CommitQueuedBlobs(IEnumerable<BlobUrlRecord> blobUrls, BlockRecord block)
-        {
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.BlobUrls.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        blobUrls.First(),
-                        u => u.BlockKey.ActivityName,
-                        u => u.BlockKey.IterationId,
-                        u => u.BlockKey.BlockId))
-                    .Delete();
-                Database.Blocks.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        block,
-                        b => b.BlockKey.ActivityName,
-                        b => b.BlockKey.IterationId,
-                        b => b.BlockKey.BlockId))
-                    .Delete();
-
-                Database.BlobUrls.AppendRecords(blobUrls, tx);
-                Database.Blocks.AppendRecord(block, tx);
-
-                tx.Complete();
-            }
         }
     }
 }

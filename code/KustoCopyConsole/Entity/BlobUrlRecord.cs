@@ -17,16 +17,16 @@ namespace KustoCopyConsole.Entity
     {
         public override void Validate()
         {
-            if (string.IsNullOrWhiteSpace(BlockKey.ActivityName))
+            if (string.IsNullOrWhiteSpace(BlockKey.IterationKey.ActivityName))
             {
                 throw new InvalidDataException(
-                    $"{nameof(BlockKey.ActivityName)} must have a value");
+                    $"{nameof(BlockKey.IterationKey.ActivityName)} must have a value");
             }
-            if (BlockKey.IterationId < 1)
+            if (BlockKey.IterationKey.IterationId < 1)
             {
                 throw new InvalidDataException(
-                    $"{nameof(BlockKey.IterationId)} should be " +
-                    $"positive but is {BlockKey.IterationId}");
+                    $"{nameof(BlockKey.IterationKey.IterationId)} should be " +
+                    $"positive but is {BlockKey.IterationKey.IterationId}");
             }
             if (BlockKey.BlockId < 1)
             {

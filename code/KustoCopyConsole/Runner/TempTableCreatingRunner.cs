@@ -5,6 +5,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 using System.Linq;
+using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -83,25 +84,19 @@ namespace KustoCopyConsole.Runner
             using (var tx = Database.Database.CreateTransaction())
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
-
-                tempTableRecord = tempTableRecord with
+                var newTempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,
                     TempTableName = tempTableName
                 };
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        tempTableRecord,
-                        t => t.IterationKey.ActivityName,
-                        t => t.IterationKey.IterationId))
-                    .Delete();
-                Database.TempTables.AppendRecord(tempTableRecord, tx);
+
+                Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
                 await tx.LogAndCompleteAsync();
 
-                return tempTableRecord;
+                return newTempTableRecord;
             }
         }
 
@@ -117,24 +112,15 @@ namespace KustoCopyConsole.Runner
                 destination.TableName,
                 tempTableRecord.TempTableName,
                 ct);
-            tempTableRecord = tempTableRecord with
+
+            var newTempTableRecord = tempTableRecord with
             {
                 State = TempTableState.Created
             };
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        tempTableRecord,
-                        t => t.IterationKey.ActivityName,
-                        t => t.IterationKey.IterationId))
-                    .Delete();
-                Database.TempTables.AppendRecord(tempTableRecord);
 
-                tx.Complete();
-            }
+            Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
 
-            return tempTableRecord;
+            return newTempTableRecord;
         }
     }
 }

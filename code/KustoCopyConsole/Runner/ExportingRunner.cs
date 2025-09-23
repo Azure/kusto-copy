@@ -69,14 +69,9 @@ namespace KustoCopyConsole.Runner
 
                 if (plannedBlocks.Any())
                 {
-                    var iterationKey = plannedBlocks.First().BlockKey.ToIterationKey();
+                    var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
                     var iteration = Database.Iterations.Query()
-                        .Where(pf => pf.Equal(
-                            i => i.IterationKey.ActivityName,
-                            iterationKey.ActivityName))
-                        .Where(pf => pf.Equal(
-                            i => i.IterationKey.IterationId,
-                            iterationKey.IterationId))
+                        .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
                         .First();
                     var startExportTasks = plannedBlocks
                         .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
@@ -97,10 +92,10 @@ namespace KustoCopyConsole.Runner
         {   //  The first (by priority) block will determine the activity and iteration
             //  we'll work on
             var firstPlannedBlocks = Database.Blocks.Query()
-                .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+                .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
-                .OrderBy(b => b.BlockKey.ActivityName)
-                .ThenBy(b => b.BlockKey.IterationId)
+                .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
+                .ThenBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
                 .Take(1)
                 .FirstOrDefault();
@@ -109,24 +104,17 @@ namespace KustoCopyConsole.Runner
             {
                 //  Fetch all blocks being in 'exporting' state
                 var exportingCount = (int)Database.Blocks.Query()
-                    .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+                    .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                     .Count();
                 //  Cap the blocks with available capacity
                 var maxExporting =
                     Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
                 var plannedBlocks = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.ActivityName,
-                        firstPlannedBlocks.BlockKey.ActivityName))
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.IterationId,
-                        firstPlannedBlocks.BlockKey.IterationId))
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.BlockId,
-                        firstPlannedBlocks.BlockKey.BlockId))
+                    .Where(pf => pf.Equal(b => b.BlockKey, firstPlannedBlocks.BlockKey))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                     .OrderBy(b => b.BlockKey.BlockId)
+                    .Take(maxExporting)
                     .ToImmutableArray();
 
                 return plannedBlocks;
@@ -142,7 +130,7 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activityParam = Parameterization.Activities[blockRecord.BlockKey.ActivityName];
+            var activityParam = Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
             var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
@@ -166,17 +154,7 @@ namespace KustoCopyConsole.Runner
                 ExportOperationId = operationId
             };
 
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.Blocks.Query()
-                    .Where(pf => pf.MatchKeys(
-                        newBlockRecord,
-                        b => b.BlockKey.ActivityName,
-                        b => b.BlockKey.IterationId,
-                        b => b.BlockKey.BlockId))
-                    .Delete();
-                Database.Blocks.AppendRecord(newBlockRecord);
-            }
+            Database.Blocks.UpdateRecord(blockRecord, newBlockRecord);
         }
 
         private async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)

@@ -53,8 +53,8 @@ namespace KustoCopyConsole.Runner
         private void ReportProgress(IterationRecord iteration, TransactionContext tx)
         {
             var blocksQuery = Database.Blocks.Query(tx)
-                .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, iteration.IterationKey.ActivityName))
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationId, iteration.IterationKey.IterationId));
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, iteration.IterationKey.ActivityName))
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.IterationId, iteration.IterationKey.IterationId));
             var blockCount = blocksQuery.Count();
             var plannedCount = blocksQuery
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))

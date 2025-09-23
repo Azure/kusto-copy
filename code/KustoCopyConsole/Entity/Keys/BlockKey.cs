@@ -1,15 +1,10 @@
 ﻿namespace KustoCopyConsole.Entity.Keys
 {
-    internal record BlockKey(string ActivityName, long IterationId, long BlockId)
+    internal record BlockKey(IterationKey IterationKey, long BlockId)
     {
-        public IterationKey ToIterationKey()
-        {
-            return new IterationKey(ActivityName, IterationId);
-        }
-
         public override string ToString()
         {
-            return $"('{ActivityName}', {IterationId}, {BlockId})";
+            return $"('{IterationKey.ActivityName}', {IterationKey.IterationId}, {BlockId})";
         }
     }
 }
