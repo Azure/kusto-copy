@@ -12,19 +12,8 @@ namespace KustoCopyConsole.Runner
     internal class QueueIngestRunner : ActivityRunnerBase
     {
 
-        public QueueIngestRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public QueueIngestRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -32,9 +21,9 @@ namespace KustoCopyConsole.Runner
             string activityName,
             CancellationToken ct)
         {
-            var destinationTable = Parameterization.Activities[activityName]
+            var destinationTable = RunnerParameters.Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
-            var block = Database.Blocks.Query()
+            var block = RunnerParameters.Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
                 .OrderBy(b => b.BlockKey.IterationKey.IterationId)
@@ -54,7 +43,7 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    var ingestClient = DbClientFactory.GetIngestClient(
+                    var ingestClient = RunnerParameters.DbClientFactory.GetIngestClient(
                         destinationTable.ClusterUri,
                         destinationTable.DatabaseName,
                         tempTable.TempTableName);
@@ -75,7 +64,7 @@ namespace KustoCopyConsole.Runner
             IngestClient ingestClient,
             CancellationToken ct)
         {
-            var urlRecords = Database.BlobUrls.Query()
+            var urlRecords = RunnerParameters.Database.BlobUrls.Query()
                 .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
                 .ToImmutableArray();
 
@@ -92,15 +81,15 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(queuingTasks);
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
             {
                 var newBlobUrls = queuingTasks.Select(o => o.Result);
 
-                Database.BlobUrls.Query(tx)
+                RunnerParameters.Database.BlobUrls.Query(tx)
                     .Where(pf => pf.Equal(u => u.BlockKey, newBlobUrls.First().BlockKey))
                     .Delete();
-                Database.BlobUrls.AppendRecords(newBlobUrls, tx);
-                Database.Blocks.UpdateRecord(
+                RunnerParameters.Database.BlobUrls.AppendRecords(newBlobUrls, tx);
+                RunnerParameters.Database.Blocks.UpdateRecord(
                     block,
                     block with
                     {
@@ -122,7 +111,7 @@ namespace KustoCopyConsole.Runner
             DateTime? creationTime,
             CancellationToken ct)
         {
-            var authorizedUri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
+            var authorizedUri = await RunnerParameters.StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
             var serializedQueueResult = await ingestClient.QueueBlobAsync(
                 new KustoPriority(blobUrl.BlockKey),
                 authorizedUri,

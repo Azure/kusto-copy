@@ -15,19 +15,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class ProgressRunner : RunnerBase
     {
-        public ProgressRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public ProgressRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -35,9 +24,9 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                using (var tx = Database.Database.CreateTransaction())
+                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
                 {
-                    var activeIterations = Database.Iterations.Query(tx)
+                    var activeIterations = RunnerParameters.Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
                         .ToImmutableArray();
 
@@ -52,7 +41,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReportProgress(IterationRecord iteration, TransactionContext tx)
         {
-            var blocksQuery = Database.Blocks.Query(tx)
+            var blocksQuery = RunnerParameters.Database.Blocks.Query(tx)
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, iteration.IterationKey.ActivityName))
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.IterationId, iteration.IterationKey.IterationId));
             var blockCount = blocksQuery.Count();

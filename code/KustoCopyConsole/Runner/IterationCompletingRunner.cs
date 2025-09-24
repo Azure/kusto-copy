@@ -11,19 +11,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class IterationCompletingRunner : RunnerBase
     {
-        public IterationCompletingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public IterationCompletingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -39,13 +28,13 @@ namespace KustoCopyConsole.Runner
 
         private async Task CompleteIterationsAsync(CancellationToken ct)
         {
-            var candidateIterations = Database.Iterations.Query()
+            var candidateIterations = RunnerParameters.Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.State, IterationState.Planned))
                 .ToImmutableArray();
 
             foreach (var iteration in candidateIterations)
             {
-                var unmovedBlocks = Database.Blocks.Query()
+                var unmovedBlocks = RunnerParameters.Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Where(pf => pf.NotEqual(b => b.State, BlockState.ExtentMoved))
                     .Count();
@@ -53,10 +42,10 @@ namespace KustoCopyConsole.Runner
                 if (unmovedBlocks == 0)
                 {
                     var tempTable = GetTempTable(iteration.IterationKey);
-                    var destinationTable = Parameterization
+                    var destinationTable = RunnerParameters.Parameterization
                         .Activities[iteration.IterationKey.ActivityName]
                         .GetDestinationTableIdentity();
-                    var dbClient = DbClientFactory.GetDbCommandClient(
+                    var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
                         destinationTable.ClusterUri,
                         destinationTable.DatabaseName);
 
@@ -64,7 +53,7 @@ namespace KustoCopyConsole.Runner
                         new KustoPriority(iteration.IterationKey),
                         tempTable.TempTableName,
                         ct);
-                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(
+                    await RunnerParameters.StagingBlobUriProvider.DeleteStagingDirectoryAsync(
                         iteration.IterationKey,
                         ct);
                     CommitCompleteIteration(iteration);
@@ -74,16 +63,16 @@ namespace KustoCopyConsole.Runner
 
         private void CommitCompleteIteration(IterationRecord iteration)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
             {
-                Database.TempTables.Query(tx)
+                RunnerParameters.Database.TempTables.Query(tx)
                     .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                     .Delete();
-                Database.Blocks.Query(tx)
+                RunnerParameters.Database.Blocks.Query(tx)
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Delete();
 
-                Database.Iterations.UpdateRecord(
+                RunnerParameters.Database.Iterations.UpdateRecord(
                     iteration,
                     iteration with
                     {

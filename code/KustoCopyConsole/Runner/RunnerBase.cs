@@ -18,35 +18,17 @@ namespace KustoCopyConsole.Runner
         private readonly TaskCompletionSource _allActivityCompletedSource
             = new TaskCompletionSource();
 
-        public RunnerBase(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider,
-            TimeSpan wakePeriod)
+        public RunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
         {
-            Parameterization = parameterization;
-            Credential = credential;
-            Database = database;
-            DbClientFactory = dbClientFactory;
-            StagingBlobUriProvider = stagingBlobUriProvider;
+            RunnerParameters = parameters;
             _wakePeriod = wakePeriod;
         }
 
-        protected MainJobParameterization Parameterization { get; }
-
-        protected TokenCredential Credential { get; }
-
-        protected TrackDatabase Database { get; }
-
-        protected DbClientFactory DbClientFactory { get; }
-
-        protected AzureBlobUriProvider StagingBlobUriProvider { get; }
+        protected RunnerParameters RunnerParameters { get; }
 
         protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
         {
-            var isCompleted = Database.Activities.Query()
+            var isCompleted = RunnerParameters.Database.Activities.Query()
                 .Where(pf => pf.In(a => a.ActivityName, activityNames))
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Count() == 0;
@@ -56,7 +38,7 @@ namespace KustoCopyConsole.Runner
 
         protected bool AllActivitiesCompleted()
         {
-            var allCompleted = !Database.Activities.Query()
+            var allCompleted = !RunnerParameters.Database.Activities.Query()
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Any();
 
@@ -81,7 +63,7 @@ namespace KustoCopyConsole.Runner
         #region Temp Table
         protected TempTableRecord? TryGetTempTable(IterationKey iterationKey)
         {
-            var tempTable = Database.TempTables.Query()
+            var tempTable = RunnerParameters.Database.TempTables.Query()
                 .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
                 .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
                 .Take(1)

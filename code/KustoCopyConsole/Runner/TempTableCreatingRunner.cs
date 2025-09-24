@@ -11,19 +11,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class TempTableCreatingRunner : RunnerBase
     {
-        public TempTableCreatingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(10))
+        public TempTableCreatingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(10))
         {
         }
 
@@ -31,7 +20,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                var tempTables = Database.TempTables.Query()
+                var tempTables = RunnerParameters.Database.TempTables.Query()
                     .Where(pf => pf.In(
                         t => t.State,
                         [TempTableState.Required, TempTableState.Creating]))
@@ -52,9 +41,9 @@ namespace KustoCopyConsole.Runner
             TempTableRecord tempTableRecord,
             CancellationToken ct)
         {
-            var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
+            var activity = RunnerParameters.Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
             var destination = activity.GetDestinationTableIdentity();
-            var dbCommandClient = DbClientFactory.GetDbCommandClient(
+            var dbCommandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
                 destination.ClusterUri,
                 destination.DatabaseName);
             var priority = new KustoPriority(tempTableRecord.IterationKey);
@@ -81,7 +70,7 @@ namespace KustoCopyConsole.Runner
             TableIdentity destination,
             CancellationToken ct)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
                 var newTempTableRecord = tempTableRecord with
@@ -90,7 +79,7 @@ namespace KustoCopyConsole.Runner
                     TempTableName = tempTableName
                 };
 
-                Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
+                RunnerParameters.Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
@@ -118,7 +107,7 @@ namespace KustoCopyConsole.Runner
                 State = TempTableState.Created
             };
 
-            Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
+            RunnerParameters.Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
 
             return newTempTableRecord;
         }

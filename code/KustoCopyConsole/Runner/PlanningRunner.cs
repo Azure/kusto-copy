@@ -16,25 +16,14 @@ namespace KustoCopyConsole.Runner
     {
         private const long RECORDS_PER_BLOCK = 8 * 1048576;
 
-        public PlanningRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public PlanningRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
-            var iterations = Database.Iterations.Query()
+            var iterations = RunnerParameters.Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Starting, IterationState.Planning]))
                 .ToImmutableArray();
@@ -51,13 +40,13 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activity = Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
+            var activity = RunnerParameters.Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
             var source = activity.GetSourceTableIdentity();
             var destination = activity.GetDestinationTableIdentity();
-            var queryClient = DbClientFactory.GetDbQueryClient(
+            var queryClient = RunnerParameters.DbClientFactory.GetDbQueryClient(
                 source.ClusterUri,
                 source.DatabaseName);
-            var dbCommandClient = DbClientFactory.GetDbCommandClient(
+            var dbCommandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
                 source.ClusterUri,
                 source.DatabaseName);
 
@@ -67,7 +56,7 @@ namespace KustoCopyConsole.Runner
                     new KustoPriority(iterationRecord.IterationKey),
                     ct);
 
-                using (var tx = Database.Database.CreateTransaction())
+                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
                 {
                     var newIterationRecord = iterationRecord with
                     {
@@ -75,8 +64,8 @@ namespace KustoCopyConsole.Runner
                         CursorEnd = cursor
                     };
 
-                    Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
-                    Database.TempTables.AppendRecord(
+                    RunnerParameters.Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
+                    RunnerParameters.Database.TempTables.AppendRecord(
                         new TempTableRecord(
                             TempTableState.Required,
                             iterationRecord.IterationKey,
@@ -132,7 +121,7 @@ namespace KustoCopyConsole.Runner
                 if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
                     || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
                 {   //  No ingestion time:  either no rows or no rows with ingestion time
-                    Database.Iterations.UpdateRecord(
+                    RunnerParameters.Database.Iterations.UpdateRecord(
                         iterationRecord,
                         iterationRecord with
                         {
@@ -163,7 +152,7 @@ namespace KustoCopyConsole.Runner
             //  Do blocks one batch at the time until completion
             while (iterationRecord.State == IterationState.Planning)
             {
-                var lastBlock = Database.Blocks.Query()
+                var lastBlock = RunnerParameters.Database.Blocks.Query()
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey.ActivityName,
                         iterationRecord.IterationKey.ActivityName))
@@ -186,7 +175,7 @@ namespace KustoCopyConsole.Runner
 
                 if (hasReachedUpperIngestionTime)
                 {
-                    Database.Iterations.UpdateRecord(
+                    RunnerParameters.Database.Iterations.UpdateRecord(
                         iterationRecord,
                         iterationRecord with
                         {
@@ -252,7 +241,7 @@ namespace KustoCopyConsole.Runner
                         string.Empty))
                     .ToImmutableArray();
 
-                Database.Blocks.AppendRecords(blockRecords);
+                RunnerParameters.Database.Blocks.AppendRecords(blockRecords);
             }
 
             return distribution.HasReachedUpperIngestionTime;

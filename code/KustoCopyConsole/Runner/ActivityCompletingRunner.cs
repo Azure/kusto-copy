@@ -11,19 +11,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class ActivityCompletingRunner : RunnerBase
     {
-        public ActivityCompletingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public ActivityCompletingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -39,25 +28,25 @@ namespace KustoCopyConsole.Runner
 
         private void CompleteActivities()
         {
-            var completedIterations = Database.Iterations.Query()
+            var completedIterations = RunnerParameters.Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.State, IterationState.Completed))
                 .ToImmutableArray();
 
             foreach (var iteration in completedIterations)
             {
-                var activityParam = Parameterization.Activities[iteration.IterationKey.ActivityName];
+                var activityParam = RunnerParameters.Parameterization.Activities[iteration.IterationKey.ActivityName];
 
-                if (!Parameterization.IsContinuousRun
+                if (!RunnerParameters.Parameterization.IsContinuousRun
                     || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly
                     || activityParam.TableOption.ExportMode == ExportMode.NewOnly)
                 {
-                    var activity = Database.Activities.Query()
+                    var activity = RunnerParameters.Database.Activities.Query()
                         .Where(pf => pf.Equal(
                             a => a.ActivityName,
                             iteration.IterationKey.ActivityName))
                         .First();
 
-                    Database.Activities.UpdateRecord(
+                    RunnerParameters.Database.Activities.UpdateRecord(
                         activity,
                         activity with
                         {

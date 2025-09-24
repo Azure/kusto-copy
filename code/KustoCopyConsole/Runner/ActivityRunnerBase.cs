@@ -9,26 +9,14 @@ namespace KustoCopyConsole.Runner
 {
     internal abstract class ActivityRunnerBase : RunnerBase
     {
-        public ActivityRunnerBase(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider,
-            TimeSpan wakePeriod)
-            : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 wakePeriod)
+        public ActivityRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
+            : base(parameters, wakePeriod)
         {
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            await TaskHelper.WhenAllWithErrors(Parameterization.Activities.Keys
+            await TaskHelper.WhenAllWithErrors(RunnerParameters.Parameterization.Activities.Keys
                 .Select(a => Task.Run(() => RunActivityLoopAsync(a, ct))));
         }
 
@@ -47,7 +35,7 @@ namespace KustoCopyConsole.Runner
 
         private bool IsActivityCompleted(string activityName)
         {
-            var isCompleted = Database.Activities.Query()
+            var isCompleted = RunnerParameters.Database.Activities.Query()
                 .Where(pf => pf.Equal(a => a.ActivityName, activityName))
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
                 .Count() == 1;

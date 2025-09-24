@@ -16,30 +16,19 @@ namespace KustoCopyConsole.Runner
     {
         private const int MAX_BLOCK_COUNT = 25;
 
-        public AwaitIngestRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(15))
+        public AwaitIngestRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(15))
         {
         }
 
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
-                Parameterization.Activities[activityName].GetDestinationTableIdentity();
-            var dbClient = DbClientFactory.GetDbCommandClient(
+                RunnerParameters.Parameterization.Activities[activityName].GetDestinationTableIdentity();
+            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
-            var iterationIds = Database.Iterations.Query()
+            var iterationIds = RunnerParameters.Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Planning, IterationState.Planned]))
                 .Select(i => i.IterationKey.IterationId)
@@ -62,7 +51,7 @@ namespace KustoCopyConsole.Runner
             DbCommandClient dbClient,
             CancellationToken ct)
         {
-            var queuedBlockByBlockId = Database.Blocks.Query()
+            var queuedBlockByBlockId = RunnerParameters.Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
                 .OrderBy(b => b.BlockKey.BlockId)
@@ -79,7 +68,7 @@ namespace KustoCopyConsole.Runner
                     tempTable.TempTableName,
                     ct);
 
-                using (var tx = Database.Database.CreateTransaction())
+                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
                 {
                     var ingestedBlockIds = extents
                         .Select(e => e.BlockKey.BlockId)
@@ -91,11 +80,11 @@ namespace KustoCopyConsole.Runner
                             State = BlockState.Ingested
                         });
 
-                    Database.Blocks.Query(tx)
+                    RunnerParameters.Database.Blocks.Query(tx)
                         .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
                         .Delete();
-                    Database.Blocks.AppendRecords(ingestedBlocks, tx);
-                    Database.Extents.AppendRecords(extents, tx);
+                    RunnerParameters.Database.Blocks.AppendRecords(ingestedBlocks, tx);
+                    RunnerParameters.Database.Extents.AppendRecords(extents, tx);
 
                     //  We do wait for the ingested status to persist before moving
                     //  This is to avoid moving extents before the confirmation of
@@ -123,7 +112,7 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableDictionary(g => g.Key);
             var blockByTags = blocks
                 .ToImmutableDictionary(b => b.BlockTag);
-            var targetRowCountByBlockId = Database.BlobUrls.Query()
+            var targetRowCountByBlockId = RunnerParameters.Database.BlobUrls.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.In(b => b.BlockKey.BlockId, blocks.Select(b => b.BlockKey.BlockId)))
                 .AsEnumerable()
@@ -169,7 +158,7 @@ namespace KustoCopyConsole.Runner
             TableIdentity destinationTable,
             CancellationToken ct)
         {
-            var oldestQueuedBlock = Database.Blocks.Query()
+            var oldestQueuedBlock = RunnerParameters.Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
                 .OrderBy(b => b.BlockKey.BlockId)
@@ -179,11 +168,11 @@ namespace KustoCopyConsole.Runner
             if (oldestQueuedBlock != null)
             {
                 var tempTable = GetTempTable(iterationKey);
-                var ingestClient = DbClientFactory.GetIngestClient(
+                var ingestClient = RunnerParameters.DbClientFactory.GetIngestClient(
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName,
                     tempTable.TempTableName);
-                var blobUrls = Database.BlobUrls.Query()
+                var blobUrls = RunnerParameters.Database.BlobUrls.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey, oldestQueuedBlock.BlockKey))
                     .ToImmutableArray();
 
@@ -208,7 +197,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReturnToPlanned(BlockRecord block)
         {
-            Database.Blocks.UpdateRecord(
+            RunnerParameters.Database.Blocks.UpdateRecord(
                 block,
                 block with
                 {

@@ -258,11 +258,6 @@ let ['{tableName}'] = ['{tableName}']
                priority,
                async () =>
                {
-                   if(tags.Any())
-                   {
-                       throw new NotImplementedException("Tags");
-                   }
-
                    var commandText = @$"
 .show table ['{tempTableName}'] extents
 | project ExtentId, RowCount, Tags

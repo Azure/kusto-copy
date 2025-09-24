@@ -1,5 +1,4 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -35,66 +34,47 @@ namespace KustoCopyConsole.Runner
                 parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
                 credentials);
 
-            return new MainRunner(
+            var parameters = new RunnerParameters(
                 parameterization,
                 credentials,
                 database,
                 dbClientFactory,
                 stagingBlobUriProvider);
+
+            return new MainRunner(parameters);
         }
 
-        private MainRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-            : base(
-                  parameterization,
-                  credential,
-                  database,
-                  dbClientFactory,
-                  stagingBlobUriProvider,
-                  TimeSpan.Zero)
+        private MainRunner(RunnerParameters parameters)
+            : base(parameters, TimeSpan.Zero)
         {
         }
         #endregion
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await ((IAsyncDisposable)Database).DisposeAsync();
-            ((IDisposable)DbClientFactory).Dispose();
+            await ((IAsyncDisposable)RunnerParameters.Database).DisposeAsync();
+            ((IDisposable)RunnerParameters.DbClientFactory).Dispose();
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
             {
                 SyncActivities(tx);
                 EnsureIterations(tx);
 
                 tx.Complete();
             }
-            var progressRunner = new ProgressRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var planningRunner = new PlanningRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var tempTableRunner = new TempTableCreatingRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var exportingRunner = new ExportingRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var awaitExportedRunner = new AwaitExportedRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var queueIngestRunner = new QueueIngestRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var awaitIngestRunner = new AwaitIngestRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var moveExtentRunner = new MoveExtentRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var iterationCompletingRunner = new IterationCompletingRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
-            var activityCompletingRunner = new ActivityCompletingRunner(
-                Parameterization, Credential, Database, DbClientFactory, StagingBlobUriProvider);
+            var progressRunner = new ProgressRunner(RunnerParameters);
+            var planningRunner = new PlanningRunner(RunnerParameters);
+            var tempTableRunner = new TempTableCreatingRunner(RunnerParameters);
+            var exportingRunner = new ExportingRunner(RunnerParameters);
+            var awaitExportedRunner = new AwaitExportedRunner(RunnerParameters);
+            var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
+            var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
+            var moveExtentRunner = new MoveExtentRunner(RunnerParameters);
+            var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
+            var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
 
             await TaskHelper.WhenAllWithErrors(
                 Task.Run(() => progressRunner.RunAsync(ct)),
@@ -111,14 +91,14 @@ namespace KustoCopyConsole.Runner
 
         private void SyncActivities(TransactionContext tx)
         {
-            var allActivities = Database.Activities.Query(tx)
+            var allActivities = RunnerParameters.Database.Activities.Query(tx)
                 .ToImmutableArray();
-            var newActivityNames = Parameterization.Activities.Keys.Except(
+            var newActivityNames = RunnerParameters.Parameterization.Activities.Keys.Except(
                 allActivities.Select(a => a.ActivityName));
 
             foreach (var a in allActivities)
             {
-                if (Parameterization.Activities.TryGetValue(
+                if (RunnerParameters.Parameterization.Activities.TryGetValue(
                     a.ActivityName,
                     out var paramActivity))
                 {
@@ -149,23 +129,23 @@ namespace KustoCopyConsole.Runner
             }
             foreach (var name in newActivityNames)
             {
-                var paramActivity = Parameterization.Activities[name];
+                var paramActivity = RunnerParameters.Parameterization.Activities[name];
                 var activity = new ActivityRecord(
                     ActivityState.Active,
                     paramActivity.ActivityName,
                     paramActivity.GetSourceTableIdentity(),
                     paramActivity.GetDestinationTableIdentity());
 
-                Database.Activities.AppendRecord(activity, tx);
+                RunnerParameters.Database.Activities.AppendRecord(activity, tx);
                 Console.WriteLine($"New activity:  '{name}'");
             }
         }
 
         private void EnsureIterations(TransactionContext tx)
         {
-            foreach (var name in Parameterization.Activities.Keys)
+            foreach (var name in RunnerParameters.Parameterization.Activities.Keys)
             {
-                var lastIteration = Database.Iterations.Query(tx)
+                var lastIteration = RunnerParameters.Database.Iterations.Query(tx)
                     .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
                     .OrderByDesc(t => t.IterationKey.IterationId)
                     .Take(1)
@@ -188,7 +168,7 @@ namespace KustoCopyConsole.Runner
                         cursorStart,
                         string.Empty);
 
-                    Database.Iterations.AppendRecord(newIterationRecord, tx);
+                    RunnerParameters.Database.Iterations.AppendRecord(newIterationRecord, tx);
                 }
             }
         }

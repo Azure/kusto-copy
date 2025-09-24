@@ -27,25 +27,14 @@ namespace KustoCopyConsole.Runner
                 "Skipped"
                 ]);
 
-        public AwaitExportedRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            DbClientFactory dbClientFactory,
-            AzureBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(15))
+        public AwaitExportedRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(15))
         {
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tasks = Parameterization.Activities.Values
+            var tasks = RunnerParameters.Parameterization.Activities.Values
                 .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
@@ -78,7 +67,7 @@ namespace KustoCopyConsole.Runner
 
         private IImmutableList<BlockRecord> GetExportingBlocks(IEnumerable<string> activityNames)
         {
-            var blockRecords = Database.Blocks.Query()
+            var blockRecords = RunnerParameters.Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                 .Take(MAX_OPERATIONS)
@@ -92,7 +81,7 @@ namespace KustoCopyConsole.Runner
             IEnumerable<BlockRecord> blockRecords,
             CancellationToken ct)
         {
-            var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
+            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var operationIdMap = blockRecords
                 .ToImmutableDictionary(b => b.ExportOperationId);
             var statuses = await dbClient.ShowOperationsAsync(
@@ -120,7 +109,7 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    Database.Blocks.UpdateRecord(
+                    RunnerParameters.Database.Blocks.UpdateRecord(
                         block,
                         block with
                         {
@@ -154,7 +143,7 @@ namespace KustoCopyConsole.Runner
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    Database.Blocks.UpdateRecord(
+                    RunnerParameters.Database.Blocks.UpdateRecord(
                         block,
                         block with
                         {
@@ -187,9 +176,9 @@ namespace KustoCopyConsole.Runner
             BlockRecord block,
             CancellationToken ct)
         {
-            var activityParam = Parameterization.Activities[block.BlockKey.IterationKey.ActivityName];
+            var activityParam = RunnerParameters.Parameterization.Activities[block.BlockKey.IterationKey.ActivityName];
             var sourceTable = activityParam.GetSourceTableIdentity();
-            var dbClient = DbClientFactory.GetDbCommandClient(
+            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);
             var details = await dbClient.ShowExportDetailsAsync(
@@ -212,10 +201,10 @@ namespace KustoCopyConsole.Runner
             };
 
             Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
             {
-                Database.Blocks.UpdateRecord(block, newBlock, tx);
-                Database.BlobUrls.AppendRecords(urls, tx);
+                RunnerParameters.Database.Blocks.UpdateRecord(block, newBlock, tx);
+                RunnerParameters.Database.BlobUrls.AppendRecords(urls, tx);
 
                 tx.Complete();
             }
