@@ -1,14 +1,11 @@
-﻿using Azure.Core;
-using Kusto.Cloud.Platform.Utils;
+﻿using Kusto.Cloud.Platform.Utils;
 using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {

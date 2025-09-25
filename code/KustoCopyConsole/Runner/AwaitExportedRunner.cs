@@ -1,14 +1,11 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
-using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {

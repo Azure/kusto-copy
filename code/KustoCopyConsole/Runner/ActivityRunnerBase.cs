@@ -1,8 +1,4 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Kusto;
+﻿using KustoCopyConsole.Entity.State;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner

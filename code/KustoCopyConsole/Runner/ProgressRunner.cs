@@ -1,8 +1,5 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Kusto;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
