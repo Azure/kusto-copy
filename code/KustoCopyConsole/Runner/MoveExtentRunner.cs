@@ -53,49 +53,54 @@ namespace KustoCopyConsole.Runner
             }
             else
             {
-                var ingestedBlockIds = RunnerParameters.Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
-                    .OrderBy(b => b.BlockKey.BlockId)
-                    .Take(MAXIMUM_EXTENT_MOVING)
-                    .AsEnumerable()
-                    .Select(b => b.BlockKey.BlockId)
-                    .ToImmutableArray();
-                var ingestedExtentsByBlockId = RunnerParameters.Database.Extents.Query()
-                    .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.In(e => e.BlockKey.BlockId, ingestedBlockIds))
-                    .AsEnumerable()
-                    .GroupBy(e => e.BlockKey.BlockId)
-                    .ToImmutableDictionary(g => g.Key, g => g.ToImmutableList());
-                var totalExtentCount = 0;
-
-                foreach (var blockId in ingestedBlockIds)
-                {
-                    var extents = ingestedExtentsByBlockId[blockId];
-
-                    if (totalExtentCount == 0
-                        || totalExtentCount + extents.Count <= MAXIMUM_EXTENT_MOVING)
-                    {
-                        totalExtentCount += extents.Count;
-                    }
-                    else
-                    {
-                        return new MovingBlocks(
-                            iterationKey,
-                            ingestedBlockIds
-                            .Where(id => id < blockId)
-                            .Select(id => ingestedExtentsByBlockId[id])
-                            .SelectMany(m => m)
-                            .ToImmutableArray());
-                    }
-                }
-
-                return new MovingBlocks(
-                    iterationKey,
-                    ingestedExtentsByBlockId.Values
-                    .SelectMany(m => m)
-                    .ToImmutableArray());
+                return GetExtentsToMove(iterationKey);
             }
+        }
+
+        private MovingBlocks GetExtentsToMove(IterationKey iterationKey)
+        {
+            var ingestedBlockIds = RunnerParameters.Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
+                .OrderBy(b => b.BlockKey.BlockId)
+                .Take(MAXIMUM_EXTENT_MOVING)
+                .AsEnumerable()
+                .Select(b => b.BlockKey.BlockId)
+                .ToImmutableArray();
+            var ingestedExtentsByBlockId = RunnerParameters.Database.Extents.Query()
+                .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.In(e => e.BlockKey.BlockId, ingestedBlockIds))
+                .AsEnumerable()
+                .GroupBy(e => e.BlockKey.BlockId)
+                .ToImmutableDictionary(g => g.Key, g => g.ToImmutableList());
+            var totalExtentCount = 0;
+
+            foreach (var blockId in ingestedBlockIds)
+            {
+                var extents = ingestedExtentsByBlockId[blockId];
+
+                if (totalExtentCount == 0
+                    || totalExtentCount + extents.Count <= MAXIMUM_EXTENT_MOVING)
+                {
+                    totalExtentCount += extents.Count;
+                }
+                else
+                {
+                    return new MovingBlocks(
+                        iterationKey,
+                        ingestedBlockIds
+                        .Where(id => id < blockId)
+                        .Select(id => ingestedExtentsByBlockId[id])
+                        .SelectMany(m => m)
+                        .ToImmutableArray());
+                }
+            }
+
+            return new MovingBlocks(
+                iterationKey,
+                ingestedExtentsByBlockId.Values
+                .SelectMany(m => m)
+                .ToImmutableArray());
         }
 
         private async Task MoveAsync(MovingBlocks movingBlocks, CancellationToken ct)
