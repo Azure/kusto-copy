@@ -12,7 +12,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            await TaskHelper.WhenAllWithErrors(RunnerParameters.Parameterization.Activities.Keys
+            await TaskHelper.WhenAllWithErrors(Parameterization.Activities.Keys
                 .Select(a => Task.Run(() => RunActivityLoopAsync(a, ct))));
         }
 
@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Runner
 
         private bool IsActivityCompleted(string activityName)
         {
-            var isCompleted = RunnerParameters.Database.Activities.Query()
+            var isCompleted = Database.Activities.Query()
                 .Where(pf => pf.Equal(a => a.ActivityName, activityName))
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
                 .Count() == 1;

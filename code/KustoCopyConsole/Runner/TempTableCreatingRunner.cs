@@ -17,7 +17,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                var tempTables = RunnerParameters.Database.TempTables.Query()
+                var tempTables = Database.TempTables.Query()
                     .Where(pf => pf.In(
                         t => t.State,
                         [TempTableState.Required, TempTableState.Creating]))
@@ -38,9 +38,9 @@ namespace KustoCopyConsole.Runner
             TempTableRecord tempTableRecord,
             CancellationToken ct)
         {
-            var activity = RunnerParameters.Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
+            var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
             var destination = activity.GetDestinationTableIdentity();
-            var dbCommandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+            var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 destination.ClusterUri,
                 destination.DatabaseName);
             var priority = new KustoPriority(tempTableRecord.IterationKey);
@@ -67,7 +67,7 @@ namespace KustoCopyConsole.Runner
             TableIdentity destination,
             CancellationToken ct)
         {
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
                 var newTempTableRecord = tempTableRecord with
@@ -76,7 +76,7 @@ namespace KustoCopyConsole.Runner
                     TempTableName = tempTableName
                 };
 
-                RunnerParameters.Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
+                Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
@@ -104,7 +104,7 @@ namespace KustoCopyConsole.Runner
                 State = TempTableState.Created
             };
 
-            RunnerParameters.Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
+            Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
 
             return newTempTableRecord;
         }

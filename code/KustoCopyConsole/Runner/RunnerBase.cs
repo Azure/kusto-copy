@@ -1,6 +1,8 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
+using KustoCopyConsole.JobParameter;
+using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -23,9 +25,17 @@ namespace KustoCopyConsole.Runner
 
         protected RunnerParameters RunnerParameters { get; }
 
+        protected MainJobParameterization Parameterization => RunnerParameters.Parameterization;
+
+        protected TrackDatabase Database => RunnerParameters.Database;
+
+        protected DbClientFactory DbClientFactory => RunnerParameters.DbClientFactory;
+
+        protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
+
         protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
         {
-            var isCompleted = RunnerParameters.Database.Activities.Query()
+            var isCompleted = Database.Activities.Query()
                 .Where(pf => pf.In(a => a.ActivityName, activityNames))
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Count() == 0;
@@ -35,7 +45,7 @@ namespace KustoCopyConsole.Runner
 
         protected bool AllActivitiesCompleted()
         {
-            var allCompleted = !RunnerParameters.Database.Activities.Query()
+            var allCompleted = !Database.Activities.Query()
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Any();
 
@@ -60,7 +70,7 @@ namespace KustoCopyConsole.Runner
         #region Temp Table
         protected TempTableRecord? TryGetTempTable(IterationKey iterationKey)
         {
-            var tempTable = RunnerParameters.Database.TempTables.Query()
+            var tempTable = Database.TempTables.Query()
                 .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
                 .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
                 .Take(1)

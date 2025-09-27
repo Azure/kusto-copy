@@ -26,13 +26,13 @@ namespace KustoCopyConsole.Runner
 
         private async Task CompleteIterationsAsync(CancellationToken ct)
         {
-            var candidateIterations = RunnerParameters.Database.Iterations.Query()
+            var candidateIterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.State, IterationState.Planned))
                 .ToImmutableArray();
 
             foreach (var iteration in candidateIterations)
             {
-                var unmovedBlocks = RunnerParameters.Database.Blocks.Query()
+                var unmovedBlocks = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Where(pf => pf.NotEqual(b => b.State, BlockState.ExtentMoved))
                     .Count();
@@ -40,10 +40,10 @@ namespace KustoCopyConsole.Runner
                 if (unmovedBlocks == 0)
                 {
                     var tempTable = GetTempTable(iteration.IterationKey);
-                    var destinationTable = RunnerParameters.Parameterization
+                    var destinationTable = Parameterization
                         .Activities[iteration.IterationKey.ActivityName]
                         .GetDestinationTableIdentity();
-                    var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+                    var dbClient = DbClientFactory.GetDbCommandClient(
                         destinationTable.ClusterUri,
                         destinationTable.DatabaseName);
 
@@ -51,7 +51,7 @@ namespace KustoCopyConsole.Runner
                         new KustoPriority(iteration.IterationKey),
                         tempTable.TempTableName,
                         ct);
-                    await RunnerParameters.StagingBlobUriProvider.DeleteStagingDirectoryAsync(
+                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(
                         iteration.IterationKey,
                         ct);
                     CommitCompleteIteration(iteration);
@@ -61,16 +61,16 @@ namespace KustoCopyConsole.Runner
 
         private void CommitCompleteIteration(IterationRecord iteration)
         {
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
-                RunnerParameters.Database.TempTables.Query(tx)
+                Database.TempTables.Query(tx)
                     .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                     .Delete();
-                RunnerParameters.Database.Blocks.Query(tx)
+                Database.Blocks.Query(tx)
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                     .Delete();
 
-                RunnerParameters.Database.Iterations.UpdateRecord(
+                Database.Iterations.UpdateRecord(
                     iteration,
                     iteration with
                     {

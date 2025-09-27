@@ -52,13 +52,13 @@ namespace KustoCopyConsole.Runner
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await ((IAsyncDisposable)RunnerParameters.Database).DisposeAsync();
-            ((IDisposable)RunnerParameters.DbClientFactory).Dispose();
+            await ((IAsyncDisposable)Database).DisposeAsync();
+            ((IDisposable)DbClientFactory).Dispose();
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
                 SyncActivities(tx);
                 EnsureIterations(tx);
@@ -91,14 +91,14 @@ namespace KustoCopyConsole.Runner
 
         private void SyncActivities(TransactionContext tx)
         {
-            var allActivities = RunnerParameters.Database.Activities.Query(tx)
+            var allActivities = Database.Activities.Query(tx)
                 .ToImmutableArray();
-            var newActivityNames = RunnerParameters.Parameterization.Activities.Keys.Except(
+            var newActivityNames = Parameterization.Activities.Keys.Except(
                 allActivities.Select(a => a.ActivityName));
 
             foreach (var a in allActivities)
             {
-                if (RunnerParameters.Parameterization.Activities.TryGetValue(
+                if (Parameterization.Activities.TryGetValue(
                     a.ActivityName,
                     out var paramActivity))
                 {
@@ -129,23 +129,23 @@ namespace KustoCopyConsole.Runner
             }
             foreach (var name in newActivityNames)
             {
-                var paramActivity = RunnerParameters.Parameterization.Activities[name];
+                var paramActivity = Parameterization.Activities[name];
                 var activity = new ActivityRecord(
                     ActivityState.Active,
                     paramActivity.ActivityName,
                     paramActivity.GetSourceTableIdentity(),
                     paramActivity.GetDestinationTableIdentity());
 
-                RunnerParameters.Database.Activities.AppendRecord(activity, tx);
+                Database.Activities.AppendRecord(activity, tx);
                 Console.WriteLine($"New activity:  '{name}'");
             }
         }
 
         private void EnsureIterations(TransactionContext tx)
         {
-            foreach (var name in RunnerParameters.Parameterization.Activities.Keys)
+            foreach (var name in Parameterization.Activities.Keys)
             {
-                var lastIteration = RunnerParameters.Database.Iterations.Query(tx)
+                var lastIteration = Database.Iterations.Query(tx)
                     .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
                     .OrderByDesc(t => t.IterationKey.IterationId)
                     .Take(1)
@@ -168,7 +168,7 @@ namespace KustoCopyConsole.Runner
                         cursorStart,
                         string.Empty);
 
-                    RunnerParameters.Database.Iterations.AppendRecord(newIterationRecord, tx);
+                    Database.Iterations.AppendRecord(newIterationRecord, tx);
                 }
             }
         }

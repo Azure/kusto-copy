@@ -21,9 +21,9 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+                using (var tx = Database.Database.CreateTransaction())
                 {
-                    var activeIterations = RunnerParameters.Database.Iterations.Query(tx)
+                    var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
                         .ToImmutableArray();
 
@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReportProgress(IterationRecord iteration, TransactionContext tx)
         {
-            var blocksQuery = RunnerParameters.Database.Blocks.Query(tx)
+            var blocksQuery = Database.Blocks.Query(tx)
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, iteration.IterationKey.ActivityName))
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.IterationId, iteration.IterationKey.IterationId));
             var blockCount = blocksQuery.Count();

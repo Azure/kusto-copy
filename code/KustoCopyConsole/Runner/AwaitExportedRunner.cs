@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tasks = RunnerParameters.Parameterization.Activities.Values
+            var tasks = Parameterization.Activities.Values
                 .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Runner
 
         private IImmutableList<BlockRecord> GetExportingBlocks(IEnumerable<string> activityNames)
         {
-            var blockRecords = RunnerParameters.Database.Blocks.Query()
+            var blockRecords = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                 .Take(MAX_OPERATIONS)
@@ -78,7 +78,7 @@ namespace KustoCopyConsole.Runner
             IEnumerable<BlockRecord> blockRecords,
             CancellationToken ct)
         {
-            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
+            var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var operationIdMap = blockRecords
                 .ToImmutableDictionary(b => b.ExportOperationId);
             var statuses = await dbClient.ShowOperationsAsync(
@@ -106,7 +106,7 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    RunnerParameters.Database.Blocks.UpdateRecord(
+                    Database.Blocks.UpdateRecord(
                         block,
                         block with
                         {
@@ -140,7 +140,7 @@ namespace KustoCopyConsole.Runner
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    RunnerParameters.Database.Blocks.UpdateRecord(
+                    Database.Blocks.UpdateRecord(
                         block,
                         block with
                         {
@@ -173,9 +173,9 @@ namespace KustoCopyConsole.Runner
             BlockRecord block,
             CancellationToken ct)
         {
-            var activityParam = RunnerParameters.Parameterization.Activities[block.BlockKey.IterationKey.ActivityName];
+            var activityParam = Parameterization.Activities[block.BlockKey.IterationKey.ActivityName];
             var sourceTable = activityParam.GetSourceTableIdentity();
-            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+            var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);
             var details = await dbClient.ShowExportDetailsAsync(
@@ -198,10 +198,10 @@ namespace KustoCopyConsole.Runner
             };
 
             Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
-                RunnerParameters.Database.Blocks.UpdateRecord(block, newBlock, tx);
-                RunnerParameters.Database.BlobUrls.AppendRecords(urls, tx);
+                Database.Blocks.UpdateRecord(block, newBlock, tx);
+                Database.BlobUrls.AppendRecords(urls, tx);
 
                 tx.Complete();
             }

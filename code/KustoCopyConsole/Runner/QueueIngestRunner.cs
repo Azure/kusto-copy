@@ -19,9 +19,9 @@ namespace KustoCopyConsole.Runner
             string activityName,
             CancellationToken ct)
         {
-            var destinationTable = RunnerParameters.Parameterization.Activities[activityName]
+            var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
-            var block = RunnerParameters.Database.Blocks.Query()
+            var block = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
                 .OrderBy(b => b.BlockKey.IterationKey.IterationId)
@@ -41,7 +41,7 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    var ingestClient = RunnerParameters.DbClientFactory.GetIngestClient(
+                    var ingestClient = DbClientFactory.GetIngestClient(
                         destinationTable.ClusterUri,
                         destinationTable.DatabaseName,
                         tempTable.TempTableName);
@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Runner
             IngestClient ingestClient,
             CancellationToken ct)
         {
-            var urlRecords = RunnerParameters.Database.BlobUrls.Query()
+            var urlRecords = Database.BlobUrls.Query()
                 .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
                 .ToImmutableArray();
 
@@ -79,15 +79,15 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(queuingTasks);
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
                 var newBlobUrls = queuingTasks.Select(o => o.Result);
 
-                RunnerParameters.Database.BlobUrls.Query(tx)
+                Database.BlobUrls.Query(tx)
                     .Where(pf => pf.Equal(u => u.BlockKey, newBlobUrls.First().BlockKey))
                     .Delete();
-                RunnerParameters.Database.BlobUrls.AppendRecords(newBlobUrls, tx);
-                RunnerParameters.Database.Blocks.UpdateRecord(
+                Database.BlobUrls.AppendRecords(newBlobUrls, tx);
+                Database.Blocks.UpdateRecord(
                     block,
                     block with
                     {
@@ -109,7 +109,7 @@ namespace KustoCopyConsole.Runner
             DateTime? creationTime,
             CancellationToken ct)
         {
-            var authorizedUri = await RunnerParameters.StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
+            var authorizedUri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
             var serializedQueueResult = await ingestClient.QueueBlobAsync(
                 new KustoPriority(blobUrl.BlockKey),
                 authorizedUri,

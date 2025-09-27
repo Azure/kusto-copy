@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tasks = RunnerParameters.Parameterization.Activities.Values
+            var tasks = Parameterization.Activities.Values
                 .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
@@ -57,7 +57,7 @@ namespace KustoCopyConsole.Runner
                 if (plannedBlocks.Any())
                 {
                     var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
-                    var iteration = RunnerParameters.Database.Iterations.Query()
+                    var iteration = Database.Iterations.Query()
                         .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
                         .First();
                     var startExportTasks = plannedBlocks
@@ -78,7 +78,7 @@ namespace KustoCopyConsole.Runner
             int cachedCapacity)
         {   //  The first (by priority) block will determine the activity and iteration
             //  we'll work on
-            var firstPlannedBlocks = RunnerParameters.Database.Blocks.Query()
+            var firstPlannedBlocks = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                 .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
@@ -90,14 +90,14 @@ namespace KustoCopyConsole.Runner
             if (firstPlannedBlocks != null)
             {
                 //  Fetch all blocks being in 'exporting' state
-                var exportingCount = (int)RunnerParameters.Database.Blocks.Query()
+                var exportingCount = (int)Database.Blocks.Query()
                     .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                     .Count();
                 //  Cap the blocks with available capacity
                 var maxExporting =
                     Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
-                var plannedBlocks = RunnerParameters.Database.Blocks.Query()
+                var plannedBlocks = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey, firstPlannedBlocks.BlockKey))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                     .OrderBy(b => b.BlockKey.BlockId)
@@ -117,12 +117,12 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activityParam = RunnerParameters.Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
+            var activityParam = Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
             var sourceTable = activityParam.GetSourceTableIdentity();
-            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+            var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);
-            var writableUris = await RunnerParameters.StagingBlobUriProvider.GetWritableFolderUrisAsync(
+            var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
                 blockRecord.BlockKey,
                 ct);
             var operationId = await dbClient.ExportBlockAsync(
@@ -141,12 +141,12 @@ namespace KustoCopyConsole.Runner
                 ExportOperationId = operationId
             };
 
-            RunnerParameters.Database.Blocks.UpdateRecord(blockRecord, newBlockRecord);
+            Database.Blocks.UpdateRecord(blockRecord, newBlockRecord);
         }
 
         private async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
         {
-            var dbCommandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
+            var dbCommandClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var capacity = await dbCommandClient.ShowExportCapacityAsync(
                 KustoPriority.HighestPriority,
                 ct);

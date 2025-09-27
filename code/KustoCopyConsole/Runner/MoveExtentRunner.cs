@@ -38,7 +38,7 @@ namespace KustoCopyConsole.Runner
 
         private MovingBlocks? GetExtentsToMove()
         {
-            var iterationKey = RunnerParameters.Database.Blocks.Query()
+            var iterationKey = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
                 .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
                 .ThenBy(b => b.BlockKey.IterationKey.IterationId)
@@ -59,7 +59,7 @@ namespace KustoCopyConsole.Runner
 
         private MovingBlocks GetExtentsToMove(IterationKey iterationKey)
         {
-            var ingestedBlockIds = RunnerParameters.Database.Blocks.Query()
+            var ingestedBlockIds = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
                 .OrderBy(b => b.BlockKey.BlockId)
@@ -67,7 +67,7 @@ namespace KustoCopyConsole.Runner
                 .AsEnumerable()
                 .Select(b => b.BlockKey.BlockId)
                 .ToImmutableArray();
-            var ingestedExtentsByBlockId = RunnerParameters.Database.Extents.Query()
+            var ingestedExtentsByBlockId = Database.Extents.Query()
                 .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.In(e => e.BlockKey.BlockId, ingestedBlockIds))
                 .ToImmutableArray()
@@ -107,9 +107,9 @@ namespace KustoCopyConsole.Runner
         {
             var iterationKey = movingBlocks.IterationKey;
             var tempTableName = GetTempTable(iterationKey).TempTableName;
-            var destinationTable = RunnerParameters.Parameterization.Activities[iterationKey.ActivityName]
+            var destinationTable = Parameterization.Activities[iterationKey.ActivityName]
                 .GetDestinationTableIdentity();
-            var commandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+            var commandClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
             var extentCount = await commandClient.MoveExtentsAsync(
@@ -122,7 +122,7 @@ namespace KustoCopyConsole.Runner
             var blockIds = movingBlocks.Extents
                 .Select(e => e.BlockKey.BlockId)
                 .Distinct();
-            var blocks = RunnerParameters.Database.Blocks.Query()
+            var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
                 .ToImmutableArray();
@@ -137,28 +137,28 @@ namespace KustoCopyConsole.Runner
 
         private void CommitMove(IterationKey iterationKey, IEnumerable<BlockRecord> blocks)
         {
-            using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+            using (var tx = Database.Database.CreateTransaction())
             {
-                RunnerParameters.Database.Blocks.Query(tx)
+                Database.Blocks.Query(tx)
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                     .Where(pf => pf.In(
                         b => b.BlockKey.BlockId,
                         blocks.Select(b => b.BlockKey.BlockId)))
                     .Delete();
-                RunnerParameters.Database.Extents.Query(tx)
+                Database.Extents.Query(tx)
                     .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
                     .Where(pf => pf.In(
                         e => e.BlockKey.BlockId,
                         blocks.Select(b => b.BlockKey.BlockId)))
                     .Delete();
-                RunnerParameters.Database.BlobUrls.Query(tx)
+                Database.BlobUrls.Query(tx)
                     .Where(pf => pf.Equal(u => u.BlockKey.IterationKey, iterationKey))
                     .Where(pf => pf.In(
                         u => u.BlockKey.BlockId,
                         blocks.Select(b => b.BlockKey.BlockId)))
                     .Delete();
 
-                RunnerParameters.Database.Blocks.AppendRecords(
+                Database.Blocks.AppendRecords(
                     blocks
                     .Select(b => b with
                     {

@@ -21,11 +21,11 @@ namespace KustoCopyConsole.Runner
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
-                RunnerParameters.Parameterization.Activities[activityName].GetDestinationTableIdentity();
-            var dbClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+                Parameterization.Activities[activityName].GetDestinationTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
-            var iterationIds = RunnerParameters.Database.Iterations.Query()
+            var iterationIds = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Planning, IterationState.Planned]))
                 .Select(i => i.IterationKey.IterationId)
@@ -48,7 +48,7 @@ namespace KustoCopyConsole.Runner
             DbCommandClient dbClient,
             CancellationToken ct)
         {
-            var queuedBlockByBlockId = RunnerParameters.Database.Blocks.Query()
+            var queuedBlockByBlockId = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
                 .OrderBy(b => b.BlockKey.BlockId)
@@ -65,7 +65,7 @@ namespace KustoCopyConsole.Runner
                     tempTable.TempTableName,
                     ct);
 
-                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+                using (var tx = Database.Database.CreateTransaction())
                 {
                     var ingestedBlockIds = extents
                         .Select(e => e.BlockKey.BlockId)
@@ -77,11 +77,11 @@ namespace KustoCopyConsole.Runner
                             State = BlockState.Ingested
                         });
 
-                    RunnerParameters.Database.Blocks.Query(tx)
+                    Database.Blocks.Query(tx)
                         .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
                         .Delete();
-                    RunnerParameters.Database.Blocks.AppendRecords(ingestedBlocks, tx);
-                    RunnerParameters.Database.Extents.AppendRecords(extents, tx);
+                    Database.Blocks.AppendRecords(ingestedBlocks, tx);
+                    Database.Extents.AppendRecords(extents, tx);
 
                     //  We do wait for the ingested status to persist before moving
                     //  This is to avoid moving extents before the confirmation of
@@ -109,7 +109,7 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableDictionary(g => g.Key);
             var blockByTags = blocks
                 .ToImmutableDictionary(b => b.BlockTag);
-            var targetRowCountByBlockId = RunnerParameters.Database.BlobUrls.Query()
+            var targetRowCountByBlockId = Database.BlobUrls.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.In(b => b.BlockKey.BlockId, blocks.Select(b => b.BlockKey.BlockId)))
                 .AsEnumerable()
@@ -155,7 +155,7 @@ namespace KustoCopyConsole.Runner
             TableIdentity destinationTable,
             CancellationToken ct)
         {
-            var oldestQueuedBlock = RunnerParameters.Database.Blocks.Query()
+            var oldestQueuedBlock = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
                 .OrderBy(b => b.BlockKey.BlockId)
@@ -165,11 +165,11 @@ namespace KustoCopyConsole.Runner
             if (oldestQueuedBlock != null)
             {
                 var tempTable = GetTempTable(iterationKey);
-                var ingestClient = RunnerParameters.DbClientFactory.GetIngestClient(
+                var ingestClient = DbClientFactory.GetIngestClient(
                     destinationTable.ClusterUri,
                     destinationTable.DatabaseName,
                     tempTable.TempTableName);
-                var blobUrls = RunnerParameters.Database.BlobUrls.Query()
+                var blobUrls = Database.BlobUrls.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey, oldestQueuedBlock.BlockKey))
                     .ToImmutableArray();
 
@@ -194,7 +194,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReturnToPlanned(BlockRecord block)
         {
-            RunnerParameters.Database.Blocks.UpdateRecord(
+            Database.Blocks.UpdateRecord(
                 block,
                 block with
                 {

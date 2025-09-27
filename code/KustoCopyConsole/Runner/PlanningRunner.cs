@@ -21,7 +21,7 @@ namespace KustoCopyConsole.Runner
 
         protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
-            var iterations = RunnerParameters.Database.Iterations.Query()
+            var iterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Starting, IterationState.Planning]))
                 .ToImmutableArray();
@@ -38,13 +38,13 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activity = RunnerParameters.Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
+            var activity = Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
             var source = activity.GetSourceTableIdentity();
             var destination = activity.GetDestinationTableIdentity();
-            var queryClient = RunnerParameters.DbClientFactory.GetDbQueryClient(
+            var queryClient = DbClientFactory.GetDbQueryClient(
                 source.ClusterUri,
                 source.DatabaseName);
-            var dbCommandClient = RunnerParameters.DbClientFactory.GetDbCommandClient(
+            var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 source.ClusterUri,
                 source.DatabaseName);
 
@@ -54,7 +54,7 @@ namespace KustoCopyConsole.Runner
                     new KustoPriority(iterationRecord.IterationKey),
                     ct);
 
-                using (var tx = RunnerParameters.Database.Database.CreateTransaction())
+                using (var tx = Database.Database.CreateTransaction())
                 {
                     var newIterationRecord = iterationRecord with
                     {
@@ -62,8 +62,8 @@ namespace KustoCopyConsole.Runner
                         CursorEnd = cursor
                     };
 
-                    RunnerParameters.Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
-                    RunnerParameters.Database.TempTables.AppendRecord(
+                    Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
+                    Database.TempTables.AppendRecord(
                         new TempTableRecord(
                             TempTableState.Required,
                             iterationRecord.IterationKey,
@@ -119,7 +119,7 @@ namespace KustoCopyConsole.Runner
                 if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
                     || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
                 {   //  No ingestion time:  either no rows or no rows with ingestion time
-                    RunnerParameters.Database.Iterations.UpdateRecord(
+                    Database.Iterations.UpdateRecord(
                         iterationRecord,
                         iterationRecord with
                         {
@@ -150,7 +150,7 @@ namespace KustoCopyConsole.Runner
             //  Do blocks one batch at the time until completion
             while (iterationRecord.State == IterationState.Planning)
             {
-                var lastBlock = RunnerParameters.Database.Blocks.Query()
+                var lastBlock = Database.Blocks.Query()
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey.ActivityName,
                         iterationRecord.IterationKey.ActivityName))
@@ -173,7 +173,7 @@ namespace KustoCopyConsole.Runner
 
                 if (hasReachedUpperIngestionTime)
                 {
-                    RunnerParameters.Database.Iterations.UpdateRecord(
+                    Database.Iterations.UpdateRecord(
                         iterationRecord,
                         iterationRecord with
                         {
@@ -239,7 +239,7 @@ namespace KustoCopyConsole.Runner
                         string.Empty))
                     .ToImmutableArray();
 
-                RunnerParameters.Database.Blocks.AppendRecords(blockRecords);
+                Database.Blocks.AppendRecords(blockRecords);
             }
 
             return distribution.HasReachedUpperIngestionTime;

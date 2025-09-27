@@ -25,25 +25,25 @@ namespace KustoCopyConsole.Runner
 
         private void CompleteActivities()
         {
-            var completedIterations = RunnerParameters.Database.Iterations.Query()
+            var completedIterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.State, IterationState.Completed))
                 .ToImmutableArray();
 
             foreach (var iteration in completedIterations)
             {
-                var activityParam = RunnerParameters.Parameterization.Activities[iteration.IterationKey.ActivityName];
+                var activityParam = Parameterization.Activities[iteration.IterationKey.ActivityName];
 
-                if (!RunnerParameters.Parameterization.IsContinuousRun
+                if (!Parameterization.IsContinuousRun
                     || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly
                     || activityParam.TableOption.ExportMode == ExportMode.NewOnly)
                 {
-                    var activity = RunnerParameters.Database.Activities.Query()
+                    var activity = Database.Activities.Query()
                         .Where(pf => pf.Equal(
                             a => a.ActivityName,
                             iteration.IterationKey.ActivityName))
                         .First();
 
-                    RunnerParameters.Database.Activities.UpdateRecord(
+                    Database.Activities.UpdateRecord(
                         activity,
                         activity with
                         {
