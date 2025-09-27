@@ -70,7 +70,7 @@ namespace KustoCopyConsole.Runner
             var ingestedExtentsByBlockId = RunnerParameters.Database.Extents.Query()
                 .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
                 .Where(pf => pf.In(e => e.BlockKey.BlockId, ingestedBlockIds))
-                .AsEnumerable()
+                .ToImmutableArray()
                 .GroupBy(e => e.BlockKey.BlockId)
                 .ToImmutableDictionary(g => g.Key, g => g.ToImmutableList());
             var totalExtentCount = 0;
