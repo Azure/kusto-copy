@@ -57,7 +57,7 @@ namespace KustoCopyConsole.Runner
                 iteration = StartIteration(iteration, cursor);
             }
             await ValidateIngestionTimeAsync(queryClient, activity, iteration, ct);
-            await PlanBlocksAsync(queryClient, dbCommandClient, activity, iteration, ct);
+            await PlanBlocksAsync(queryClient, activity, iteration, ct);
         }
 
         private IterationRecord StartIteration(IterationRecord iteration, string cursor)
@@ -108,7 +108,6 @@ namespace KustoCopyConsole.Runner
 
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
             ActivityParameterization activity,
             IterationRecord iterationRecord,
             CancellationToken ct)
@@ -137,7 +136,6 @@ namespace KustoCopyConsole.Runner
                 {
                     await PlanBlocksAsync(
                         queryClient,
-                        dbCommandClient,
                         activity,
                         iterationRecord,
                         ingestionTimeInterval,
@@ -148,7 +146,6 @@ namespace KustoCopyConsole.Runner
 
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
             ActivityParameterization activity,
             IterationRecord iterationRecord,
             IngestionTimeInterval ingestionTimeInterval,
