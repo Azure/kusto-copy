@@ -175,7 +175,6 @@ namespace KustoCopyConsole.Runner
                     lastBlock?.IngestionTimeEnd.ToString() ?? ingestionTimeInterval.MinIngestionTime,
                     ingestionTimeInterval.MaxIngestionTime,
                     queryClient,
-                    dbCommandClient,
                     ct);
 
                 if (hasReachedUpperIngestionTime)
@@ -200,7 +199,6 @@ namespace KustoCopyConsole.Runner
             string lowerIngestionTime,
             string upperIngestionTime,
             DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
             CancellationToken ct)
         {
             var distribution = await queryClient.GetRecordDistributionAsync(
@@ -227,7 +225,6 @@ namespace KustoCopyConsole.Runner
                     lowerIngestionTime,
                     upperIngestionTime,
                     queryClient,
-                    dbCommandClient,
                     ct);
             }
             else if (distribution.RecordGroups.Any())
