@@ -57,7 +57,10 @@ namespace KustoCopyConsole.Runner
                 iteration = StartIteration(iteration, cursor);
             }
             await ValidateIngestionTimeAsync(queryClient, activity, iteration, ct);
-            await PlanBlocksAsync(queryClient, activity, iteration, ct);
+            if (iteration.State == IterationState.Planning)
+            {
+                await PlanBlocksAsync(queryClient, activity, iteration, ct);
+            }
         }
 
         private IterationRecord StartIteration(IterationRecord iteration, string cursor)
@@ -109,64 +112,61 @@ namespace KustoCopyConsole.Runner
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             CancellationToken ct)
         {
-            if (iterationRecord.State == IterationState.Planning)
-            {
-                var ingestionTimeInterval = await queryClient.GetIngestionTimeIntervalAsync(
-                    new KustoPriority(iterationRecord.IterationKey),
-                    activity.GetSourceTableIdentity().TableName,
-                    activity.KqlQuery,
-                    iterationRecord.CursorStart,
-                    iterationRecord.CursorEnd,
-                    ct);
+            var ingestionTimeInterval = await queryClient.GetIngestionTimeIntervalAsync(
+                new KustoPriority(iteration.IterationKey),
+                activity.GetSourceTableIdentity().TableName,
+                activity.KqlQuery,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                ct);
 
-                if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
-                    || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
-                {   //  No ingestion time:  either no rows or no rows with ingestion time
-                    Database.Iterations.UpdateRecord(
-                        iterationRecord,
-                        iterationRecord with
-                        {
-                            State = IterationState.Completed
-                        });
-                }
-                else
-                {
-                    await PlanBlocksAsync(
-                        queryClient,
-                        activity,
-                        iterationRecord,
-                        ingestionTimeInterval,
-                        ct);
-                }
+            if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
+                || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
+            {   //  No ingestion time:  either no rows or no rows with ingestion time
+                Database.Iterations.UpdateRecord(
+                    iteration,
+                    iteration with
+                    {
+                        State = IterationState.Completed
+                    });
+            }
+            else
+            {
+                await PlanBlocksAsync(
+                    queryClient,
+                    activity,
+                    iteration,
+                    ingestionTimeInterval,
+                    ct);
             }
         }
 
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             IngestionTimeInterval ingestionTimeInterval,
             CancellationToken ct)
         {
             //  Do blocks one batch at the time until completion
-            while (iterationRecord.State == IterationState.Planning)
+            while (iteration.State == IterationState.Planning)
             {
                 var lastBlock = Database.Blocks.Query()
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey.ActivityName,
-                        iterationRecord.IterationKey.ActivityName))
+                        iteration.IterationKey.ActivityName))
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey.IterationId,
-                        iterationRecord.IterationKey.IterationId))
+                        iteration.IterationKey.IterationId))
                     .OrderByDesc(b => b.BlockKey.BlockId)
                     .Take(1)
                     .FirstOrDefault();
                 var hasReachedUpperIngestionTime = await PlanBlocksBatchAsync(
                     activity,
-                    iterationRecord,
+                    iteration,
                     lastBlock == null ? 1 : lastBlock.BlockKey.BlockId + 1,
                     lastBlock?.IngestionTimeEnd.ToString(),
                     lastBlock?.IngestionTimeEnd.ToString() ?? ingestionTimeInterval.MinIngestionTime,
@@ -177,8 +177,8 @@ namespace KustoCopyConsole.Runner
                 if (hasReachedUpperIngestionTime)
                 {
                     Database.Iterations.UpdateRecord(
-                        iterationRecord,
-                        iterationRecord with
+                        iteration,
+                        iteration with
                         {
                             State = IterationState.Planned
                         });
@@ -190,7 +190,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<bool> PlanBlocksBatchAsync(
             ActivityParameterization activity,
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             long nextBlockId,
             string? lastIngestionTime,
             string lowerIngestionTime,
@@ -199,11 +199,11 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var distribution = await queryClient.GetRecordDistributionAsync(
-                new KustoPriority(iterationRecord.IterationKey),
+                new KustoPriority(iteration.IterationKey),
                 activity.GetSourceTableIdentity().TableName,
                 activity.KqlQuery,
-                iterationRecord.CursorStart,
-                iterationRecord.CursorEnd,
+                iteration.CursorStart,
+                iteration.CursorEnd,
                 lastIngestionTime,
                 lowerIngestionTime,
                 upperIngestionTime,
@@ -216,7 +216,7 @@ namespace KustoCopyConsole.Runner
             {
                 return await PlanBlocksBatchAsync(
                     activity,
-                    iterationRecord,
+                    iteration,
                     nextBlockId,
                     lastIngestionTime,
                     lowerIngestionTime,
@@ -229,7 +229,7 @@ namespace KustoCopyConsole.Runner
                 var blockRecords = distribution.RecordGroups
                     .Select(r => new BlockRecord(
                         BlockState.Planned,
-                        new BlockKey(iterationRecord.IterationKey, nextBlockId++),
+                        new BlockKey(iteration.IterationKey, nextBlockId++),
                         r.IngestionTimeStart,
                         r.IngestionTimeEnd,
                         r.MinCreatedOn!.Value,
