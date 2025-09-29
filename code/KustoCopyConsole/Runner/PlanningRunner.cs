@@ -35,10 +35,10 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task PlanIterationAsync(
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             CancellationToken ct)
         {
-            var activity = Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
+            var activity = Parameterization.Activities[iteration.IterationKey.ActivityName];
             var source = activity.GetSourceTableIdentity();
             var destination = activity.GetDestinationTableIdentity();
             var queryClient = DbClientFactory.GetDbQueryClient(
@@ -48,34 +48,41 @@ namespace KustoCopyConsole.Runner
                 source.ClusterUri,
                 source.DatabaseName);
 
-            if (iterationRecord.State == IterationState.Starting)
+            if (iteration.State == IterationState.Starting)
             {
                 var cursor = await queryClient.GetCurrentCursorAsync(
-                    new KustoPriority(iterationRecord.IterationKey),
+                    new KustoPriority(iteration.IterationKey),
                     ct);
 
-                using (var tx = Database.Database.CreateTransaction())
-                {
-                    var newIterationRecord = iterationRecord with
-                    {
-                        State = IterationState.Planning,
-                        CursorEnd = cursor
-                    };
-
-                    Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
-                    Database.TempTables.AppendRecord(
-                        new TempTableRecord(
-                            TempTableState.Required,
-                            iterationRecord.IterationKey,
-                            string.Empty),
-                        tx);
-                    iterationRecord = newIterationRecord;
-
-                    tx.Complete();
-                }
+                iteration = StartIteration(iteration, cursor);
             }
-            await ValidateIngestionTimeAsync(queryClient, activity, iterationRecord, ct);
-            await PlanBlocksAsync(queryClient, dbCommandClient, activity, iterationRecord, ct);
+            await ValidateIngestionTimeAsync(queryClient, activity, iteration, ct);
+            await PlanBlocksAsync(queryClient, dbCommandClient, activity, iteration, ct);
+        }
+
+        private IterationRecord StartIteration(IterationRecord iteration, string cursor)
+        {
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                var newIterationRecord = iteration with
+                {
+                    State = IterationState.Planning,
+                    CursorEnd = cursor
+                };
+
+                Database.Iterations.UpdateRecord(iteration, newIterationRecord, tx);
+                Database.TempTables.AppendRecord(
+                    new TempTableRecord(
+                        TempTableState.Required,
+                        iteration.IterationKey,
+                        string.Empty),
+                    tx);
+                iteration = newIterationRecord;
+
+                tx.Complete();
+            }
+
+            return iteration;
         }
 
         private async Task ValidateIngestionTimeAsync(
