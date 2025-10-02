@@ -85,11 +85,129 @@ BaseData
                 });
         }
 
+        public async Task<IEnumerable<ProtoBlock>> GetExtentStatsAsync(
+            KustoPriority priority,
+            string tableName,
+            string? cursorStart,
+            string? cursorEnd,
+            string? ingestionTimeStart,
+            CancellationToken ct)
+        {
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
+                    var cursorStartFilter = cursorStart == null
+                    ? string.Empty
+                    : $"| where cursor_after('{cursorStart}')";
+                    var cursorEndFilter = cursorEnd == null
+                    ? string.Empty
+                    : $"| where cursor_before_or_at('{cursorEnd}')";
+                    var ingestionTimeStartFilter = ingestionTimeStart == null
+                    ? string.Empty
+                    : $"| where ingestion_time() > datetime({ingestionTimeStart})";
+                    var clipIngestionTimeStart = ingestionTimeStart == null
+                    ? string.Empty
+                    : @$"
+| where EndIngestionTime < datetime({ingestionTimeStart})
+| extend StartIngestionTime < max_of(datetime({ingestionTimeStart}), StartIngestionTime)
+";
+                    var query = @$"
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    {cursorEndFilter}
+    {ingestionTimeStartFilter};
+let StartIngestionTime = toscalar(BaseData
+    | summarize min(ingestion_time()));
+let TopExtentStats = materialize(BaseData
+    | project ExtentId=extent_id(), IngestionTime=ingestion_time()
+    | where IngestionTime between (StartIngestionTime .. 1h)
+    | summarize
+        RecordCount=count(),
+        MinIngestionTime=min(IngestionTime),
+        MaxIngestionTime=max(IngestionTime) by ExtentId
+    | top 250 by MinIngestionTime asc);
+let ExtentIdsText = strcat_array(toscalar(TopExtentStats | summarize make_list(ExtentId)), ',');
+let ShowCommand = toscalar(strcat(
+    "".show table ['wikipedia'] extents ("",
+    //  Fake a non-existing extent ID if no extent ID are available
+    iif(isempty(ExtentIdsText), tostring(new_guid()), ExtentIdsText),
+    "") | project ExtentId, MinCreatedOn""));
+let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
+    | project ExtentId, CreatedOn=bin(MinCreatedOn, 1h);
+let RawIntervals = TopExtentStats
+    //  We outer join so that if a merge happen in between, extent creation time will be null (hence detectable)
+    | lookup kind=leftouter ExtentIdCreationTime on ExtentId;
+//  Clip the bottom limit to have non overlapping intervals
+let ClippedIntervals = RawIntervals
+| order by MinIngestionTime asc
+| scan declare (
+    RunningMax:datetime = datetime(1900-01-01),
+    ClippedMinIngestionTime:datetime,
+    ClippedMaxIngestionTime:datetime,
+    ClippedCreatedOn:datetime) with
+(
+    step s: true =>
+        //  Update the running max
+        RunningMax = max_of(s.RunningMax, MaxIngestionTime),
+        //  Clip values
+        ClippedMinIngestionTime = max_of(MinIngestionTime, s.RunningMax),
+        ClippedMaxIngestionTime = max_of(MaxIngestionTime, s.RunningMax),
+        ClippedCreatedOn = iif(
+            max_of(MinIngestionTime, s.RunningMax)!=max_of(MaxIngestionTime, s.RunningMax) or isnull(s.ClippedCreatedOn),
+            CreatedOn,
+            s.ClippedCreatedOn);
+)
+| project RecordCount, MinIngestionTime=ClippedMinIngestionTime, MaxIngestionTime=ClippedMaxIngestionTime, CreatedOn=ClippedCreatedOn;
+let MergedIntervals = ClippedIntervals
+    //  Is first record
+    | extend IsNewBatch = isnull(prev(RecordCount))
+    //  Different createdOn and actual interval
+        or (prev(CreatedOn)!=CreatedOn and MinIngestionTime!=MaxIngestionTime)
+    //  There is a space between last max and current min, i.e. the intervals are disjunted
+        or (prev(MaxIngestionTime) < MinIngestionTime)
+    | extend CumulatedRecordCount = row_cumsum(RecordCount, IsNewBatch)
+    | extend NextIsNewBatch = isnull(next(RecordCount)) or next(IsNewBatch)
+    | where IsNewBatch or NextIsNewBatch
+    //  We calculate the batch on the last row of the batch to capture the cumulated record count
+    | extend BatchMinIngestionTime = iif(IsNewBatch, MinIngestionTime, prev(MinIngestionTime))
+    | where NextIsNewBatch
+    | project MinIngestionTime=BatchMinIngestionTime, MaxIngestionTime, RecordCount=CumulatedRecordCount, CreatedOn;
+let Blocks = MergedIntervals
+    | extend BlockCount = tolong(ceiling(RecordCount/8000000.0))
+    | extend i = range(0, BlockCount-1)
+    | mv-expand i to typeof(long)
+    | extend StartIngestionTime=MinIngestionTime+(MaxIngestionTime-MinIngestionTime)*i/BlockCount
+    | extend EndIngestionTime=MinIngestionTime+(MaxIngestionTime-MinIngestionTime)*(i+1)/BlockCount
+    | order by StartIngestionTime asc
+    | project StartIngestionTime, EndIngestionTime, CreatedOn;
+Blocks
+{clipIngestionTimeStart}
+| extend StartIngestionTime=tostring(StartIngestionTime)
+| extend EndIngestionTime=tostring(EndIngestionTime)
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var results = reader
+                        .ToEnumerable(r => new ProtoBlock(
+                            (string)r["StartIngestionTime"],
+                            (string)r["EndIngestionTime"],
+                            DbNullHelper.To<DateTime>(r["CreatedOn"])))
+                        .ToImmutableArray();
+
+                    return results;
+                });
+        }
+
         public async Task<IngestionTimeInterval> GetIngestionTimeIntervalAsync(
             KustoPriority priority,
             string tableName,
             string? kqlQuery,
-            string cursorStart,
+            string? cursorStart,
             string cursorEnd,
             CancellationToken ct)
         {
@@ -97,7 +215,7 @@ BaseData
                 priority,
                 async () =>
                 {
-                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    var cursorStartFilter = cursorStart == null
                     ? string.Empty
                     : $"| where cursor_after('{cursorStart}')";
                     var query = @$"
@@ -129,7 +247,7 @@ BaseData
             KustoPriority priority,
             string tableName,
             string? kqlQuery,
-            string cursorStart,
+            string? cursorStart,
             string cursorEnd,
             //  This is excluded
             string? lastIngestionTime,
@@ -149,7 +267,7 @@ BaseData
                     const int MAX_INTERVAL_COUNT = 500000;
 
                     var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
-                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    var cursorStartFilter = cursorStart == null
                     ? string.Empty
                     : $@"| where cursor_after(""{cursorStart}"")";
                     var lowerIngestionTimeFilter = string.IsNullOrWhiteSpace(lastIngestionTime)

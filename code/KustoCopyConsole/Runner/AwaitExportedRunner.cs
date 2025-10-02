@@ -205,21 +205,6 @@ namespace KustoCopyConsole.Runner
 
                 tx.Complete();
             }
-            ValidatePlannedRowCount(newBlock, urls);
-        }
-
-        private void ValidatePlannedRowCount(
-            BlockRecord block,
-            IImmutableList<BlobUrlRecord> urls)
-        {
-            var exportedRowCount = urls.Sum(u => u.RowCount);
-
-            if (block.PlannedRowCount != exportedRowCount)
-            {
-                TraceWarning($"Warning!  Block {block.BlockKey} " +
-                    $"had planned row count of {block.PlannedRowCount} but " +
-                    $"exported {exportedRowCount} rows");
-            }
         }
         #endregion
     }

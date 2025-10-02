@@ -74,7 +74,7 @@ namespace KustoCopyConsole.Runner
                     ingestClient,
                     u,
                     blockTag,
-                    block.MinCreationTime,
+                    block.CreationTime,
                     ct))
                 .ToImmutableArray();
 

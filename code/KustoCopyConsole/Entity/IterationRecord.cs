@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Entity
     internal record IterationRecord(
         IterationState State,
         IterationKey IterationKey,
-        string CursorStart,
+        string? CursorStart,
         string CursorEnd) : RecordBase
     {
         public override void Validate()
