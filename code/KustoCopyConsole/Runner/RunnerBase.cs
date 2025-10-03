@@ -1,60 +1,96 @@
-﻿using Azure.Core;
+﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
+using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class RunnerBase
+    internal abstract class RunnerBase
     {
         private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
 
         private readonly TimeSpan _wakePeriod;
+        private readonly TaskCompletionSource _allActivityCompletedSource
+            = new TaskCompletionSource();
 
-        public RunnerBase(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider,
-            TimeSpan wakePeriod)
+        public RunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
         {
-            Parameterization = parameterization;
-            Credential = credential;
-            RowItemGateway = rowItemGateway;
-            DbClientFactory = dbClientFactory;
-            StagingBlobUriProvider = stagingBlobUriProvider;
+            RunnerParameters = parameters;
             _wakePeriod = wakePeriod;
         }
 
-        protected MainJobParameterization Parameterization { get; }
+        protected RunnerParameters RunnerParameters { get; }
 
-        protected TokenCredential Credential { get; }
+        protected MainJobParameterization Parameterization => RunnerParameters.Parameterization;
 
-        protected RowItemGateway RowItemGateway { get; }
+        protected TrackDatabase Database => RunnerParameters.Database;
 
-        protected DbClientFactory DbClientFactory { get; }
+        protected DbClientFactory DbClientFactory => RunnerParameters.DbClientFactory;
 
-        protected IStagingBlobUriProvider StagingBlobUriProvider { get; }
+        protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
+
+        protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
+        {
+            var isCompleted = Database.Activities.Query()
+                .Where(pf => pf.In(a => a.ActivityName, activityNames))
+                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
+                .Count() == 0;
+
+            return isCompleted;
+        }
 
         protected bool AllActivitiesCompleted()
         {
-            return !RowItemGateway.InMemoryCache.ActivityMap
-                .Values
-                .Where(a => a.RowItem.State == ActivityState.Active)
+            var allCompleted = !Database.Activities.Query()
+                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Any();
+
+            if (allCompleted)
+            {
+                _allActivityCompletedSource.TrySetResult();
+            }
+
+            return allCompleted;
         }
 
         protected async Task SleepAsync(CancellationToken ct)
         {
-            await Task.Delay(_wakePeriod, ct);
+            await Task.WhenAny(_allActivityCompletedSource.Task, Task.Delay(_wakePeriod, ct));
         }
 
         protected void TraceWarning(string text)
         {
             _traceSource.TraceEvent(TraceEventType.Warning, 0, text);
         }
+
+        #region Temp Table
+        protected TempTableRecord? TryGetTempTable(IterationKey iterationKey)
+        {
+            var tempTable = Database.TempTables.Query()
+                .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
+                .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
+                .Take(1)
+                .FirstOrDefault();
+
+            return tempTable;
+        }
+
+        protected TempTableRecord GetTempTable(IterationKey iterationKey)
+        {
+            var tempTable = TryGetTempTable(iterationKey);
+
+            if (tempTable == null)
+            {
+                throw new InvalidDataException(
+                    $"TempTable for iteration {iterationKey} should exist by now");
+            }
+
+            return tempTable;
+        }
+        #endregion
     }
 }

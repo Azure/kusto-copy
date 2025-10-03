@@ -2,8 +2,8 @@
 {
     public enum TempTableState
     {
+        Required,
         Creating,
-        Created,
-        Dropped
+        Created
     }
 }

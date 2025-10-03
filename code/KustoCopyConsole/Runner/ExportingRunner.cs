@@ -1,12 +1,6 @@
-﻿using Azure.Core;
-using Kusto.Cloud.Platform.Utils;
-using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -19,206 +13,135 @@ namespace KustoCopyConsole.Runner
         private record CapacityCache(DateTime CachedTime, int CachedCapacity);
         #endregion
 
+        private const int BLOCK_BATCH = 50;
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
 
-        public ExportingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public ExportingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var capacityMap = new Dictionary<Uri, CapacityCache>();
+            var tasks = Parameterization.Activities.Values
+                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
+                .Select(g => Task.Run(() => RunActivitiesAsync(
+                    g.Key,
+                    g.Select(a => a.ActivityName).ToImmutableArray(),
+                    ct)))
+                .ToImmutableList();
 
-            while (!AllActivitiesCompleted())
-            {
-                var candidatesByCluster = GetCandidatesByCluster();
-
-                //  Ensure (or fetch) capacity of each cluster having candidates
-                await EnsureCapacityCacheAsync(capacityMap, candidatesByCluster.Keys, ct);
-
-                var processTasks = candidatesByCluster
-                    .Select(p => Task.Run(() => ProcessExportByClusterAsync(
-                        p.Key,
-                        capacityMap[p.Key].CachedCapacity,
-                        p.Value,
-                        ct)))
-                    .ToImmutableArray();
-
-                await Task.WhenAll(processTasks);
-                await SleepAsync(ct);
-            }
+            await Task.WhenAll(tasks);
         }
 
-        private IImmutableDictionary<Uri, IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>>>
-            GetCandidatesByCluster()
-        {
-            IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>> GroupByIteration(
-                IEnumerable<ActivityFlatHierarchy> flatHierarchy)
-            {
-                var map = flatHierarchy
-                    .GroupBy(
-                        h => new IterationKey(h.Activity.ActivityName, h.Iteration.IterationId),
-                        h => h.Block)
-                    .ToImmutableDictionary(
-                        g => g.Key,
-                        g => (IImmutableList<BlockRowItem>)g.ToImmutableArray());
-
-                return map;
-            }
-            var flatHierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                a => a.RowItem.State != ActivityState.Completed,
-                i => i.RowItem.State != IterationState.Completed);
-            var plannedOnly = flatHierarchy
-                .Where(h => h.Block.State == BlockState.Planned);
-            var candidates = plannedOnly
-                .GroupBy(h => h.Activity.SourceTable.ClusterUri)
-                .ToImmutableDictionary(
-                    g => g.Key,
-                    g => GroupByIteration(g));
-
-            return candidates;
-        }
-
-        private async Task EnsureCapacityCacheAsync(
-            IDictionary<Uri, CapacityCache> capacityMap,
-            IEnumerable<Uri> clusterUris,
+        private async Task RunActivitiesAsync(
+            Uri sourceClusterUri,
+            IImmutableList<string> activityNames,
             CancellationToken ct)
         {
-            var clustersToUpdate = clusterUris
-                .Where(u => !capacityMap.ContainsKey(u)
-                || capacityMap[u].CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now);
-            var capacityUpdateTasks = clustersToUpdate
-                .Select(u => new
-                {
-                    ClusterUri = u,
-                    CapacityTask = FetchCapacityAsync(u, ct)
-                })
-                .ToImmutableArray();
+            var capacityCache = new CapacityCache(
+                DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD),
+                0);
 
-            await TaskHelper.WhenAllWithErrors(capacityUpdateTasks.Select(o => o.CapacityTask));
-
-            foreach (var update in capacityUpdateTasks)
+            while (!AreActivitiesCompleted(activityNames))
             {
-                capacityMap[update.ClusterUri] =
-                    new CapacityCache(DateTime.Now, update.CapacityTask.Result);
-            }
-        }
+                //  Ensures capacity of source cluster
+                capacityCache = capacityCache.CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now
+                    ? new CapacityCache(
+                        DateTime.Now,
+                        await FetchCapacityAsync(sourceClusterUri, ct))
+                    : capacityCache;
 
-        private async Task<int> ProcessExportByClusterAsync(
-            Uri clusterUri,
-            int capacity,
-            IImmutableDictionary<IterationKey, IImmutableList<BlockRowItem>> iterationMap,
-            CancellationToken ct)
-        {
-            var exportingCount = GetExportingCount(clusterUri);
-            var freeCapacity = capacity - exportingCount;
-            var orderedIterationKeys = iterationMap.Keys
-                .OrderBy(k => k.ActivityName)
-                .ThenBy(k => k.IterationId);
-            var lineup = new List<BlockRowItem>();
+                var plannedBlocks = FetchPlannedBlocks(activityNames, capacityCache.CachedCapacity);
 
-            //  Get line up by iteration priority
-            foreach (var iterationKey in orderedIterationKeys)
-            {
-                if (freeCapacity > 0)
+                if (plannedBlocks.Any())
                 {
-                    var candidates = iterationMap[iterationKey];
+                    var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
+                    var iteration = Database.Iterations.Query()
+                        .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                        .First();
+                    var startExportTasks = plannedBlocks
+                        .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
+                        .ToImmutableArray();
 
-                    freeCapacity -= lineup.Count();
-                    lineup.AddRange(GetLineup(iterationKey, candidates, freeCapacity));
+                    await TaskHelper.WhenAllWithErrors(startExportTasks);
+                }
+                else
+                {
+                    await SleepAsync(ct);
                 }
             }
-
-            var startExportTasks = lineup
-                .Select(b => Task.Run(() => StartExportAsync(b, ct)))
-                .ToImmutableArray();
-
-            await Task.WhenAll(startExportTasks);
-
-            return lineup.Count;
         }
 
-        private int GetExportingCount(Uri clusterUri)
-        {
-            var flatHierarchy = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                a => a.RowItem.SourceTable.ClusterUri == clusterUri,
-                i => i.RowItem.State != IterationState.Completed);
-            var exportCount = flatHierarchy
-                .Where(h => h.Block.State == BlockState.Exporting)
-                .Count();
+        private IEnumerable<BlockRecord> FetchPlannedBlocks(
+            IEnumerable<string> activityNames,
+            int cachedCapacity)
+        {   //  The first (by priority) block will determine the activity and iteration
+            //  we'll work on
+            var firstPlannedBlocks = Database.Blocks.Query()
+                .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
+                .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
+                .ThenBy(b => b.BlockKey.IterationKey.IterationId)
+                .ThenBy(b => b.BlockKey.BlockId)
+                .Take(1)
+                .FirstOrDefault();
 
-            return exportCount;
+            if (firstPlannedBlocks != null)
+            {
+                //  Fetch all blocks being in 'exporting' state
+                var exportingCount = (int)Database.Blocks.Query()
+                    .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
+                    .Count();
+                //  Cap the blocks with available capacity
+                var maxExporting =
+                    Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
+                var plannedBlocks = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey, firstPlannedBlocks.BlockKey))
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
+                    .OrderBy(b => b.BlockKey.BlockId)
+                    .Take(maxExporting)
+                    .ToImmutableArray();
+
+                return plannedBlocks;
+            }
+            else
+            {
+                return Array.Empty<BlockRecord>();
+            }
         }
 
-        private IEnumerable<BlockRowItem> GetLineup(
-            IterationKey iterationKey,
-            IEnumerable<BlockRowItem> candidates,
-            int freeCapacity)
+        private async Task StartExportAsync(
+            BlockRecord blockRecord,
+            IterationRecord iterationRecord,
+            CancellationToken ct)
         {
-            const int MIN_STAT_COUNT = 5;
-            const long MIN_ROW_COUNT_STATS = 100000;
-
-            var MAX_EXPORT_DURATION = TimeSpan.FromMinutes(4);
-            var latestBlocks = RowItemGateway.InMemoryCache
-                .ActivityMap[iterationKey.ActivityName]
-                .IterationMap[iterationKey.IterationId]
-                .BlockMap
-                .Values
-                .Select(c => c.RowItem)
-                .Where(b => b.State >= BlockState.Exported)
-                //  We want representative export, i.e. meaningful size
-                .Where(b => b.ExportedRowCount > MIN_ROW_COUNT_STATS)
-                .OrderByDescending(b => b.ExportedRowCount)
-                .Take(MIN_STAT_COUNT)
-                .ToImmutableArray();
-
-            //  Just return the top blocks
-            return candidates
-                .OrderBy(b => b.IngestionTimeStart)
-                .Take(freeCapacity)
-                .ToImmutableArray();
-        }
-
-        private async Task StartExportAsync(BlockRowItem item, CancellationToken ct)
-        {
-            var activity = RowItemGateway.InMemoryCache.ActivityMap[item.ActivityName].RowItem;
-            var iteration = RowItemGateway.InMemoryCache
-                .ActivityMap[item.ActivityName]
-                .IterationMap[item.IterationId]
-                .RowItem;
+            var activityParam = Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
+            var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
-                activity.SourceTable.ClusterUri,
-                activity.SourceTable.DatabaseName);
+                sourceTable.ClusterUri,
+                sourceTable.DatabaseName);
             var writableUris = await StagingBlobUriProvider.GetWritableFolderUrisAsync(
-                item.GetBlockKey(),
+                blockRecord.BlockKey,
                 ct);
-            var query = Parameterization.Activities[item.ActivityName].KqlQuery;
             var operationId = await dbClient.ExportBlockAsync(
-                new KustoPriority(item.GetBlockKey()),
+                new KustoPriority(blockRecord.BlockKey),
                 writableUris,
-                activity.SourceTable.TableName,
-                query,
-                iteration.CursorStart,
-                iteration.CursorEnd,
-                item.IngestionTimeStart,
-                item.IngestionTimeEnd,
+                sourceTable.TableName,
+                activityParam.KqlQuery,
+                iterationRecord.CursorStart,
+                iterationRecord.CursorEnd,
+                blockRecord.IngestionTimeStart,
+                blockRecord.IngestionTimeEnd,
                 ct);
-            var newBlockItem = item.ChangeState(BlockState.Exporting);
+            var newBlockRecord = blockRecord with
+            {
+                State = BlockState.Exporting,
+                ExportOperationId = operationId
+            };
 
-            newBlockItem.ExportOperationId = operationId;
-            RowItemGateway.Append(newBlockItem);
+            Database.Blocks.UpdateRecord(blockRecord, newBlockRecord);
         }
 
         private async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)

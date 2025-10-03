@@ -1,188 +1,190 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems;
+﻿using Kusto.Cloud.Platform.Utils;
+using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class AwaitIngestRunner : RunnerBase
+    internal class AwaitIngestRunner : ActivityRunnerBase
     {
-        private const int MAXIMUM_EXTENT_MOVING = 100;
+        private const int MAX_BLOCK_COUNT = 25;
 
-        public AwaitIngestRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(15))
+        public AwaitIngestRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(15))
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
-            {
-                await UpdateIngestedAsync(ct);
-                await FailureDetectionAsync(ct);
-                await MoveAsync(ct);
-
-                //  Sleep
-                await SleepAsync(ct);
-            }
-        }
-
-        private async Task UpdateIngestedAsync(CancellationToken ct)
-        {
-            async Task<IEnumerable<RowItemBase>> GetIngestionItemsAsync(
-                ActivityRowItem activity,
-                IterationRowItem iteration,
-                IEnumerable<ActivityFlatHierarchy> items,
-                string tempTableName,
-                CancellationToken ct)
-            {
-                var dbClient = DbClientFactory.GetDbCommandClient(
-                    activity.DestinationTable.ClusterUri,
-                    activity.DestinationTable.DatabaseName);
-                var allExtentRowCounts = await dbClient.GetExtentRowCountsAsync(
-                    new KustoPriority(iteration.GetIterationKey()),
-                    tempTableName,
-                    ct);
-                var extentRowCountByTags = allExtentRowCounts
-                    .GroupBy(e => e.Tags)
-                    .ToImmutableDictionary(g => g.Key);
-                var ingestionItems = new List<RowItemBase>();
-
-                Trace.TraceInformation($"AwaitIngest:  {allExtentRowCounts.Count} " +
-                    $"extents found with {extentRowCountByTags.Count} tags");
-                foreach (var item in items)
-                {
-                    if (extentRowCountByTags.TryGetValue(
-                        item.Block.BlockTag,
-                        out var extentRowCounts))
-                    {
-                        var targetRowCount = item
-                            .Urls
-                            .Sum(h => h.RowCount);
-                        var blockExtentRowCount = extentRowCounts
-                            .Sum(e => e.RecordCount);
-
-                        if (blockExtentRowCount > targetRowCount)
-                        {
-                            throw new CopyException(
-                                $"Target row count is {targetRowCount} while " +
-                                $"we observe {blockExtentRowCount}",
-                                false);
-                        }
-                        if (blockExtentRowCount == targetRowCount)
-                        {
-                            var extentItems = extentRowCounts
-                                .Select(e => new ExtentRowItem
-                                {
-                                    ActivityName = activity.ActivityName,
-                                    IterationId = iteration.IterationId,
-                                    BlockId = item.Block.BlockId,
-                                    ExtentId = e.ExtentId,
-                                    RowCount = e.RecordCount
-                                });
-
-                            ingestionItems.AddRange(extentItems);
-                            ingestionItems.Add(item.Block.ChangeState(BlockState.Ingested));
-                        }
-                    }
-                }
-
-                return ingestionItems;
-            }
-            var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                        a => a.RowItem.State != ActivityState.Completed,
-                        i => i.RowItem.State != IterationState.Completed);
-            var queuedBlocks = allBlocks
-                .Where(h => h.Block.State == BlockState.Queued);
-            var detectIngestionTasks = queuedBlocks
-                .Where(h => h.TempTable != null)
-                .GroupBy(h => h.TempTable)
-                .Select(g => GetIngestionItemsAsync(
-                    g.First().Activity,
-                    g.First().Iteration,
-                    g,
-                    g.Key!.TempTableName,
-                    ct))
+            var destinationTable =
+                Parameterization.Activities[activityName].GetDestinationTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                destinationTable.ClusterUri,
+                destinationTable.DatabaseName);
+            var iterationIds = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                .Where(pf => pf.In(i => i.State, [IterationState.Planning, IterationState.Planned]))
+                .Select(i => i.IterationKey.IterationId)
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(detectIngestionTasks);
+            foreach (var iterationId in iterationIds)
+            {
+                var iterationKey = new IterationKey(activityName, iterationId);
 
-            var ingestionItems = detectIngestionTasks
-                .SelectMany(t => t.Result);
+                await UpdateIngestedAsync(iterationKey, dbClient, ct);
+                await FailureDetectionAsync(iterationKey, destinationTable, ct);
+            }
 
-            //  We do wait for the ingested status to persist before moving
-            //  This is to avoid moving extents before the confirmation of
-            //  ingestion is persisted:  this would result in the block
-            //  staying in "queued" if the process would restart
-            await RowItemGateway.AppendAndPersistAsync(ingestionItems, ct);
+            return iterationIds.Any();
         }
 
-        private async Task FailureDetectionAsync(CancellationToken ct)
-        {
-            var activeIterations = RowItemGateway.InMemoryCache
-                .ActivityMap
-                .Values
-                .Where(a => a.RowItem.State != ActivityState.Completed)
-                .SelectMany(a => a.IterationMap.Values)
-                .Where(i => i.RowItem.State != IterationState.Completed);
-            var iterationTasks = activeIterations
-                .Select(i => IterationFailureDetectionAsync(i, ct))
-                .ToImmutableArray();
-
-            await TaskHelper.WhenAllWithErrors(iterationTasks);
-        }
-
-        private async Task IterationFailureDetectionAsync(
-            IterationCache iterationCache,
+        #region Update Ingested
+        private async Task UpdateIngestedAsync(
+            IterationKey iterationKey,
+            DbCommandClient dbClient,
             CancellationToken ct)
         {
-            var queuedBlocks = iterationCache
-                .BlockMap
-                .Values
-                .Where(b => b.RowItem.State == BlockState.Queued);
+            var queuedBlockByBlockId = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
+                .OrderBy(b => b.BlockKey.BlockId)
+                .Take(MAX_BLOCK_COUNT)
+                .ToImmutableDictionary(b => b.BlockKey.BlockId);
 
-            if (queuedBlocks.Any())
+            if (queuedBlockByBlockId.Any())
             {
-                var activityItem = RowItemGateway.InMemoryCache
-                    .ActivityMap[iterationCache.RowItem.ActivityName]
-                    .RowItem;
-                var ingestClient = DbClientFactory.GetIngestClient(
-                    activityItem.DestinationTable.ClusterUri,
-                    activityItem.DestinationTable.DatabaseName,
-                    iterationCache.TempTable!.TempTableName);
-                var oldestBlock = queuedBlocks
-                    .ArgMin(b => b.RowItem.Updated);
+                var tempTable = GetTempTable(iterationKey);
+                var extents = await DetectIngestedBlocksAsync(
+                    queuedBlockByBlockId.Values,
+                    iterationKey,
+                    dbClient,
+                    tempTable.TempTableName,
+                    ct);
 
-                foreach (var urlItem in oldestBlock.UrlMap.Values.Select(u => u.RowItem))
+                using (var tx = Database.Database.CreateTransaction())
+                {
+                    var ingestedBlockIds = extents
+                        .Select(e => e.BlockKey.BlockId)
+                        .Distinct();
+                    var ingestedBlocks = ingestedBlockIds
+                        .Select(id => queuedBlockByBlockId[id])
+                        .Select(block => block with
+                        {
+                            State = BlockState.Ingested
+                        });
+
+                    Database.Blocks.Query(tx)
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                        .Delete();
+                    Database.Blocks.AppendRecords(ingestedBlocks, tx);
+                    Database.Extents.AppendRecords(extents, tx);
+
+                    //  We do wait for the ingested status to persist before moving
+                    //  This is to avoid moving extents before the confirmation of
+                    //  ingestion is persisted:  this would result in the block
+                    //  staying in "queued" if the process would restart
+                    await tx.LogAndCompleteAsync();
+                }
+            }
+        }
+
+        private async Task<IEnumerable<ExtentRecord>> DetectIngestedBlocksAsync(
+            IEnumerable<BlockRecord> blocks,
+            IterationKey iterationKey,
+            DbCommandClient dbClient,
+            string tempTableName,
+            CancellationToken ct)
+        {
+            var allExtentRowCounts = await dbClient.GetExtentRowCountsAsync(
+                new KustoPriority(iterationKey),
+                blocks.Select(b => b.BlockTag),
+                tempTableName,
+                ct);
+            var extentRowCountByTags = allExtentRowCounts
+                .GroupBy(e => e.Tags)
+                .ToImmutableDictionary(g => g.Key);
+            var blockByTags = blocks
+                .ToImmutableDictionary(b => b.BlockTag);
+            var targetRowCountByBlockId = Database.BlobUrls.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.In(b => b.BlockKey.BlockId, blocks.Select(b => b.BlockKey.BlockId)))
+                .AsEnumerable()
+                .GroupBy(u => u.BlockKey.BlockId)
+                .ToImmutableDictionary(g => g.Key, g => g.Sum(u => u.RowCount));
+            var extents = new List<ExtentRecord>();
+
+            Trace.TraceInformation($"AwaitIngest:  {allExtentRowCounts.Count} " +
+                $"extents found with {extentRowCountByTags.Count} tags");
+            foreach (var tag in extentRowCountByTags.Keys)
+            {
+                if (extentRowCountByTags.TryGetValue(tag, out var extentRowCounts)
+                    && blockByTags.TryGetValue(tag, out var block)
+                    && targetRowCountByBlockId.TryGetValue(block.BlockKey.BlockId, out var targetRowCount))
+                {
+                    var blockExtentRowCount = extentRowCounts
+                        .Sum(e => e.RecordCount);
+
+                    if (blockExtentRowCount > targetRowCount)
+                    {
+                        throw new CopyException(
+                            $"Target row count is {targetRowCount} while " +
+                            $"we observe {blockExtentRowCount}",
+                            false);
+                    }
+                    if (blockExtentRowCount == targetRowCount)
+                    {
+                        var blockExtents = extentRowCounts
+                            .Select(e => new ExtentRecord(block.BlockKey, e.ExtentId, e.RecordCount));
+
+                        extents.AddRange(blockExtents);
+                    }
+                }
+            }
+
+            return extents;
+        }
+        #endregion
+
+        #region Failure detection
+        private async Task FailureDetectionAsync(
+            IterationKey iterationKey,
+            TableIdentity destinationTable,
+            CancellationToken ct)
+        {
+            var oldestQueuedBlock = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
+                .OrderBy(b => b.BlockKey.BlockId)
+                .Take(1)
+                .FirstOrDefault();
+
+            if (oldestQueuedBlock != null)
+            {
+                var tempTable = GetTempTable(iterationKey);
+                var ingestClient = DbClientFactory.GetIngestClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName,
+                    tempTable.TempTableName);
+                var blobUrls = Database.BlobUrls.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey, oldestQueuedBlock.BlockKey))
+                    .ToImmutableArray();
+
+                foreach (var blobUrl in blobUrls)
                 {
                     var failure = await ingestClient.FetchIngestionFailureAsync(
-                        urlItem.SerializedQueuedResult);
+                        blobUrl.SerializedQueuedResult);
 
                     if (failure != null)
                     {
                         TraceWarning(
                             $"Warning!  Ingestion failed with status '{failure.Status}'" +
-                            $"and detail '{failure.Details}' for blob {urlItem.Url} in block " +
-                            $"{oldestBlock.RowItem.BlockId}, iteration " +
-                            $"{oldestBlock.RowItem.IterationId}, activity " +
-                            $"{oldestBlock.RowItem.ActivityName} ; block will be re-exported");
-                        ReturnToPlanned(oldestBlock);
+                            $"and detail '{failure.Details}' for blob {blobUrl.Url} in block " +
+                            $"{oldestQueuedBlock.BlockKey} ; block will be re-exported");
+                        ReturnToPlanned(oldestQueuedBlock);
 
                         return;
                     }
@@ -190,104 +192,17 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void ReturnToPlanned(BlockCache oldestBlock)
+        private void ReturnToPlanned(BlockRecord block)
         {
-            var newBlock = oldestBlock.RowItem.ChangeState(BlockState.Planned);
-
-            newBlock.ExportOperationId = string.Empty;
-            newBlock.BlockTag = string.Empty;
-            RowItemGateway.Append(newBlock);
-        }
-
-        private async Task MoveAsync(CancellationToken ct)
-        {
-            var allBlocks = RowItemGateway.InMemoryCache.GetActivityFlatHierarchy(
-                a => a.RowItem.State != ActivityState.Completed,
-                i => i.RowItem.State != IterationState.Completed);
-            var ingestedBlocks = allBlocks
-                .Where(h => h.Block.State == BlockState.Ingested);
-            var moveTasks = ingestedBlocks
-                .GroupBy(h => h.Iteration.GetIterationKey())
-                .Select(g => MoveBlocksFromIterationAsync(
-                    g.First().Activity,
-                    g.First().Iteration,
-                    g.First().TempTable!.TempTableName,
-                    g,
-                    ct))
-                .ToImmutableArray();
-
-            Trace.TraceInformation($"AwaitIngest:  {moveTasks.Count()} extent moving commands");
-            await TaskHelper.WhenAllWithErrors(moveTasks);
-        }
-
-        private async Task MoveBlocksFromIterationAsync(
-            ActivityRowItem activity,
-            IterationRowItem iteration,
-            string tempTableName,
-            IEnumerable<ActivityFlatHierarchy> items,
-            CancellationToken ct)
-        {
-            var commandClient = DbClientFactory.GetDbCommandClient(
-                activity.DestinationTable.ClusterUri,
-                activity.DestinationTable.DatabaseName);
-            var priority = new KustoPriority(iteration.GetIterationKey());
-            var sortedItems = items
-                .OrderBy(i => i.Block.BlockId)
-                .ToImmutableArray();
-
-            while (sortedItems.Any())
-            {
-                var movingItems = TakeMovingBlocks(sortedItems);
-                var movingExtentIds = movingItems
-                    .SelectMany(i => i.Extents.Select(e => e.ExtentId));
-                var tags = movingItems
-                    .Select(i => i.Block.BlockTag);
-                var extentCount = await commandClient.MoveExtentsAsync(
-                    priority,
-                    tempTableName,
-                    activity.DestinationTable.TableName,
-                    movingExtentIds,
-                    ct);
-                var cleanCount = await commandClient.CleanExtentTagsAsync(
-                    priority,
-                    activity.DestinationTable.TableName,
-                    tags,
-                    ct);
-                var newBlockItems = movingItems
-                    .Select(i => i.Block.ChangeState(BlockState.ExtentMoved))
-                    .ToImmutableArray();
-
-                foreach(var item in newBlockItems)
+            Database.Blocks.UpdateRecord(
+                block,
+                block with
                 {
-                    item.BlockTag = string.Empty;
-                }
-                RowItemGateway.Append(newBlockItems);
-                sortedItems = sortedItems
-                    .Skip(movingItems.Count())
-                    .ToImmutableArray();
-            }
+                    State = BlockState.Planned,
+                    ExportOperationId = string.Empty,
+                    BlockTag = string.Empty
+                });
         }
-
-        private IEnumerable<ActivityFlatHierarchy> TakeMovingBlocks(
-            IEnumerable<ActivityFlatHierarchy> items)
-        {
-            var i = 0;
-            var totalExtents = 0;
-
-            foreach (var item in items)
-            {
-                if (totalExtents + item.Extents.Count() > MAXIMUM_EXTENT_MOVING)
-                {
-                    return items.Take(Math.Max(1, i));
-                }
-                else
-                {
-                    totalExtents += item.Extents.Count();
-                    ++i;
-                }
-            }
-
-            return items;
-        }
+        #endregion
     }
 }

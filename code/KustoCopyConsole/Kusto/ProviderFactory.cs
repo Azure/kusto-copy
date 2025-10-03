@@ -25,11 +25,11 @@ namespace KustoCopyConsole.Kusto
         {
             var sourceClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
+                .Select(a => a.GetSourceTableIdentity().ClusterUri)
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Destination.ClusterUri))
+                .Select(a => a.GetDestinationTableIdentity().ClusterUri)
                 .Distinct();
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)

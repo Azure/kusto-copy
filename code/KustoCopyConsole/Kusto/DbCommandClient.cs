@@ -88,18 +88,22 @@ namespace KustoCopyConsole.Kusto
             IEnumerable<Uri> storageRootUris,
             string tableName,
             string? kqlQuery,
-            string cursorStart,
+            string? cursorStart,
             string cursorEnd,
-            string ingestionTimeStart,
+            string? ingestionTimeStart,
             string ingestionTimeEnd,
             CancellationToken ct)
         {
+            var ingestionTimeStartFilter = ingestionTimeStart == null
+                ? string.Empty
+                : $"| where ingestion_time() >= todatetime('{ingestionTimeStart}')";
+
             return await _commandQueue.RequestRunAsync(
                 priority,
                 async () =>
                 {
                     var rootListText = string.Join(", ", storageRootUris.Select(u => $"h'{u}'"));
-                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    var cursorStartFilter = cursorStart == null
                     ? string.Empty
                     : $"| where cursor_after('{cursorStart}')";
                     var commandText = @$"
@@ -115,9 +119,8 @@ with (
 let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at('{cursorEnd}')
-    | where ingestion_time() between (
-        todatetime('{ingestionTimeStart}')..
-        todatetime('{ingestionTimeEnd}'));
+{ingestionTimeStartFilter}
+    | where ingestion_time() <= todatetime('{ingestionTimeEnd}');
 ['{tableName}']
 {kqlQuery}
 ";
@@ -250,6 +253,7 @@ let ['{tableName}'] = ['{tableName}']
 
         public async Task<IImmutableList<ExtentRowCount>> GetExtentRowCountsAsync(
             KustoPriority priority,
+            IEnumerable<string> tags,
             string tempTableName,
             CancellationToken ct)
         {

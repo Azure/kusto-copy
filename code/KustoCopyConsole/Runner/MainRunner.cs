@@ -1,12 +1,10 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Entity.InMemory;
-using KustoCopyConsole.Entity.RowItems;
-using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
-using KustoCopyConsole.Storage.AzureStorage;
+using System.Collections.Immutable;
+using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -20,20 +18,8 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var fileSystem = new AzureBlobFileSystem(
-                parameterization.StagingStorageDirectories.First(),
-                credentials);
+            var database = await TrackDatabase.CreateAsync();
 
-            Console.Write("Initialize storage...");
-
-            var logStorage = await LogStorage.CreateAsync(fileSystem, appVersion, ct);
-
-            Console.WriteLine("  Done");
-            Console.Write("Reading checkpoint logs...");
-
-            var rowItemGateway = await RowItemGateway.CreateAsync(logStorage, ct);
-
-            Console.WriteLine("  Done");
             Console.Write("Initialize Kusto connections...");
 
             var dbClientFactory = await DbClientFactory.CreateAsync(
@@ -48,161 +34,142 @@ namespace KustoCopyConsole.Runner
                 parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
                 credentials);
 
-            return new MainRunner(
+            var parameters = new RunnerParameters(
                 parameterization,
                 credentials,
-                rowItemGateway,
+                database,
                 dbClientFactory,
                 stagingBlobUriProvider);
+
+            return new MainRunner(parameters);
         }
 
-        private MainRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-            : base(
-                  parameterization,
-                  credential,
-                  rowItemGateway,
-                  dbClientFactory,
-                  stagingBlobUriProvider,
-                  TimeSpan.Zero)
+        private MainRunner(RunnerParameters parameters)
+            : base(parameters, TimeSpan.Zero)
         {
         }
         #endregion
 
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
-            await ((IAsyncDisposable)RowItemGateway).DisposeAsync();
+            await ((IAsyncDisposable)Database).DisposeAsync();
             ((IDisposable)DbClientFactory).Dispose();
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            DisplayExistingIterations();
-            await using (var progressBar = new ProgressBar(RowItemGateway, ct))
+            using (var tx = Database.Database.CreateTransaction())
             {
-                foreach (var a in Parameterization.Activities.Values)
+                SyncActivities(tx);
+                EnsureIterations(tx);
+
+                tx.Complete();
+            }
+            var progressRunner = new ProgressRunner(RunnerParameters);
+            var planningRunner = new PlanningRunner(RunnerParameters);
+            var tempTableRunner = new TempTableCreatingRunner(RunnerParameters);
+            var exportingRunner = new ExportingRunner(RunnerParameters);
+            var awaitExportedRunner = new AwaitExportedRunner(RunnerParameters);
+            var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
+            var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
+            var moveExtentRunner = new MoveExtentRunner(RunnerParameters);
+            var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
+            var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
+
+            await TaskHelper.WhenAllWithErrors(
+                Task.Run(() => progressRunner.RunAsync(ct)),
+                Task.Run(() => planningRunner.RunAsync(ct)),
+                Task.Run(() => tempTableRunner.RunAsync(ct)),
+                Task.Run(() => exportingRunner.RunAsync(ct)),
+                Task.Run(() => awaitExportedRunner.RunAsync(ct)),
+                Task.Run(() => queueIngestRunner.RunAsync(ct)),
+                Task.Run(() => awaitIngestRunner.RunAsync(ct)),
+                Task.Run(() => moveExtentRunner.RunAsync(ct)),
+                Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
+                Task.Run(() => activityCompletingRunner.RunAsync(ct)));
+        }
+
+        private void SyncActivities(TransactionContext tx)
+        {
+            var allActivities = Database.Activities.Query(tx)
+                .ToImmutableArray();
+            var newActivityNames = Parameterization.Activities.Keys.Except(
+                allActivities.Select(a => a.ActivityName));
+
+            foreach (var a in allActivities)
+            {
+                if (Parameterization.Activities.TryGetValue(
+                    a.ActivityName,
+                    out var paramActivity))
                 {
-                    EnsureActivity(a);
-                    EnsureIteration(a);
+                    if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
+                    {
+                        throw new CopyException(
+                            $"Activity '{a.ActivityName}' has mistmached source table ; " +
+                            $"configuration is {paramActivity.GetSourceTableIdentity()} while" +
+                            $"logs is {a.SourceTable}",
+                            false);
+                    }
+                    else if (paramActivity.GetDestinationTableIdentity() != a.DestinationTable)
+                    {
+                        throw new CopyException(
+                            $"Activity '{a.ActivityName}' has mistmached destination table ; " +
+                            $"configuration is {paramActivity.GetDestinationTableIdentity()} while" +
+                            $"logs is {a.DestinationTable}",
+                            false);
+                    }
                 }
-                var iterationRunner = new PlanningRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var tempTableRunner = new TempTableCreatingRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var exportingRunner = new ExportingRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var awaitExportedRunner = new AwaitExportedRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var queueIngestRunner = new QueueIngestRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var awaitIngestRunner = new AwaitIngestRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-                var iterationCompletingRunner = new IterationCompletingRunner(
-                    Parameterization, Credential, RowItemGateway, DbClientFactory, StagingBlobUriProvider);
-
-                await TaskHelper.WhenAllWithErrors(
-                    Task.Run(() => iterationRunner.RunAsync(ct)),
-                    Task.Run(() => tempTableRunner.RunAsync(ct)),
-                    Task.Run(() => exportingRunner.RunAsync(ct)),
-                    Task.Run(() => awaitExportedRunner.RunAsync(ct)),
-                    Task.Run(() => queueIngestRunner.RunAsync(ct)),
-                    Task.Run(() => awaitIngestRunner.RunAsync(ct)),
-                    Task.Run(() => iterationCompletingRunner.RunAsync(ct)));
-            }
-        }
-
-        private static void DisplayIteration(IterationRowItem item, bool isNew)
-        {
-            var iterationAge = isNew
-                ? "New"
-                : "Existing";
-
-            Console.WriteLine(
-                $"{iterationAge} iteration {item.GetIterationKey()}:  " +
-                $"['{item.CursorStart}', '{item.CursorEnd}']");
-        }
-
-        private void DisplayExistingIterations()
-        {
-            var cache = RowItemGateway.InMemoryCache;
-            var existingIterations = cache.ActivityMap
-                .Values
-                .SelectMany(a => a.IterationMap.Values)
-                .Select(i => i.RowItem)
-                .Where(i => i.State != IterationState.Completed);
-
-            foreach (var iteration in existingIterations)
-            {
-                DisplayIteration(iteration, false);
-            }
-        }
-
-        private void EnsureIteration(ActivityParameterization activityParam)
-        {
-            if (activityParam.TableOption.ExportMode != ExportMode.BackfillOnly)
-            {
-                throw new NotSupportedException(
-                    $"'{activityParam.TableOption.ExportMode}' isn't supported yet");
-            }
-
-            var cache = RowItemGateway.InMemoryCache;
-            var cachedIterations = cache.ActivityMap.ContainsKey(activityParam.ActivityName)
-                ? cache.ActivityMap[activityParam.ActivityName].IterationMap.Values
-                : Array.Empty<IterationCache>();
-            var completedIterations = cachedIterations
-                .Select(c => c.RowItem)
-                .Where(i => i.State == IterationState.Completed);
-            var activeIterations = cachedIterations
-                .Select(c => c.RowItem)
-                .Where(i => i.State != IterationState.Completed);
-            var isBackfillOnly =
-                activityParam.TableOption.ExportMode == ExportMode.BackfillOnly;
-
-            //  Start new iteration if need to
-            if (!cachedIterations.Any())
-            {
-                var lastIteration = cachedIterations.Any()
-                    ? cachedIterations.ArgMax(i => i.RowItem.IterationId).RowItem
-                    : null;
-                var newIterationId = lastIteration != null
-                    ? lastIteration.IterationId + 1
-                    : 1;
-                var cursorStart = lastIteration != null
-                    ? lastIteration.CursorEnd
-                    : string.Empty;
-                var newIterationItem = new IterationRowItem
+                else
                 {
-                    State = IterationState.Starting,
-                    ActivityName = activityParam.ActivityName,
-                    IterationId = newIterationId,
-                    CursorStart = cursorStart,
-                    CursorEnd = string.Empty
-                };
-                var iterationKey = newIterationItem.GetIterationKey();
+                    throw new CopyException(
+                        $"Activity '{a.ActivityName}' is present in logs but not in " +
+                        $"configuration",
+                        false);
+                }
+            }
+            foreach (var name in newActivityNames)
+            {
+                var paramActivity = Parameterization.Activities[name];
+                var activity = new ActivityRecord(
+                    ActivityState.Active,
+                    paramActivity.ActivityName,
+                    paramActivity.GetSourceTableIdentity(),
+                    paramActivity.GetDestinationTableIdentity());
 
-                RowItemGateway.Append(newIterationItem);
-                DisplayIteration(newIterationItem, true);
+                Database.Activities.AppendRecord(activity, tx);
+                Console.WriteLine($"New activity:  '{name}'");
             }
         }
 
-        private void EnsureActivity(ActivityParameterization activityParam)
+        private void EnsureIterations(TransactionContext tx)
         {
-            if (!RowItemGateway.InMemoryCache.ActivityMap.ContainsKey(activityParam.ActivityName))
+            foreach (var name in Parameterization.Activities.Keys)
             {
-                var activity = new ActivityRowItem
-                {
-                    State = ActivityState.Active,
-                    ActivityName = activityParam.ActivityName,
-                    SourceTable = activityParam.Source.GetTableIdentity(),
-                    DestinationTable = activityParam.GetEffectiveDestinationTableIdentity()
-                };
+                var lastIteration = Database.Iterations.Query(tx)
+                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
+                    .OrderByDesc(t => t.IterationKey.IterationId)
+                    .Take(1)
+                    .FirstOrDefault();
 
-                RowItemGateway.Append(activity);
-                Console.WriteLine($"New activity:  '{activity.ActivityName}'");
+                if (lastIteration != null)
+                {   //  An iteration already exist, nothing to do
+                }
+                else
+                {   //  Create an iteration
+                    var newIterationId = lastIteration != null
+                        ? lastIteration.IterationKey.IterationId + 1
+                        : 1;
+                    var cursorStart = lastIteration != null
+                        ? lastIteration.CursorEnd
+                        : string.Empty;
+                    var newIterationRecord = new IterationRecord(
+                        IterationState.Starting,
+                        new IterationKey(name, newIterationId),
+                        cursorStart,
+                        string.Empty);
+
+                    Database.Iterations.AppendRecord(newIterationRecord, tx);
+                }
             }
         }
     }
