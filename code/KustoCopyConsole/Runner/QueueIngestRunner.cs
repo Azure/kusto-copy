@@ -102,7 +102,7 @@ namespace KustoCopyConsole.Runner
                 tempTableName,
                 authorizedUris,
                 blockTag,
-                block.MinCreationTime,
+                block.CreationTime,
                 ct);
             var ingestionBatches = operationTexts
                 .Select(op => new IngestionBatchRecord(block.BlockKey, op));

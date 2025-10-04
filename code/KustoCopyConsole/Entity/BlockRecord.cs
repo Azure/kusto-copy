@@ -11,11 +11,9 @@ namespace KustoCopyConsole.Entity
     internal record BlockRecord(
         BlockState State,
         BlockKey BlockKey,
-        string IngestionTimeStart,
+        string? IngestionTimeStart,
         string IngestionTimeEnd,
-        DateTime MinCreationTime,
-        DateTime MaxCreationTime,
-        long PlannedRowCount,
+        DateTime CreationTime,
         long ExportedRowCount,
         string ExportOperationId,
         string BlockTag) : RecordBase
@@ -47,21 +45,6 @@ namespace KustoCopyConsole.Entity
             {
                 throw new InvalidDataException(
                     $"{nameof(IngestionTimeEnd)} hasn't been populated");
-            }
-            if (MinCreationTime == DateTime.MinValue)
-            {
-                throw new InvalidDataException(
-                    $"{nameof(MinCreationTime)} hasn't been populated");
-            }
-            if (MaxCreationTime == DateTime.MinValue)
-            {
-                throw new InvalidDataException(
-                    $"{nameof(MinCreationTime)} hasn't been populated");
-            }
-            if (PlannedRowCount < 0)
-            {
-                throw new InvalidDataException(
-                    $"{nameof(PlannedRowCount)} should be superior to zero");
             }
             if (State == BlockState.Exporting && string.IsNullOrWhiteSpace(ExportOperationId))
             {

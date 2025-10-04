@@ -12,6 +12,13 @@ namespace KustoCopyConsole.Runner
 {
     internal class PlanningRunner : ActivityRunnerBase
     {
+        #region Inner Types
+        private record ExtentBatch(
+            DateTime MinIngestionTime,
+            DateTime MaxIngestionTime,
+            long RecordCount);
+        #endregion
+
         private const long RECORDS_PER_BLOCK = 8 * 1048576;
 
         public PlanningRunner(RunnerParameters parameters)
@@ -35,10 +42,10 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task PlanIterationAsync(
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             CancellationToken ct)
         {
-            var activity = Parameterization.Activities[iterationRecord.IterationKey.ActivityName];
+            var activity = Parameterization.Activities[iteration.IterationKey.ActivityName];
             var source = activity.GetSourceTableIdentity();
             var destination = activity.GetDestinationTableIdentity();
             var queryClient = DbClientFactory.GetDbQueryClient(
@@ -48,201 +55,130 @@ namespace KustoCopyConsole.Runner
                 source.ClusterUri,
                 source.DatabaseName);
 
-            if (iterationRecord.State == IterationState.Starting)
+            if (iteration.State == IterationState.Starting)
             {
                 var cursor = await queryClient.GetCurrentCursorAsync(
-                    new KustoPriority(iterationRecord.IterationKey),
+                    new KustoPriority(iteration.IterationKey),
                     ct);
 
-                using (var tx = Database.Database.CreateTransaction())
-                {
-                    var newIterationRecord = iterationRecord with
-                    {
-                        State = IterationState.Planning,
-                        CursorEnd = cursor
-                    };
-
-                    Database.Iterations.UpdateRecord(iterationRecord, newIterationRecord, tx);
-                    Database.TempTables.AppendRecord(
-                        new TempTableRecord(
-                            TempTableState.Required,
-                            iterationRecord.IterationKey,
-                            string.Empty),
-                        tx);
-                    iterationRecord = newIterationRecord;
-
-                    tx.Complete();
-                }
+                iteration = PlanningIteration(iteration, cursor);
             }
-            await ValidateIngestionTimeAsync(queryClient, activity, iterationRecord, ct);
-            await PlanBlocksAsync(queryClient, dbCommandClient, activity, iterationRecord, ct);
+            if (iteration.State == IterationState.Planning)
+            {
+                await PlanBlocksAsync(queryClient, activity, iteration, ct);
+                Database.Iterations.UpdateRecord(
+                    iteration,
+                    iteration with { State = IterationState.Planned });
+            }
         }
 
-        private async Task ValidateIngestionTimeAsync(
-            DbQueryClient queryClient,
-            ActivityParameterization activity,
-            IterationRecord iterationRecord,
-            CancellationToken ct)
+        private IterationRecord PlanningIteration(IterationRecord iteration, string cursor)
         {
-            var hasNullIngestionTime = await queryClient.HasNullIngestionTime(
-                new KustoPriority(iterationRecord.IterationKey),
-                activity.GetSourceTableIdentity().TableName,
-                activity.KqlQuery,
-                ct);
-
-            if (hasNullIngestionTime)
+            using (var tx = Database.Database.CreateTransaction())
             {
-                throw new CopyException(
-                    $"Iteration {iterationRecord.IterationKey}:  " +
-                    $"null ingestion time are present.  Null ingestion time aren't supported.",
-                    false);
+                var newIterationRecord = iteration with
+                {
+                    State = IterationState.Planning,
+                    CursorEnd = cursor
+                };
+
+                Database.Iterations.UpdateRecord(iteration, newIterationRecord, tx);
+                Database.TempTables.AppendRecord(
+                    new TempTableRecord(
+                        TempTableState.Required,
+                        iteration.IterationKey,
+                        string.Empty),
+                    tx);
+                iteration = newIterationRecord;
+
+                tx.Complete();
             }
+
+            return iteration;
         }
 
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
             ActivityParameterization activity,
-            IterationRecord iterationRecord,
+            IterationRecord iteration,
             CancellationToken ct)
         {
-            if (iterationRecord.State == IterationState.Planning)
-            {
-                var ingestionTimeInterval = await queryClient.GetIngestionTimeIntervalAsync(
-                    new KustoPriority(iterationRecord.IterationKey),
-                    activity.GetSourceTableIdentity().TableName,
-                    activity.KqlQuery,
-                    iterationRecord.CursorStart,
-                    iterationRecord.CursorEnd,
-                    ct);
+            var lastBlock = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
+                .FirstOrDefault();
 
-                if (string.IsNullOrWhiteSpace(ingestionTimeInterval.MinIngestionTime)
-                    || string.IsNullOrWhiteSpace(ingestionTimeInterval.MaxIngestionTime))
-                {   //  No ingestion time:  either no rows or no rows with ingestion time
-                    Database.Iterations.UpdateRecord(
-                        iterationRecord,
-                        iterationRecord with
-                        {
-                            State = IterationState.Completed
-                        });
+            do
+            {
+                var protoBlocks = await LoadProtoBlocksAsync(
+                    queryClient, activity, iteration, lastBlock?.IngestionTimeEnd, ct);
+
+                if (!protoBlocks.Any())
+                {
+                    lastBlock = null;
                 }
                 else
                 {
-                    await PlanBlocksAsync(
-                        queryClient,
-                        dbCommandClient,
-                        activity,
-                        iterationRecord,
-                        ingestionTimeInterval,
-                        ct);
+                    var blocks = CreateBlocks(protoBlocks, iteration.IterationKey, lastBlock)
+                        .ToImmutableArray();
+
+                    Database.Blocks.AppendRecords(blocks);
+                    lastBlock = blocks.Last();
                 }
             }
+            while (lastBlock != null);
         }
 
-        private async Task PlanBlocksAsync(
+        private static async Task<IEnumerable<ProtoBlock>> LoadProtoBlocksAsync(
             DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
             ActivityParameterization activity,
-            IterationRecord iterationRecord,
-            IngestionTimeInterval ingestionTimeInterval,
+            IterationRecord iteration,
+            string? ingestionTimeStart,
             CancellationToken ct)
         {
-            //  Do blocks one batch at the time until completion
-            while (iterationRecord.State == IterationState.Planning)
-            {
-                var lastBlock = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.IterationKey.ActivityName,
-                        iterationRecord.IterationKey.ActivityName))
-                    .Where(pf => pf.Equal(
-                        b => b.BlockKey.IterationKey.IterationId,
-                        iterationRecord.IterationKey.IterationId))
-                    .OrderByDesc(b => b.BlockKey.BlockId)
-                    .Take(1)
-                    .FirstOrDefault();
-                var hasReachedUpperIngestionTime = await PlanBlocksBatchAsync(
-                    activity,
-                    iterationRecord,
-                    lastBlock == null ? 1 : lastBlock.BlockKey.BlockId + 1,
-                    lastBlock?.IngestionTimeEnd.ToString(),
-                    lastBlock?.IngestionTimeEnd.ToString() ?? ingestionTimeInterval.MinIngestionTime,
-                    ingestionTimeInterval.MaxIngestionTime,
-                    queryClient,
-                    dbCommandClient,
-                    ct);
-
-                if (hasReachedUpperIngestionTime)
-                {
-                    Database.Iterations.UpdateRecord(
-                        iterationRecord,
-                        iterationRecord with
-                        {
-                            State = IterationState.Planned
-                        });
-
-                    return;
-                }
-            }
-        }
-
-        private async Task<bool> PlanBlocksBatchAsync(
-            ActivityParameterization activity,
-            IterationRecord iterationRecord,
-            long nextBlockId,
-            string? lastIngestionTime,
-            string lowerIngestionTime,
-            string upperIngestionTime,
-            DbQueryClient queryClient,
-            DbCommandClient dbCommandClient,
-            CancellationToken ct)
-        {
-            var distribution = await queryClient.GetRecordDistributionAsync(
-                new KustoPriority(iterationRecord.IterationKey),
+            var protoBlocks = await queryClient.GetExtentStatsAsync(
+                new KustoPriority(iteration.IterationKey),
                 activity.GetSourceTableIdentity().TableName,
-                activity.KqlQuery,
-                iterationRecord.CursorStart,
-                iterationRecord.CursorEnd,
-                lastIngestionTime,
-                lowerIngestionTime,
-                upperIngestionTime,
-                RECORDS_PER_BLOCK,
+                iteration.CursorStart,
+                iteration.CursorStart == null ? null : iteration.CursorEnd,
+                ingestionTimeStart,
                 ct);
 
-            //  Check for racing condition where extents got merged and extent ids didn't exist
-            //  when retrieving extent creation date
-            if (distribution.RecordGroups.Any(d => d.MinCreatedOn == null))
+            //  We test for racing conditions:
+            //  the extents were changed between query and .show extents
+            if (protoBlocks.Any(e => e.CreationTime == null))
             {
-                return await PlanBlocksBatchAsync(
-                    activity,
-                    iterationRecord,
-                    nextBlockId,
-                    lastIngestionTime,
-                    lowerIngestionTime,
-                    upperIngestionTime,
-                    queryClient,
-                    dbCommandClient,
-                    ct);
+                return await LoadProtoBlocksAsync(
+                    queryClient, activity, iteration, ingestionTimeStart, ct);
             }
-            else if (distribution.RecordGroups.Any())
+            else
             {
-                var blockRecords = distribution.RecordGroups
-                    .Select(r => new BlockRecord(
-                        BlockState.Planned,
-                        new BlockKey(iterationRecord.IterationKey, nextBlockId++),
-                        r.IngestionTimeStart,
-                        r.IngestionTimeEnd,
-                        r.MinCreatedOn!.Value,
-                        r.MaxCreatedOn!.Value,
-                        r.RowCount,
-                        0,
-                        string.Empty,
-                        string.Empty))
-                    .ToImmutableArray();
-
-                Database.Blocks.AppendRecords(blockRecords);
+                return protoBlocks;
             }
+        }
 
-            return distribution.HasReachedUpperIngestionTime;
+        private IEnumerable<BlockRecord> CreateBlocks(
+            IEnumerable<ProtoBlock> protoBlocks,
+            IterationKey iterationKey,
+            BlockRecord? lastBlock)
+        {
+            foreach (var current in protoBlocks)
+            {
+                var blockId = lastBlock == null
+                    ? 0
+                    : lastBlock.BlockKey.BlockId + 1;
+                var block = new BlockRecord(
+                    BlockState.Planned,
+                    new BlockKey(iterationKey, blockId),
+                    blockId == 0 ? null : current.StartIngestionTime,
+                    current.EndIngestionTime,
+                    current.CreationTime!.Value,
+                    0,
+                    string.Empty,
+                    string.Empty);
+
+                yield return block;
+                lastBlock = block;
+            }
         }
     }
 }
