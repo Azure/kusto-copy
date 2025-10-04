@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Entity
 {
-    internal record BlobUrlRecord(BlockKey BlockKey, Uri Url, long RowCount) : RecordBase
+    internal record IngestionBatchRecord(BlockKey BlockKey, string OperationText) : RecordBase
     {
         public override void Validate()
         {
@@ -26,6 +26,10 @@ namespace KustoCopyConsole.Entity
             {
                 throw new InvalidDataException(
                     $"{nameof(BlockKey.BlockId)} should be positive but is {BlockKey.BlockId}");
+            }
+            if (string.IsNullOrWhiteSpace(OperationText))
+            {
+                throw new InvalidDataException($"{nameof(OperationText)} should contain a value");
             }
         }
     }

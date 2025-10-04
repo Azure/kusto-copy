@@ -162,13 +162,13 @@ namespace KustoCopyConsole.Kusto
             }
         }
 
-        public IngestClient GetIngestClient(Uri clusterUri, string database, string table)
+        public IngestClient GetIngestClient(Uri clusterUri, string database)
         {
             try
             {
                 var queue = _destinationClusterIngestCommandQueueMap[clusterUri];
                 var ingestProvider = _providerFactory.GetIngestProvider(clusterUri);
-                var ingestClient = new IngestClient(ingestProvider, queue, database, table);
+                var ingestClient = new IngestClient(ingestProvider, queue, database);
 
                 return ingestClient;
             }

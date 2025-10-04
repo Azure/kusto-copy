@@ -15,6 +15,7 @@ namespace KustoCopyConsole.Entity
         private const string BLOCK_TABLE = "Block";
         private const string TEMP_TABLE_TABLE = "TempTable";
         private const string BLOB_URL_TABLE = "BlobUrl";
+        private const string INGESTION_BATCH_TABLE = "IngestionBatch";
         private const string EXTENT_TABLE = "Extent";
 
         #region Constructor
@@ -33,6 +34,7 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
                 .AddPrimaryKeyProperty(b => b.BlockKey)
                 .AddPrimaryKeyProperty(b => b.Url),
+                TypedTableSchema<IngestionBatchRecord>.FromConstructor(INGESTION_BATCH_TABLE),
                 TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE)
                 .AddPrimaryKeyProperty(e => e.BlockKey)
                 .AddPrimaryKeyProperty(e => e.ExtentId));
@@ -67,6 +69,9 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<BlobUrlRecord> BlobUrls =>
             Database.GetTypedTable<BlobUrlRecord>(BLOB_URL_TABLE);
+
+        public TypedTable<IngestionBatchRecord> IngestionBatches =>
+            Database.GetTypedTable<IngestionBatchRecord>(INGESTION_BATCH_TABLE);
 
         public TypedTable<ExtentRecord> Extents =>
             Database.GetTypedTable<ExtentRecord>(EXTENT_TABLE);

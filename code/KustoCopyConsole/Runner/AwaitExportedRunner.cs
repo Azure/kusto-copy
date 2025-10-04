@@ -184,11 +184,9 @@ namespace KustoCopyConsole.Runner
                 ct);
             var urls = details
                 .Select(d => new BlobUrlRecord(
-                    UrlState.Exported,
                     block.BlockKey,
                     d.BlobUri,
-                    d.RecordCount,
-                    string.Empty))
+                    d.RecordCount))
                 .ToImmutableArray();
             var newBlock = block with
             {

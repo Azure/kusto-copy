@@ -164,26 +164,25 @@ namespace KustoCopyConsole.Runner
 
             if (oldestQueuedBlock != null)
             {
-                var tempTable = GetTempTable(iterationKey);
                 var ingestClient = DbClientFactory.GetIngestClient(
                     destinationTable.ClusterUri,
-                    destinationTable.DatabaseName,
-                    tempTable.TempTableName);
-                var blobUrls = Database.BlobUrls.Query()
+                    destinationTable.DatabaseName);
+                var ingestionBatches = Database.IngestionBatches.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey, oldestQueuedBlock.BlockKey))
                     .ToImmutableArray();
 
-                foreach (var blobUrl in blobUrls)
+                foreach (var batch in ingestionBatches)
                 {
-                    var failure = await ingestClient.FetchIngestionFailureAsync(
-                        blobUrl.SerializedQueuedResult);
+                    var isFailure = await ingestClient.IsIngestionFailureAsync(
+                        new KustoPriority(oldestQueuedBlock.BlockKey),
+                        batch.OperationText,
+                        ct);
 
-                    if (failure != null)
+                    if (isFailure)
                     {
                         TraceWarning(
-                            $"Warning!  Ingestion failed with status '{failure.Status}'" +
-                            $"and detail '{failure.Details}' for blob {blobUrl.Url} in block " +
-                            $"{oldestQueuedBlock.BlockKey} ; block will be re-exported");
+                            $"Warning!  Ingestion failed for block {oldestQueuedBlock.BlockKey} " +
+                            $"; block will be re-exported");
                         ReturnToPlanned(oldestQueuedBlock);
 
                         return;

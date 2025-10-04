@@ -9,6 +9,7 @@ namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
+        const int PARALLEL_BLOCKS = 5;
 
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -21,34 +22,49 @@ namespace KustoCopyConsole.Runner
         {
             var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
-            var block = Database.Blocks.Query()
+            var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
                 .OrderBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(1)
-                .FirstOrDefault();
+                .Take(PARALLEL_BLOCKS)
+                .ToImmutableArray();
 
-            if (block != null)
+            if (blocks.Any())
             {
-                var tempTable = TryGetTempTable(block.BlockKey.IterationKey);
+                var tempTableMap = blocks
+                    .Select(b => b.BlockKey.IterationKey)
+                    .Distinct()
+                    .Select(key => new
+                    {
+                        Key = key,
+                        TempTable = TryGetTempTable(key)?.TempTableName
+                    })
+                    //  It's possible, although unlikely, the temp table hasn't been created yet
+                    .Where(o => o.TempTable != null)
+                    .ToImmutableDictionary(o => o.Key, o => o.TempTable!);
 
-                //  It's possible, although unlikely, the temp table hasn't been created yet
-                //  If so, we'll process this block later
-                if (tempTable == null)
-                {
-                    return false;
-                }
-                else
+                if (tempTableMap.Any())
                 {
                     var ingestClient = DbClientFactory.GetIngestClient(
                         destinationTable.ClusterUri,
-                        destinationTable.DatabaseName,
-                        tempTable.TempTableName);
+                        destinationTable.DatabaseName);
+                    var tasks = blocks
+                        .Where(b => tempTableMap.ContainsKey(b.BlockKey.IterationKey))
+                        .Select(b => QueueIngestBlockAsync(
+                            b,
+                            ingestClient,
+                            tempTableMap[b.BlockKey.IterationKey],
+                            ct))
+                        .ToImmutableArray();
 
-                    await QueueIngestBlockAsync(block, ingestClient, ct);
+                    await TaskHelper.WhenAllWithErrors(tasks);
 
                     return true;
+                }
+                else
+                {   //  No temp table was available, we'll process this block later
+                    return false;
                 }
             }
             else
@@ -60,6 +76,7 @@ namespace KustoCopyConsole.Runner
         private async Task QueueIngestBlockAsync(
             BlockRecord block,
             IngestClient ingestClient,
+            string tempTableName,
             CancellationToken ct)
         {
             var urlRecords = Database.BlobUrls.Query()
@@ -69,59 +86,30 @@ namespace KustoCopyConsole.Runner
             Trace.TraceInformation($"Block {block.BlockKey}:  ingest {urlRecords.Length} urls");
 
             var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
-            var queuingTasks = urlRecords
-                .Select(u => QueueIngestUrlAsync(
-                    ingestClient,
-                    u,
-                    blockTag,
-                    block.MinCreationTime,
-                    ct))
+            //  Get Uri with SAS tokens
+            var authorizedUriTasks = urlRecords
+                .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(u.Url, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(queuingTasks);
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                var newBlobUrls = queuingTasks.Select(o => o.Result);
+            await Task.WhenAll(authorizedUriTasks);
 
-                Database.BlobUrls.Query(tx)
-                    .Where(pf => pf.Equal(u => u.BlockKey, newBlobUrls.First().BlockKey))
-                    .Delete();
-                Database.BlobUrls.AppendRecords(newBlobUrls, tx);
-                Database.Blocks.UpdateRecord(
-                    block,
-                    block with
-                    {
-                        State = BlockState.Queued,
-                        BlockTag = blockTag
-                    },
-                    tx);
+            var authorizedUris = authorizedUriTasks
+                .Select(t => t.Result)
+                .ToImmutableList();
+            //  Queue all blobs
+            var operationTexts = await ingestClient.QueueBlobsAsync(
+                new KustoPriority(block.BlockKey),
+                tempTableName,
+                authorizedUris,
+                blockTag,
+                block.MinCreationTime,
+                ct);
+            var ingestionBatches = operationTexts
+                .Select(op => new IngestionBatchRecord(block.BlockKey, op));
 
-                tx.Complete();
-            }
+            Database.IngestionBatches.AppendRecords(ingestionBatches);
 
             Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
-        }
-
-        private async Task<BlobUrlRecord> QueueIngestUrlAsync(
-            IngestClient ingestClient,
-            BlobUrlRecord blobUrl,
-            string blockTag,
-            DateTime? creationTime,
-            CancellationToken ct)
-        {
-            var authorizedUri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
-            var serializedQueueResult = await ingestClient.QueueBlobAsync(
-                new KustoPriority(blobUrl.BlockKey),
-                authorizedUri,
-                blockTag,
-                creationTime,
-                ct);
-
-            return blobUrl with
-            {
-                State = UrlState.Queued,
-                SerializedQueuedResult = serializedQueueResult
-            };
         }
     }
 }
