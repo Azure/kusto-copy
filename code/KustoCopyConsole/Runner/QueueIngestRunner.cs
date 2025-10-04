@@ -107,7 +107,16 @@ namespace KustoCopyConsole.Runner
             var ingestionBatches = operationTexts
                 .Select(op => new IngestionBatchRecord(block.BlockKey, op));
 
-            Database.IngestionBatches.AppendRecords(ingestionBatches);
+            using (var tc = Database.Database.CreateTransaction())
+            {
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with { State = BlockState.Queued },
+                    tc);
+                Database.IngestionBatches.AppendRecords(ingestionBatches);
+
+                tc.Complete();
+            }
 
             Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
         }
