@@ -111,7 +111,11 @@ namespace KustoCopyConsole.Runner
             {
                 Database.Blocks.UpdateRecord(
                     block,
-                    block with { State = BlockState.Queued },
+                    block with
+                    {
+                        State = BlockState.Queued,
+                        BlockTag = blockTag
+                    },
                     tc);
                 Database.IngestionBatches.AppendRecords(ingestionBatches);
 

@@ -78,7 +78,7 @@ namespace KustoCopyConsole
                     currentBatch.Clear();
                 }
             }
-            if (currentBatch.Count >= 0)
+            if (currentBatch.Count > 0)
             {
                 yield return currentBatch.ToImmutable();
             }
