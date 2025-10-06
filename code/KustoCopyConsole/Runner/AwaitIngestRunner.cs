@@ -193,14 +193,26 @@ namespace KustoCopyConsole.Runner
 
         private void ReturnToPlanned(BlockRecord block)
         {
-            Database.Blocks.UpdateRecord(
-                block,
-                block with
-                {
-                    State = BlockState.Planned,
-                    ExportOperationId = string.Empty,
-                    BlockTag = string.Empty
-                });
+            using (var tx = Database.Database.CreateTransaction())
+            {
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with
+                    {
+                        State = BlockState.Planned,
+                        ExportOperationId = string.Empty,
+                        BlockTag = string.Empty
+                    },
+                    tx);
+                Database.BlobUrls.Query(tx)
+                    .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
+                    .Delete();
+                Database.IngestionBatches.Query(tx)
+                    .Where(pf => pf.Equal(i => i.BlockKey, block.BlockKey))
+                    .Delete();
+
+                tx.Complete();
+            }
         }
         #endregion
     }

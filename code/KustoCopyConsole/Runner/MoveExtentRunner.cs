@@ -157,6 +157,12 @@ namespace KustoCopyConsole.Runner
                         u => u.BlockKey.BlockId,
                         blocks.Select(b => b.BlockKey.BlockId)))
                     .Delete();
+                Database.IngestionBatches.Query(tx)
+                    .Where(pf => pf.Equal(i => i.BlockKey.IterationKey, iterationKey))
+                    .Where(pf => pf.In(
+                        u => u.BlockKey.BlockId,
+                        blocks.Select(b => b.BlockKey.BlockId)))
+                    .Delete();
 
                 Database.Blocks.AppendRecords(
                     blocks

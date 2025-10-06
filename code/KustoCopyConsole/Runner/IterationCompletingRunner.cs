@@ -61,25 +61,32 @@ namespace KustoCopyConsole.Runner
 
         private void CommitCompleteIteration(IterationRecord iteration)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            const int DELETE_COUNT = 200;
+
+            Database.TempTables.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                .Delete();
+
+            //  Delete batches of blocks at the time not to overrun the RAM
+            while (true)
             {
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
-                    .Delete();
-                Database.Blocks.Query(tx)
+                var deletedCount = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
+                    .Take(DELETE_COUNT)
                     .Delete();
 
-                Database.Iterations.UpdateRecord(
-                    iteration,
-                    iteration with
-                    {
-                        State = IterationState.Completed
-                    },
-                    tx);
-
-                tx.Complete();
+                if (deletedCount < DELETE_COUNT)
+                {
+                    break;
+                }
             }
+
+            Database.Iterations.UpdateRecord(
+                iteration,
+                iteration with
+                {
+                    State = IterationState.Completed
+                });
         }
     }
 }
