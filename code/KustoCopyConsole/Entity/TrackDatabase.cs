@@ -22,7 +22,7 @@ namespace KustoCopyConsole.Entity
         public static async Task<TrackDatabase> CreateAsync()
         {
             var db = await Database.CreateAsync(
-                new DatabasePolicies(),
+                DatabasePolicy.Create(),
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
                 .AddPrimaryKeyProperty(a => a.ActivityName),
                 TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE)
