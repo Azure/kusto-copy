@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Version>1.0.0.0</Version>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!--	Important to avoid the trimming warning hell ; since we automate-test everything, we do not need static analysis	-->
