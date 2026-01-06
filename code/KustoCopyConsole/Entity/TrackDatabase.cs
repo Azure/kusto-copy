@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KustoCopyConsole.Entity.State;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,7 +14,7 @@ namespace KustoCopyConsole.Entity
         private const string ACTIVITY_TABLE = "Activity";
         private const string ITERATION_TABLE = "Iteration";
         private const string BLOCK_TABLE = "Block";
-        private const string BLOCK_SUMMARY_TABLE = "BlockSummary";
+        private const string BLOCK_METRIC_TABLE = "BlockMetric";
         private const string TEMP_TABLE_TABLE = "TempTable";
         private const string BLOB_URL_TABLE = "BlobUrl";
         private const string INGESTION_BATCH_TABLE = "IngestionBatch";
@@ -31,8 +32,14 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE)
                 .AddPrimaryKeyProperty(i => i.IterationKey),
                 TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE)
-                .AddPrimaryKeyProperty(b => b.BlockKey),
-                TypedTableSchema<BlockSummaryCount>.FromConstructor(BLOCK_SUMMARY_TABLE),
+                .AddPrimaryKeyProperty(b => b.BlockKey)
+                .AddTrigger((db, tx) =>
+                {
+                    var typedDb = (TrackDatabase)db;
+
+                    ComputeBlockMetric(typedDb, tx);
+                }),
+                TypedTableSchema<BlockMetricRecord>.FromConstructor(BLOCK_METRIC_TABLE),
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
@@ -47,7 +54,7 @@ namespace KustoCopyConsole.Entity
         }
 
         private TrackDatabase(Database database)
-            :base(database)
+            : base(database)
         {
         }
         #endregion
@@ -61,8 +68,8 @@ namespace KustoCopyConsole.Entity
         public TypedTable<BlockRecord> Blocks =>
             Database.GetTypedTable<BlockRecord>(BLOCK_TABLE);
 
-        public TypedTable<BlockSummaryRecord> BlockSummary =>
-            Database.GetTypedTable<BlockSummaryRecord>(BLOCK_SUMMARY_TABLE);
+        public TypedTable<BlockMetricRecord> BlockMetrics =>
+            Database.GetTypedTable<BlockMetricRecord>(BLOCK_METRIC_TABLE);
 
         public TypedTable<TempTableRecord> TempTables =>
             Database.GetTypedTable<TempTableRecord>(TEMP_TABLE_TABLE);
@@ -75,5 +82,53 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<ExtentRecord> Extents =>
             Database.GetTypedTable<ExtentRecord>(EXTENT_TABLE);
+
+        private static void ComputeBlockMetric(TrackDatabase db, TransactionContext tx)
+        {
+            var newBlocks = db.Blocks.Query(tx)
+                //.WithinTransactionOnly()
+                ;
+            var deletedBlocks = db.Blocks.TombstonedWithinTransaction(tx);
+            var newBlocksStateMetrics = newBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    ToBlockMetric(b.State),
+                    1));
+            var newBlocksExportedRowMetrics = newBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    BlockMetric.ExportedRowCount,
+                    b.ExportedRowCount));
+            var deletedStateMetrics = deletedBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    ToBlockMetric(b.State),
+                    -1));
+            var deletedExportedRowMetrics = deletedBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    BlockMetric.ExportedRowCount,
+                    -b.ExportedRowCount));
+            var newMetrics = newBlocksStateMetrics
+                .Concat(newBlocksExportedRowMetrics)
+                .Concat(deletedStateMetrics)
+                .Concat(deletedExportedRowMetrics)
+                .GroupBy(bm => new
+                {
+                    bm.IterationKey,
+                    bm.BlockMetric
+                })
+                .Select(g => new BlockMetricRecord(
+                    g.Key.IterationKey,
+                    g.Key.BlockMetric,
+                    g.Sum(bm => bm.Value)));
+
+            db.BlockMetrics.AppendRecords(newMetrics, tx);
+        }
+
+        private static BlockMetric ToBlockMetric(BlockState state)
+        {   //  Assume the state and metrics are in the same order and states appear first
+            return (BlockMetric)((int)state);
+        }
     }
 }
