@@ -137,7 +137,7 @@ namespace KustoCopyConsole.Runner
 
         private void CommitMove(IterationKey iterationKey, IEnumerable<BlockRecord> blocks)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 Database.Blocks.Query(tx)
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))

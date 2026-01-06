@@ -107,7 +107,7 @@ namespace KustoCopyConsole.Runner
             var ingestionBatches = operationTexts
                 .Select(op => new IngestionBatchRecord(block.BlockKey, op));
 
-            using (var tc = Database.Database.CreateTransaction())
+            using (var tc = Database.CreateTransaction())
             {
                 Database.Blocks.UpdateRecord(
                     block,

@@ -21,7 +21,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                using (var tx = Database.Database.CreateTransaction())
+                using (var tx = Database.CreateTransaction())
                 {
                     var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))

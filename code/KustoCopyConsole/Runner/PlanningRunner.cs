@@ -74,7 +74,7 @@ namespace KustoCopyConsole.Runner
 
         private IterationRecord PlanningIteration(IterationRecord iteration, string cursor)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 var newIterationRecord = iteration with
                 {

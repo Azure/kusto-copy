@@ -18,7 +18,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var database = await TrackDatabase.CreateAsync();
+            var database = await TrackDatabase.CreateAsync(ct);
 
             Console.Write("Initialize Kusto connections...");
 
@@ -58,7 +58,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 SyncActivities(tx);
                 EnsureIterations(tx);

@@ -196,7 +196,7 @@ namespace KustoCopyConsole.Runner
             };
 
             Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 Database.Blocks.UpdateRecord(block, newBlock, tx);
                 Database.BlobUrls.AppendRecords(urls, tx);

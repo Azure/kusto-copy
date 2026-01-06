@@ -65,7 +65,7 @@ namespace KustoCopyConsole.Runner
                     tempTable.TempTableName,
                     ct);
 
-                using (var tx = Database.Database.CreateTransaction())
+                using (var tx = Database.CreateTransaction())
                 {
                     var ingestedBlockIds = extents
                         .Select(e => e.BlockKey.BlockId)
@@ -193,7 +193,7 @@ namespace KustoCopyConsole.Runner
 
         private void ReturnToPlanned(BlockRecord block)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 Database.Blocks.UpdateRecord(
                     block,

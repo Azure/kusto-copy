@@ -8,7 +8,7 @@ using TrackDb.Lib.Policies;
 
 namespace KustoCopyConsole.Entity
 {
-    internal class TrackDatabase : IAsyncDisposable
+    internal class TrackDatabase : DatabaseContextBase
     {
         private const string ACTIVITY_TABLE = "Activity";
         private const string ITERATION_TABLE = "Iteration";
@@ -19,10 +19,12 @@ namespace KustoCopyConsole.Entity
         private const string EXTENT_TABLE = "Extent";
 
         #region Constructor
-        public static async Task<TrackDatabase> CreateAsync()
+        public static async Task<TrackDatabase> CreateAsync(CancellationToken ct)
         {
-            var db = await Database.CreateAsync(
+            var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(),
+                db => new TrackDatabase(db),
+                ct,
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
                 .AddPrimaryKeyProperty(a => a.ActivityName),
                 TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE)
@@ -39,21 +41,14 @@ namespace KustoCopyConsole.Entity
                 .AddPrimaryKeyProperty(e => e.BlockKey)
                 .AddPrimaryKeyProperty(e => e.ExtentId));
 
-            return new TrackDatabase(db);
+            return dbContext;
         }
 
         private TrackDatabase(Database database)
+            :base(database)
         {
-            Database = database;
         }
         #endregion
-
-        async ValueTask IAsyncDisposable.DisposeAsync()
-        {
-            await ((IAsyncDisposable)Database).DisposeAsync();
-        }
-
-        public Database Database { get; }
 
         public TypedTable<ActivityRecord> Activities =>
             Database.GetTypedTable<ActivityRecord>(ACTIVITY_TABLE);

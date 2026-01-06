@@ -67,7 +67,7 @@ namespace KustoCopyConsole.Runner
             TableIdentity destination,
             CancellationToken ct)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
                 var newTempTableRecord = tempTableRecord with
