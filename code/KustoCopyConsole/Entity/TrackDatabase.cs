@@ -13,6 +13,7 @@ namespace KustoCopyConsole.Entity
         private const string ACTIVITY_TABLE = "Activity";
         private const string ITERATION_TABLE = "Iteration";
         private const string BLOCK_TABLE = "Block";
+        private const string BLOCK_SUMMARY_TABLE = "BlockSummary";
         private const string TEMP_TABLE_TABLE = "TempTable";
         private const string BLOB_URL_TABLE = "BlobUrl";
         private const string INGESTION_BATCH_TABLE = "IngestionBatch";
@@ -31,6 +32,7 @@ namespace KustoCopyConsole.Entity
                 .AddPrimaryKeyProperty(i => i.IterationKey),
                 TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE)
                 .AddPrimaryKeyProperty(b => b.BlockKey),
+                TypedTableSchema<BlockSummaryCount>.FromConstructor(BLOCK_SUMMARY_TABLE),
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
@@ -58,6 +60,9 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<BlockRecord> Blocks =>
             Database.GetTypedTable<BlockRecord>(BLOCK_TABLE);
+
+        public TypedTable<BlockSummaryRecord> BlockSummary =>
+            Database.GetTypedTable<BlockSummaryRecord>(BLOCK_SUMMARY_TABLE);
 
         public TypedTable<TempTableRecord> TempTables =>
             Database.GetTypedTable<TempTableRecord>(TEMP_TABLE_TABLE);
