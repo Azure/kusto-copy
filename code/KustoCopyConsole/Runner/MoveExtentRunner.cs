@@ -39,7 +39,7 @@ namespace KustoCopyConsole.Runner
         private MovingBlocks? GetExtentsToMove()
         {
             var iterationKey = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
+                .Where(pf => pf.Equal(b => b.State, BlockState.ReadyToMove))
                 .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
                 .ThenBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
@@ -59,25 +59,25 @@ namespace KustoCopyConsole.Runner
 
         private MovingBlocks GetExtentsToMove(IterationKey iterationKey)
         {
-            var ingestedBlockIds = Database.Blocks.Query()
+            var readyToMoveBlockIds = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
+                .Where(pf => pf.Equal(b => b.State, BlockState.ReadyToMove))
                 .OrderBy(b => b.BlockKey.BlockId)
                 .Take(MAXIMUM_EXTENT_MOVING)
                 .AsEnumerable()
                 .Select(b => b.BlockKey.BlockId)
                 .ToImmutableArray();
-            var ingestedExtentsByBlockId = Database.Extents.Query()
+            var readyToMoveExtentsByBlockId = Database.Extents.Query()
                 .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.In(e => e.BlockKey.BlockId, ingestedBlockIds))
+                .Where(pf => pf.In(e => e.BlockKey.BlockId, readyToMoveBlockIds))
                 .ToImmutableArray()
                 .GroupBy(e => e.BlockKey.BlockId)
                 .ToImmutableDictionary(g => g.Key, g => g.ToImmutableList());
             var totalExtentCount = 0;
 
-            foreach (var blockId in ingestedBlockIds)
+            foreach (var blockId in readyToMoveBlockIds)
             {
-                var extents = ingestedExtentsByBlockId[blockId];
+                var extents = readyToMoveExtentsByBlockId[blockId];
 
                 if (totalExtentCount == 0
                     || totalExtentCount + extents.Count <= MAXIMUM_EXTENT_MOVING)
@@ -88,9 +88,9 @@ namespace KustoCopyConsole.Runner
                 {
                     return new MovingBlocks(
                         iterationKey,
-                        ingestedBlockIds
+                        readyToMoveBlockIds
                         .Where(id => id < blockId)
-                        .Select(id => ingestedExtentsByBlockId[id])
+                        .Select(id => readyToMoveExtentsByBlockId[id])
                         .SelectMany(m => m)
                         .ToImmutableArray());
                 }
@@ -98,7 +98,7 @@ namespace KustoCopyConsole.Runner
 
             return new MovingBlocks(
                 iterationKey,
-                ingestedExtentsByBlockId.Values
+                readyToMoveExtentsByBlockId.Values
                 .SelectMany(m => m)
                 .ToImmutableArray());
         }

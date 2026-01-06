@@ -7,6 +7,7 @@
         Exported,
         Queued,
         Ingested,
+        ReadyToMove,
         ExtentMoved
     }
 }
