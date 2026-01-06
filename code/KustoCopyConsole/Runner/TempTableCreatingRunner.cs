@@ -80,7 +80,7 @@ namespace KustoCopyConsole.Runner
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
-                await tx.LogAndCompleteAsync();
+                await tx.CompleteAsync(ct);
 
                 return newTempTableRecord;
             }
