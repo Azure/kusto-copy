@@ -48,7 +48,7 @@ namespace KustoCopyConsole.Kusto
             var properties = new IngestProperties
             {
                 CreationTime = creationTime,
-                AdditionalTags = new List<string>([$"['{extentTag}']"]),
+                AdditionalTags = new List<string>([extentTag]),
                 EnableTracking = true
             };
             var queuingTasks = uriBatches

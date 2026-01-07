@@ -86,8 +86,7 @@ namespace KustoCopyConsole.Entity
         private static void ComputeBlockMetric(TrackDatabase db, TransactionContext tx)
         {
             var newBlocks = db.Blocks.Query(tx)
-                //.WithinTransactionOnly()
-                ;
+                .WithinTransactionOnly();
             var deletedBlocks = db.Blocks.TombstonedWithinTransaction(tx);
             var newBlocksStateMetrics = newBlocks
                 .Select(b => new BlockMetricRecord(
