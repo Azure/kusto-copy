@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity.State;
+﻿using Azure.Core;
+using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,10 +22,19 @@ namespace KustoCopyConsole.Entity
         private const string EXTENT_TABLE = "Extent";
 
         #region Constructor
-        public static async Task<TrackDatabase> CreateAsync(CancellationToken ct)
+        public static async Task<TrackDatabase> CreateAsync(
+            Uri blobFolderUri,
+            TokenCredential credentials,
+            CancellationToken ct)
         {
             var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(),
+                //DatabasePolicy.Create(
+                //    LogPolicy: LogPolicy.Create(
+                //        StorageConfiguration: new StorageConfiguration(
+                //            blobFolderUri,
+                //            credentials,
+                //            null))),
                 db => new TrackDatabase(db),
                 ct,
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)

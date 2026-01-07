@@ -18,8 +18,15 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
-            var database = await TrackDatabase.CreateAsync(ct);
 
+            Console.Write("Initialize tracking...");
+            
+            var database = await TrackDatabase.CreateAsync(
+                new Uri($"{parameterization.StagingStorageDirectories.First()}/tracking"),
+                credentials,
+                ct);
+
+            Console.WriteLine("  Done");
             Console.Write("Initialize Kusto connections...");
 
             var dbClientFactory = await DbClientFactory.CreateAsync(
