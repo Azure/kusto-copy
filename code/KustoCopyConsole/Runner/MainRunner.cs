@@ -82,6 +82,7 @@ namespace KustoCopyConsole.Runner
             var moveExtentRunner = new MoveExtentRunner(RunnerParameters);
             var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
             var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
+            var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
 
             await TaskHelper.WhenAllWithErrors(
                 Task.Run(() => progressRunner.RunAsync(ct)),
@@ -93,7 +94,8 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                 Task.Run(() => moveExtentRunner.RunAsync(ct)),
                 Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                Task.Run(() => activityCompletingRunner.RunAsync(ct)));
+                Task.Run(() => activityCompletingRunner.RunAsync(ct)),
+                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)));
         }
 
         private void SyncActivities(TransactionContext tx)

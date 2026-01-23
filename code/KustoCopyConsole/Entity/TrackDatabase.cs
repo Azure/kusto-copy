@@ -116,7 +116,10 @@ namespace KustoCopyConsole.Entity
         {
             var newBlocks = db.Blocks.Query(tx)
                 .WithinTransactionOnly();
-            var deletedBlocks = db.Blocks.TombstonedWithinTransaction(tx);
+            var deletedBlocks = db.Blocks.TombstonedWithinTransaction(tx)
+                //  We don't materialized deleted extent moved
+                //  This way we simulate the accumulation of blocks even as they get deleted
+                .Where(b => b.State != BlockState.ExtentMoved);
             var newBlocksStateMetrics = newBlocks
                 .Select(b => new BlockMetricRecord(
                     b.BlockKey.IterationKey,
