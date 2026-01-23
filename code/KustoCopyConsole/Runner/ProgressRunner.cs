@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
@@ -30,6 +31,7 @@ namespace KustoCopyConsole.Runner
                     foreach (var iteration in activeIterations)
                     {
                         ReportProgress(iteration, tx);
+                        ReportProgress2(iteration, tx);
                     }
                 }
                 await SleepAsync(ct);
@@ -69,6 +71,24 @@ namespace KustoCopyConsole.Runner
                 $"Queued={queuedCount}, Ingested={ingestedCount}, " +
                 $"Moved={movedCount} " +
                 $"({exportedRowCount:N0} rows)");
+        }
+
+        private void ReportProgress2(IterationRecord iteration, TransactionContext tx)
+        {
+            var metrics = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
+            var blockCount = metrics
+                //  Only take the states part of the metrics
+                .Where(p => (int)p.Key < Enum.GetValues<BlockState>().Length)
+                .Sum(p => p.Value);
+
+            Console.WriteLine(
+                $"Progress2 {iteration.IterationKey} [{iteration.State}]:  " +
+                $"Total={blockCount}, Planned={metrics[BlockMetric.Planned]}, " +
+                $"Exporting={metrics[BlockMetric.Exporting]}, Exported={metrics[BlockMetric.Exported]}, " +
+                $"Queued={metrics[BlockMetric.Queued]}, " +
+                $"Ingested={metrics[BlockMetric.Ingested] + metrics[BlockMetric.ReadyToMove]}, " +
+                $"Moved={metrics[BlockMetric.ExtentMoved]} " +
+                $"({metrics[BlockMetric.ExportedRowCount]:N0} rows exported)");
         }
     }
 }

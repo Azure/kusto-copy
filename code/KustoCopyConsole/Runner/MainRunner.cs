@@ -154,7 +154,7 @@ namespace KustoCopyConsole.Runner
             {
                 var lastIteration = Database.Iterations.Query(tx)
                     .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
-                    .OrderByDesc(t => t.IterationKey.IterationId)
+                    .OrderByDescending(t => t.IterationKey.IterationId)
                     .Take(1)
                     .FirstOrDefault();
 

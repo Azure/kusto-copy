@@ -1,4 +1,5 @@
-﻿using CommandLine;
+﻿using Azure.Identity;
+using CommandLine;
 using CommandLine.Text;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Runner;
@@ -142,9 +143,15 @@ namespace KustoCopyConsole
                     await mainRunner.RunAsync(cancellationTokenSource.Token);
                 }
             }
-            catch(Exception)
+            catch (Exception ex)
             {
                 await cancellationTokenSource.CancelAsync();
+                if (ex is AuthenticationFailedException afe)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine();
+                    Console.WriteLine($"Authentication error:  '{afe.Message}'");
+                }
                 throw;
             }
             finally

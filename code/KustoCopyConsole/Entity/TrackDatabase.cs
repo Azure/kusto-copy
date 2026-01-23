@@ -1,7 +1,9 @@
 ﻿using Azure.Core;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -92,6 +94,23 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<ExtentRecord> Extents =>
             Database.GetTypedTable<ExtentRecord>(EXTENT_TABLE);
+
+        public IImmutableDictionary<BlockMetric, long> QueryAggregatedBlockMetrics(
+            IterationKey iterationKey,
+            TransactionContext tx)
+        {
+            //  Easier to separate for DEBUG
+            var allMetrics = BlockMetrics.Query(tx)
+                .Where(pf => pf.Equal(bm => bm.IterationKey, iterationKey));
+            var aggregatedMetrics = allMetrics
+                //  Ensure each metric has an entry
+                .Concat(Enum.GetValues<BlockMetric>().Select(
+                    m => new BlockMetricRecord(iterationKey, m, 0)))
+                .AggregateBy(bm => bm.BlockMetric, (long)0, (sum, bm) => sum + bm.Value)
+                .ToImmutableDictionary();
+
+            return aggregatedMetrics;
+        }
 
         private static void ComputeBlockMetric(TrackDatabase db, TransactionContext tx)
         {
