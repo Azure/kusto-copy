@@ -130,7 +130,7 @@ let TopExtentStats = materialize(BaseData
     | top 250 by MinIngestionTime asc);
 let ExtentIdsText = strcat_array(toscalar(TopExtentStats | summarize make_list(ExtentId)), ',');
 let ShowCommand = toscalar(strcat(
-    "".show table ['wikipedia'] extents ("",
+    "".show table ['{tableName}'] extents ("",
     //  Fake a non-existing extent ID if no extent ID are available
     iif(isempty(ExtentIdsText), tostring(new_guid()), ExtentIdsText),
     "") | project ExtentId, MinCreatedOn""));
