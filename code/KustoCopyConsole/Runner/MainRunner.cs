@@ -80,6 +80,7 @@ namespace KustoCopyConsole.Runner
             var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
             var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
             var moveExtentRunner = new MoveExtentRunner(RunnerParameters);
+            var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
             var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
             var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
@@ -93,9 +94,10 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => queueIngestRunner.RunAsync(ct)),
                 Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                 Task.Run(() => moveExtentRunner.RunAsync(ct)),
+                Task.Run(() => blockCompletingRunner.RunAsync(ct)),
+                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)),
                 Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                Task.Run(() => activityCompletingRunner.RunAsync(ct)),
-                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)));
+                Task.Run(() => activityCompletingRunner.RunAsync(ct)));
         }
 
         private void SyncActivities(TransactionContext tx)

@@ -19,7 +19,6 @@ namespace KustoCopyConsole.Runner
             while (!AllActivitiesCompleted())
             {
                 await CompleteIterationsAsync(ct);
-
                 await SleepAsync(ct);
             }
         }
@@ -32,12 +31,13 @@ namespace KustoCopyConsole.Runner
 
             foreach (var iteration in candidateIterations)
             {
-                var unmovedBlocks = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
-                    .Where(pf => pf.NotEqual(b => b.State, BlockState.ExtentMoved))
-                    .Count();
+                var pendingBlockCount = Database.QueryAggregatedBlockMetrics(
+                    iteration.IterationKey)
+                    .Where(p => p.Key != BlockMetric.ExtentMoved)
+                    .Where(p => p.Key != BlockMetric.ExportedRowCount)
+                    .Sum(p => p.Value);
 
-                if (unmovedBlocks == 0)
+                if (pendingBlockCount == 0)
                 {
                     var tempTable = GetTempTable(iteration.IterationKey);
                     var destinationTable = Parameterization
@@ -51,9 +51,6 @@ namespace KustoCopyConsole.Runner
                         new KustoPriority(iteration.IterationKey),
                         tempTable.TempTableName,
                         ct);
-                    await StagingBlobUriProvider.DeleteStagingDirectoryAsync(
-                        iteration.IterationKey,
-                        ct);
                     CommitCompleteIteration(iteration);
                 }
             }
@@ -61,26 +58,9 @@ namespace KustoCopyConsole.Runner
 
         private void CommitCompleteIteration(IterationRecord iteration)
         {
-            const int DELETE_COUNT = 200;
-
             Database.TempTables.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                 .Delete();
-
-            //  Delete batches of blocks at the time not to overrun the RAM
-            while (true)
-            {
-                var deletedCount = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
-                    .Take(DELETE_COUNT)
-                    .Delete();
-
-                if (deletedCount < DELETE_COUNT)
-                {
-                    break;
-                }
-            }
-
             Database.Iterations.UpdateRecord(
                 iteration,
                 iteration with

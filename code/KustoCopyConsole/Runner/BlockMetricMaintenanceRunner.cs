@@ -1,6 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -18,10 +17,6 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                var deletedBlockCount = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.State, BlockState.ExtentMoved))
-                    .Delete();
-
                 MaintainBlockMetrics();
 
                 await SleepAsync(ct);
@@ -47,6 +42,13 @@ namespace KustoCopyConsole.Runner
                 {
                     var aggregatedValue = p.Value.Sum(bm => bm.Value);
 
+#if DEBUG
+                    if (aggregatedValue < 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Value of {aggregatedValue} for metric '{p.Key.BlockMetric}'");
+                    }
+#endif
                     //  Delete duplicates
                     Database.BlockMetrics.Query(tx)
                         .Where(pf => pf.Equal(bm => bm.IterationKey, p.Key.IterationKey))

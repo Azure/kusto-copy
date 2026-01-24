@@ -88,7 +88,7 @@ namespace KustoCopyConsole.Runner
             {
                 var subDirectoryClient = _directoryClient.GetSubDirectoryClient(subDirectory);
 
-                await subDirectoryClient.DeleteAsync();
+                await subDirectoryClient.DeleteIfExistsAsync();
             }
 
             private async Task<(TimeSpan, UserDelegationKey)> FetchUserDelegationKey()
@@ -154,11 +154,9 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        public async Task DeleteStagingDirectoryAsync(
-            IterationKey iterationKey,
-            CancellationToken ct)
+        public async Task DeleteStagingDirectoryAsync(BlockKey blockKey, CancellationToken ct)
         {
-            var subDirectory = GetSubDirectory(iterationKey);
+            var subDirectory = GetSubDirectory(blockKey);
             var tasks = _providerMap.Values
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();

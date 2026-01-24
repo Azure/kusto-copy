@@ -30,13 +30,12 @@ namespace KustoCopyConsole.Entity
             CancellationToken ct)
         {
             var dbContext = await Database.CreateAsync(
-                DatabasePolicy.Create(),
-                //DatabasePolicy.Create(
-                //    LogPolicy: LogPolicy.Create(
-                //        StorageConfiguration: new StorageConfiguration(
-                //            blobFolderUri,
-                //            credentials,
-                //            null))),
+                DatabasePolicy.Create(
+                    LogPolicy: LogPolicy.Create(
+                        StorageConfiguration: new StorageConfiguration(
+                            blobFolderUri,
+                            credentials,
+                            null))),
                 db => new TrackDatabase(db),
                 ct,
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
@@ -97,7 +96,7 @@ namespace KustoCopyConsole.Entity
 
         public IImmutableDictionary<BlockMetric, long> QueryAggregatedBlockMetrics(
             IterationKey iterationKey,
-            TransactionContext tx)
+            TransactionContext? tx = null)
         {
             //  Easier to separate for DEBUG
             var allMetrics = BlockMetrics.Query(tx)
@@ -110,6 +109,21 @@ namespace KustoCopyConsole.Entity
                 .ToImmutableDictionary();
 
             return aggregatedMetrics;
+        }
+
+        public long QueryAggregatedBlockMetric(
+            IterationKey iterationKey,
+            BlockMetric blockMetric,
+            TransactionContext? tx = null)
+        {
+            //  Easier to separate for DEBUG
+            var metric = BlockMetrics.Query(tx)
+                .Where(pf => pf.Equal(bm => bm.IterationKey, iterationKey))
+                .Where(pf => pf.Equal(bm => bm.BlockMetric, blockMetric));
+            var sumValue = metric
+                .Sum(bm => bm.Value);
+
+            return sumValue;
         }
 
         private static void ComputeBlockMetric(TrackDatabase db, TransactionContext tx)
