@@ -3,7 +3,6 @@ using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Immutable;
-using System.Data;
 
 namespace KustoCopyConsole.Kusto
 {
@@ -91,6 +90,7 @@ BaseData
             string? cursorStart,
             string? cursorEnd,
             string? ingestionTimeStart,
+            int maxProtoBlockCount,
             CancellationToken ct)
         {
             return await _queue.RequestRunAsync(
@@ -118,16 +118,19 @@ let BaseData = ['{tableName}']
     {cursorStartFilter}
     {cursorEndFilter}
     {ingestionTimeStartFilter};
+//  Find the lowest ingestion-time
 let StartIngestionTime = toscalar(BaseData
     | summarize min(ingestion_time()));
+//  Look one day ahead for existing extents
 let TopExtentStats = materialize(BaseData
     | project ExtentId=extent_id(), IngestionTime=ingestion_time()
-    | where IngestionTime between (StartIngestionTime .. 1h)
+    | where IngestionTime between (StartIngestionTime .. 1d)
     | summarize
         RecordCount=count(),
         MinIngestionTime=min(IngestionTime),
         MaxIngestionTime=max(IngestionTime) by ExtentId
-    | top 250 by MinIngestionTime asc);
+    | top {maxProtoBlockCount} by MinIngestionTime asc);
+//  Use .show extents to find the min-created-on of each extent
 let ExtentIdsText = strcat_array(toscalar(TopExtentStats | summarize make_list(ExtentId)), ',');
 let ShowCommand = toscalar(strcat(
     "".show table ['{tableName}'] extents ("",
@@ -136,6 +139,7 @@ let ShowCommand = toscalar(strcat(
     "") | project ExtentId, MinCreatedOn""));
 let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
     | project ExtentId, CreatedOn=bin(MinCreatedOn, 1h);
+//  Join the top extent stats to their created-on
 let RawIntervals = TopExtentStats
     //  We outer join so that if a merge happen in between, extent creation time will be null (hence detectable)
     | lookup kind=leftouter ExtentIdCreationTime on ExtentId;
@@ -186,6 +190,7 @@ Blocks
 {clipIngestionTimeStart}
 | extend StartIngestionTime=tostring(StartIngestionTime)
 | extend EndIngestionTime=tostring(EndIngestionTime)
+| top {maxProtoBlockCount} by StartIngestionTime asc
 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,

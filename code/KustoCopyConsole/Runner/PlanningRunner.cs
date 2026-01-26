@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
             long RecordCount);
         #endregion
 
-        private const long RECORDS_PER_BLOCK = 8 * 1048576;
+        private const int MAX_PROTO_BLOCK_COUNT = 10000;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -141,6 +141,7 @@ namespace KustoCopyConsole.Runner
                 iteration.CursorStart,
                 iteration.CursorStart == null ? null : iteration.CursorEnd,
                 ingestionTimeStart,
+                MAX_PROTO_BLOCK_COUNT,
                 ct);
 
             //  We test for racing conditions:
