@@ -188,20 +188,35 @@ namespace KustoCopyConsole.Runner
                     d.BlobUri,
                     d.RecordCount))
                 .ToImmutableArray();
-            var newBlock = block with
-            {
-                State = BlockState.Exported,
-                ExportOperationId = string.Empty,
-                ExportedRowCount = details.Sum(d => d.RecordCount)
-            };
 
-            Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
-            using (var tx = Database.CreateTransaction())
+            if (urls.Length > 0)
             {
-                Database.Blocks.UpdateRecord(block, newBlock, tx);
-                Database.BlobUrls.AppendRecords(urls, tx);
+                var newBlock = block with
+                {
+                    State = BlockState.Exported,
+                    ExportOperationId = string.Empty,
+                    ExportedRowCount = details.Sum(d => d.RecordCount)
+                };
 
-                tx.Complete();
+                Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
+                using (var tx = Database.CreateTransaction())
+                {
+                    Database.Blocks.UpdateRecord(block, newBlock, tx);
+                    Database.BlobUrls.AppendRecords(urls, tx);
+
+                    tx.Complete();
+                }
+            }
+            else
+            {
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with
+                    {
+                        ExportOperationId = string.Empty,
+                        State = BlockState.ExtentMoved,
+                        ExportedRowCount = 0
+                    });
             }
         }
         #endregion
