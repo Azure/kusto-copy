@@ -12,7 +12,8 @@ namespace KustoCopyConsole.Entity
         IterationState State,
         IterationKey IterationKey,
         string? CursorStart,
-        string CursorEnd) : RecordBase
+        string CursorEnd,
+        DateTime? LastIngestionTime) : RecordBase
     {
         public override void Validate()
         {

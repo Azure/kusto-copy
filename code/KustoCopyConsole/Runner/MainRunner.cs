@@ -177,7 +177,8 @@ namespace KustoCopyConsole.Runner
                         IterationState.Starting,
                         new IterationKey(name, newIterationId),
                         cursorStart,
-                        string.Empty);
+                        string.Empty,
+                        null);
 
                     Database.Iterations.AppendRecord(newIterationRecord, tx);
                 }
