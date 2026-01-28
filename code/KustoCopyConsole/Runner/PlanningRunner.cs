@@ -20,6 +20,8 @@ namespace KustoCopyConsole.Runner
         #endregion
 
         private const int MAX_PROTO_BLOCK_COUNT = 10000;
+        private const int MAX_ROW_COUNT_PER_BLOCK = 16000000;
+        private const int MAX_ROW_COUNT_BY_SUPER_PARTITION = 16 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -103,6 +105,17 @@ namespace KustoCopyConsole.Runner
             IterationRecord iteration,
             CancellationToken ct)
         {
+            var statsStack = new Stack<RecordStats>();
+
+            await DichotomyPartitionAsync(
+                queryClient,
+                activity,
+                iteration,
+                null,
+                iteration.LastBlockEndIngestionTime,
+                statsStack,
+                ct);
+            //MAX_ROW_COUNT_PER_BLOCK
             var lastBlock = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
                 .FirstOrDefault();
@@ -126,6 +139,38 @@ namespace KustoCopyConsole.Runner
                 }
             }
             while (lastBlock != null);
+        }
+
+        private static async Task DichotomyPartitionAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activity,
+            IterationRecord iteration,
+            string? minIngestionTime,
+            string? maxIngestionTime,
+            Stack<RecordStats> statsStack,
+            CancellationToken ct)
+        {
+            var stats = await queryClient.GetRecordStats(
+                new KustoPriority(iteration.IterationKey),
+                activity.GetSourceTableIdentity().TableName,
+                iteration.CursorStart,
+                iteration.CursorStart == null ? null : iteration.CursorEnd,
+                minIngestionTime,
+                maxIngestionTime,
+                ct);
+
+            statsStack.Push(stats);
+            if (stats.RecordCount > MAX_ROW_COUNT_BY_SUPER_PARTITION)
+            {
+                await DichotomyPartitionAsync(
+                    queryClient,
+                    activity,
+                    iteration,
+                    minIngestionTime,
+                    stats.MedianIngestionTime,
+                    statsStack,
+                    ct);
+            }
         }
 
         private static async Task<IEnumerable<ProtoBlock>> LoadProtoBlocksAsync(

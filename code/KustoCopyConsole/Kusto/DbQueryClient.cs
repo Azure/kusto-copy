@@ -380,5 +380,58 @@ print todatetime('{upperIngestionTime}') <=
                     return new RecordDistribution(groups, hasReachedUpperIngestionTime);
                 });
         }
+
+        public async Task<RecordStats> GetRecordStats(
+            KustoPriority priority,
+            string tableName,
+            string? cursorStart,
+            string? cursorEnd,
+            string? minIngestionTime,
+            string? maxIngestionTime,
+            CancellationToken ct)
+        {
+            return await _queue.RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
+                    var cursorStartFilter = cursorStart == null
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var lowerIngestionTimeFilter = string.IsNullOrWhiteSpace(minIngestionTime)
+                    ? string.Empty
+                    : $@"| where ingestion_time()>todatetime('{minIngestionTime}')";
+                    var upperIngestionTimeFilter = string.IsNullOrWhiteSpace(maxIngestionTime)
+                    ? string.Empty
+                    : $@"| where ingestion_time()<todatetime('{maxIngestionTime}')";
+                    var query = @$"
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    {lowerIngestionTimeFilter}
+    {upperIngestionTimeFilter}
+    ;
+BaseData
+| summarize RecordCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+| extend MedianIngestionTime=tostring((MaxIngestionTime+MinIngestionTime)/2)
+| extend MinIngestionTime=tostring(MinIngestionTime)
+| extend MaxIngestionTime=tostring(MaxIngestionTime)
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var stats = reader
+                        .ToEnumerable(r => new RecordStats(
+                            (long)r["RecordCount"],
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"],
+                            (string)r["MedianIngestionTime"]))
+                        .First();
+
+                    return stats;
+                });
+        }
     }
 }
