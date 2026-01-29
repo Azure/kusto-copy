@@ -11,9 +11,9 @@ namespace KustoCopyConsole.Entity
     internal record BlockRecord(
         BlockState State,
         BlockKey BlockKey,
-        string? IngestionTimeStart,
+        string IngestionTimeStart,
         string IngestionTimeEnd,
-        DateTime CreationTime,
+        DateTime? CreationTime,
         long ExportedRowCount,
         string ExportOperationId,
         string BlockTag) : RecordBase

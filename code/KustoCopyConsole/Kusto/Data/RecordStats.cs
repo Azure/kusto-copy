@@ -1,15 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto.Data
 {
-    /// <summary>Proto block.</summary>
-    internal record ProtoBlock(
+    internal record RecordStats(
+        long RecordCount,
         string MinIngestionTime,
         string MaxIngestionTime,
-        DateTime? CreationTime,
-        long RecordCount);
+        string MedianIngestionTime);
 }
