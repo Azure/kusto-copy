@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyConsole.Entity.Keys
 {
-    internal record BlockKey(IterationKey IterationKey, long BlockId)
+    internal record BlockKey(IterationKey IterationKey, int BlockId)
     {
         public override string ToString()
         {

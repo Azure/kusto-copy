@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Kusto.Cloud.Platform.Utils.DecayCache;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -21,7 +22,7 @@ namespace KustoCopyConsole.Runner
 
         private const int MAX_PROTO_BLOCK_COUNT = 10000;
         private const int MAX_ROW_COUNT_PER_BLOCK = 16000000;
-        private const int MAX_ROW_COUNT_BY_SUPER_PARTITION = 16 * MAX_ROW_COUNT_PER_BLOCK;
+        private const int MAX_ROW_COUNT_BY_PARTITION = 16 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -43,17 +44,12 @@ namespace KustoCopyConsole.Runner
             return iterations.Any();
         }
 
-        private async Task PlanIterationAsync(
-            IterationRecord iteration,
-            CancellationToken ct)
+        private async Task PlanIterationAsync(IterationRecord iteration, CancellationToken ct)
         {
             var activity = Parameterization.Activities[iteration.IterationKey.ActivityName];
             var source = activity.GetSourceTableIdentity();
             var destination = activity.GetDestinationTableIdentity();
             var queryClient = DbClientFactory.GetDbQueryClient(
-                source.ClusterUri,
-                source.DatabaseName);
-            var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 source.ClusterUri,
                 source.DatabaseName);
 
@@ -68,9 +64,6 @@ namespace KustoCopyConsole.Runner
             if (iteration.State == IterationState.Planning)
             {
                 await PlanBlocksAsync(queryClient, activity, iteration, ct);
-                Database.Iterations.UpdateRecord(
-                    iteration,
-                    iteration with { State = IterationState.Planned });
             }
         }
 
@@ -105,126 +98,182 @@ namespace KustoCopyConsole.Runner
             IterationRecord iteration,
             CancellationToken ct)
         {
-            var statsStack = new Stack<RecordStats>();
+            var minIngestionTime = iteration.LastBlockEndIngestionTime == null
+                ? null
+                : new DateTimeBoundary(iteration.LastBlockEndIngestionTime, false);
 
-            await DichotomyPartitionAsync(
+            await PlanPartitionBlocksAsync(
                 queryClient,
                 activity,
                 iteration,
+                minIngestionTime,
                 null,
-                iteration.LastBlockEndIngestionTime,
-                statsStack,
                 ct);
-            //MAX_ROW_COUNT_PER_BLOCK
-            var lastBlock = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iteration.IterationKey))
-                .FirstOrDefault();
 
-            do
+            using (var tx = Database.CreateTransaction())
             {
-                var protoBlocks = await LoadProtoBlocksAsync(
-                    queryClient, activity, iteration, lastBlock?.IngestionTimeEnd, ct);
+                var refreshedIteration = Database.Iterations.Query(tx)
+                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                    .First();
 
-                if (!protoBlocks.Any())
-                {
-                    lastBlock = null;
-                }
-                else
-                {
-                    var blocks = CreateBlocks(protoBlocks, iteration.IterationKey, lastBlock)
-                        .ToImmutableArray();
+                Database.Iterations.UpdateRecord(
+                    refreshedIteration,
+                    refreshedIteration with { State = IterationState.Planned },
+                    tx);
 
-                    Database.Blocks.AppendRecords(blocks);
-                    lastBlock = blocks.Last();
-                }
+                tx.Complete();
             }
-            while (lastBlock != null);
         }
 
-        private static async Task DichotomyPartitionAsync(
+        private async Task PlanPartitionBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
             IterationRecord iteration,
-            string? minIngestionTime,
-            string? maxIngestionTime,
-            Stack<RecordStats> statsStack,
+            DateTimeBoundary? minIngestionTime,
+            DateTimeBoundary? maxIngestionTime,
             CancellationToken ct)
         {
-            var stats = await queryClient.GetRecordStats(
+            var stats = await queryClient.GetRecordStatsAsync(
                 new KustoPriority(iteration.IterationKey),
                 activity.GetSourceTableIdentity().TableName,
                 iteration.CursorStart,
-                iteration.CursorStart == null ? null : iteration.CursorEnd,
+                iteration.CursorEnd,
                 minIngestionTime,
                 maxIngestionTime,
                 ct);
 
-            statsStack.Push(stats);
-            if (stats.RecordCount > MAX_ROW_COUNT_BY_SUPER_PARTITION)
+            //  Maybe we found an empty partition
+            if (stats.RecordCount > 0)
             {
-                await DichotomyPartitionAsync(
-                    queryClient,
-                    activity,
-                    iteration,
-                    minIngestionTime,
-                    stats.MedianIngestionTime,
-                    statsStack,
-                    ct);
+                if (stats.RecordCount > MAX_ROW_COUNT_BY_PARTITION)
+                {   //  Split partition
+                    //  We include the median in the left half
+                    await PlanPartitionBlocksAsync(
+                        queryClient,
+                        activity,
+                        iteration,
+                        new DateTimeBoundary(stats.MinIngestionTime, true),
+                        new DateTimeBoundary(stats.MedianIngestionTime, true),
+                        ct);
+                    //  We exclude the median in the right half
+                    await PlanPartitionBlocksAsync(
+                        queryClient,
+                        activity,
+                        iteration,
+                        new DateTimeBoundary(stats.MedianIngestionTime, false),
+                        new DateTimeBoundary(stats.MaxIngestionTime, true),
+                        ct);
+                }
+                else
+                {
+                    await LoadBlocksAsync(
+                        queryClient,
+                        activity,
+                        iteration,
+                        stats.MinIngestionTime,
+                        stats.MaxIngestionTime,
+                        (int)Math.Ceiling((double)stats.RecordCount / MAX_ROW_COUNT_PER_BLOCK),
+                        ct);
+                }
             }
         }
 
-        private static async Task<IEnumerable<ProtoBlock>> LoadProtoBlocksAsync(
+        private async Task LoadBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
             IterationRecord iteration,
-            string? ingestionTimeStart,
+            string minIngestionTime,
+            string maxIngestionTime,
+            int partitionCount,
             CancellationToken ct)
         {
-            var protoBlocks = await queryClient.GetExtentStatsAsync(
-                new KustoPriority(iteration.IterationKey),
-                activity.GetSourceTableIdentity().TableName,
-                iteration.CursorStart,
-                iteration.CursorStart == null ? null : iteration.CursorEnd,
-                ingestionTimeStart,
-                MAX_PROTO_BLOCK_COUNT,
+            var protoBlocks = await LoadProtoBlocksAsync(
+                queryClient,
+                activity,
+                iteration,
+                minIngestionTime,
+                maxIngestionTime,
+                partitionCount,
                 ct);
 
-            //  We test for racing conditions:
-            //  the extents were changed between query and .show extents
-            if (protoBlocks.Any(e => e.CreationTime == null))
+            if (protoBlocks.Count > 0)
             {
-                return await LoadProtoBlocksAsync(
-                    queryClient, activity, iteration, ingestionTimeStart, ct);
-            }
-            else
-            {
-                return protoBlocks;
+                using (var tx = Database.CreateTransaction())
+                {
+                    //  Refresh iteration entity
+                    iteration = Database.Iterations.Query(tx)
+                        .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                        .First();
+
+                    var nextBlockId = iteration.NextBlockId;
+
+                    foreach (var protoBlock in protoBlocks)
+                    {
+                        Database.Blocks.AppendRecord(
+                            new BlockRecord(
+                                BlockState.Planned,
+                                new BlockKey(iteration.IterationKey, nextBlockId++),
+                                protoBlock.MinIngestionTime,
+                                protoBlock.MaxIngestionTime,
+                                protoBlock.CreationTime,
+                                0,
+                                string.Empty,
+                                string.Empty),
+                            tx);
+                    }
+                    Database.Iterations.UpdateRecord(
+                        iteration,
+                        iteration with { NextBlockId = nextBlockId },
+                        tx);
+
+                    tx.Complete();
+                }
             }
         }
 
-        private IEnumerable<BlockRecord> CreateBlocks(
-            IEnumerable<ProtoBlock> protoBlocks,
-            IterationKey iterationKey,
-            BlockRecord? lastBlock)
+        private async Task<IReadOnlyCollection<ProtoBlock2>> LoadProtoBlocksAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activity,
+            IterationRecord iteration,
+            string minIngestionTime,
+            string maxIngestionTime,
+            int partitionCount,
+            CancellationToken ct)
         {
-            foreach (var current in protoBlocks)
-            {
-                var blockId = lastBlock == null
-                    ? 0
-                    : lastBlock.BlockKey.BlockId + 1;
-                var block = new BlockRecord(
-                    BlockState.Planned,
-                    new BlockKey(iterationKey, blockId),
-                    blockId == 0 ? null : current.StartIngestionTime,
-                    current.EndIngestionTime,
-                    current.CreationTime!.Value,
-                    0,
-                    string.Empty,
-                    string.Empty);
+            var rawProtoBlocks = await queryClient.GetProtoBlocksAsync(
+                new KustoPriority(iteration.IterationKey),
+                activity.GetSourceTableIdentity().TableName,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                minIngestionTime,
+                maxIngestionTime,
+                partitionCount,
+                ct);
+            //  We are going to go through the list and subdivide protoblocks that are too big
+            var normalizeProtoBlocks = new List<ProtoBlock2>();
 
-                yield return block;
-                lastBlock = block;
+            foreach (var protoBlock in rawProtoBlocks)
+            {
+                if (protoBlock.RecordCount <= 2 * MAX_ROW_COUNT_PER_BLOCK)
+                {
+                    normalizeProtoBlocks.Add(protoBlock);
+                }
+                else
+                {
+                    var subProtoBlocks = await LoadProtoBlocksAsync(
+                        queryClient,
+                        activity,
+                        iteration,
+                        protoBlock.MinIngestionTime,
+                        protoBlock.MaxIngestionTime,
+                        (int)Math.Ceiling((double)protoBlock.RecordCount / MAX_ROW_COUNT_PER_BLOCK),
+                        ct);
+
+                    normalizeProtoBlocks.AddRange(subProtoBlocks);
+                }
             }
+
+            return normalizeProtoBlocks;
         }
     }
 }

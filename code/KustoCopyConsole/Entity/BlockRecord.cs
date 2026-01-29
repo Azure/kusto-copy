@@ -13,7 +13,7 @@ namespace KustoCopyConsole.Entity
         BlockKey BlockKey,
         string? IngestionTimeStart,
         string IngestionTimeEnd,
-        DateTime CreationTime,
+        DateTime? CreationTime,
         long ExportedRowCount,
         string ExportOperationId,
         string BlockTag) : RecordBase
