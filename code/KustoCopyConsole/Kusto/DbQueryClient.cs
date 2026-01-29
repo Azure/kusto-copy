@@ -53,6 +53,7 @@ namespace KustoCopyConsole.Kusto
         public async Task<RecordStats> GetRecordStatsAsync(
             KustoPriority priority,
             string tableName,
+            string kqlQuery,
             string? cursorStart,
             string? cursorEnd,
             DateTimeBoundary? minIngestionTime,
@@ -80,6 +81,7 @@ let BaseData = ['{tableName}']
     | where cursor_before_or_at(""{cursorEnd}"")
     {lowerIngestionTimeFilter}
     {upperIngestionTimeFilter}
+    {kqlQuery}
     ;
 BaseData
 | summarize RecordCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
@@ -107,6 +109,7 @@ BaseData
         public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksAsync(
             KustoPriority priority,
             string tableName,
+            string kqlQuery,
             string? cursorStart,
             string cursorEnd,
             string minIngestionTime,
@@ -132,6 +135,7 @@ let BaseData = ['{tableName}']
     | where cursor_before_or_at(""{cursorEnd}"")
     | where ingestion_time()>=todatetime('{minIngestionTime}')
     | where ingestion_time()<=todatetime('{maxIngestionTime}')
+    {kqlQuery}
     ;
 //  We scan the data and find for each row its extent ID (if there is one)
 //  and the partition it falls into

@@ -11,7 +11,7 @@ namespace KustoCopyConsole.JobParameter
 
         public TableParameterization Destination { get; set; } = new();
 
-        public string? KqlQuery { get; set; } = string.Empty;
+        public string KqlQuery { get; set; } = string.Empty;
 
         public TableOption TableOption { get; set; } = new();
 

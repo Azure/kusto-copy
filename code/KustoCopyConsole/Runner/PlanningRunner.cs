@@ -136,6 +136,7 @@ namespace KustoCopyConsole.Runner
             var stats = await queryClient.GetRecordStatsAsync(
                 new KustoPriority(iteration.IterationKey),
                 activity.GetSourceTableIdentity().TableName,
+                activity.KqlQuery,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 minIngestionTime,
@@ -243,6 +244,7 @@ namespace KustoCopyConsole.Runner
             var rawProtoBlocks = await queryClient.GetProtoBlocksAsync(
                 new KustoPriority(iteration.IterationKey),
                 activity.GetSourceTableIdentity().TableName,
+                activity.KqlQuery,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 minIngestionTime,
