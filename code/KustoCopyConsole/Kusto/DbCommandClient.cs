@@ -90,14 +90,10 @@ namespace KustoCopyConsole.Kusto
             string? kqlQuery,
             string? cursorStart,
             string cursorEnd,
-            string? ingestionTimeStart,
+            string ingestionTimeStart,
             string ingestionTimeEnd,
             CancellationToken ct)
         {
-            var ingestionTimeStartFilter = ingestionTimeStart == null
-                ? string.Empty
-                : $"| where ingestion_time() >= todatetime('{ingestionTimeStart}')";
-
             return await _commandQueue.RequestRunAsync(
                 priority,
                 async () =>
@@ -119,7 +115,7 @@ with (
 let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at('{cursorEnd}')
-{ingestionTimeStartFilter}
+    | where ingestion_time() >= todatetime('{ingestionTimeStart}')
     | where ingestion_time() <= todatetime('{ingestionTimeEnd}');
 ['{tableName}']
 {kqlQuery}
