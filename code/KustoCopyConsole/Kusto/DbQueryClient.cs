@@ -104,7 +104,7 @@ BaseData
                 });
         }
 
-        public async Task<IEnumerable<ProtoBlock2>> GetProtoBlocksAsync(
+        public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksAsync(
             KustoPriority priority,
             string tableName,
             string? cursorStart,
@@ -171,7 +171,7 @@ ExtentIntervals
                         EMPTY_PROPERTIES,
                         ct);
                     var results = reader
-                        .ToEnumerable(r => new ProtoBlock2(
+                        .ToEnumerable(r => new ProtoBlock(
                             (string)r["MinIngestionTime"],
                             (string)r["MaxIngestionTime"],
                             (DateTime?)r["CreatedOn"],

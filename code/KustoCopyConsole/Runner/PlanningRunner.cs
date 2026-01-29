@@ -231,7 +231,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task<IReadOnlyCollection<ProtoBlock2>> LoadProtoBlocksAsync(
+        private async Task<IReadOnlyCollection<ProtoBlock>> LoadProtoBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
             IterationRecord iteration,
@@ -250,7 +250,7 @@ namespace KustoCopyConsole.Runner
                 partitionCount,
                 ct);
             //  We are going to go through the list and subdivide protoblocks that are too big
-            var normalizeProtoBlocks = new List<ProtoBlock2>();
+            var normalizeProtoBlocks = new List<ProtoBlock>();
 
             foreach (var protoBlock in rawProtoBlocks)
             {

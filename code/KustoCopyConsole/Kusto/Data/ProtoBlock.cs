@@ -8,9 +8,8 @@ namespace KustoCopyConsole.Kusto.Data
 {
     /// <summary>Proto block.</summary>
     internal record ProtoBlock(
-        string StartIngestionTime,
-        string EndIngestionTime,
-        DateTime? CreationTime)
-    {
-    }
+        string MinIngestionTime,
+        string MaxIngestionTime,
+        DateTime? CreationTime,
+        long RecordCount);
 }
