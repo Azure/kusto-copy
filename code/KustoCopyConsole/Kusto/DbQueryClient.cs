@@ -144,13 +144,13 @@ let ExtentIntervals = materialize(BaseData
     | extend i = range(1, PartitionCount)
     | mv-expand i to typeof(int)
     | extend StartI=i-1, EndI=i
-    | extend StartIngestionTime = MinIngestionTime+(StartI*Delta)
-    | extend EndIngestionTime = MinIngestionTime+(EndI*Delta)
-    | where IngestionTime >= StartIngestionTime
-    | where IngestionTime < EndIngestionTime
+    | extend MinPartitionIngestionTime = MinIngestionTime+(StartI*Delta)
+    | extend MaxPartitionIngestionTime = MinIngestionTime+(EndI*Delta)
+    | where IngestionTime >= MinPartitionIngestionTime
+    | where iif(EndI==PartitionCount, IngestionTime<=MaxIngestionTime, IngestionTime < MaxPartitionIngestionTime)
     | summarize RecordCount=count(),
-        MinIngestionTime=min(IngestionTime), MaxIngestionTime=max(IngestionTime)
-        by StartIngestionTime, ExtentId);
+        MinExtentIngestionTime=min(IngestionTime), MaxExtentIngestionTime=max(IngestionTime)
+        by MinPartitionIngestionTime, ExtentId);
 let ExtentIdsText = strcat_array(toscalar(ExtentIntervals | summarize make_list(ExtentId)), ',');
 let ShowCommand = toscalar(strcat(
     "".show table ['{tableName}'] extents ("",
@@ -162,12 +162,12 @@ ExtentIntervals
 //  We outer join so that if a merge happen in between, extent creation time will be null (hence detectable)
 | lookup kind=leftouter ExtentIdCreationTime on ExtentId
 | summarize RecordCount=sum(RecordCount), CreatedOn=max(CreatedOn),
-    MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime)
-    by StartIngestionTime
+    TrimmedMinPartitionIngestionTime=min(MinExtentIngestionTime), TrimmedMaxPartitionIngestionTime=max(MaxExtentIngestionTime)
+    by MinPartitionIngestionTime
 | order by MinIngestionTime asc
-| project-away StartIngestionTime
-| extend MinIngestionTime=tostring(MinIngestionTime)
-| extend MaxIngestionTime=tostring(MaxIngestionTime)
+| project-away MinPartitionIngestionTime
+| extend TrimmedMinPartitionIngestionTime=tostring(TrimmedMinPartitionIngestionTime)
+| extend TrimmedMaxPartitionIngestionTime=tostring(TrimmedMaxPartitionIngestionTime)
 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -176,8 +176,8 @@ ExtentIntervals
                         ct);
                     var results = reader
                         .ToEnumerable(r => new ProtoBlock(
-                            (string)r["MinIngestionTime"],
-                            (string)r["MaxIngestionTime"],
+                            (string)r["TrimmedMinPartitionIngestionTime"],
+                            (string)r["TrimmedMaxPartitionIngestionTime"],
                             (DateTime?)r["CreatedOn"],
                             (long)r["RecordCount"]))
                         .ToImmutableArray();
