@@ -25,16 +25,14 @@ namespace KustoCopyConsole.Runner
             var dbClient = DbClientFactory.GetDbCommandClient(
                 destinationTable.ClusterUri,
                 destinationTable.DatabaseName);
-            var iterationIds = Database.Iterations.Query()
+            var iterationKeys = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Planning, IterationState.Planned]))
-                .Select(i => i.IterationKey.IterationId)
+                .Select(i => i.IterationKey)
                 .ToImmutableArray();
 
-            foreach (var iterationId in iterationIds)
+            foreach (var iterationKey in iterationKeys)
             {
-                var iterationKey = new IterationKey(activityName, iterationId);
-
                 await UpdateIngestedAsync(iterationKey, dbClient, ct);
                 await FailureDetectionAsync(iterationKey, destinationTable, ct);
             }
@@ -42,7 +40,7 @@ namespace KustoCopyConsole.Runner
             //  in blocks being moved
             await UpdateReadyToMoveAsync(activityName, ct);
 
-            return iterationIds.Any();
+            return iterationKeys.Any();
         }
 
         #region Update Ingested

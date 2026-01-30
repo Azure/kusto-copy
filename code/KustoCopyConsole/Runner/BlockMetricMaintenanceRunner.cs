@@ -36,11 +36,11 @@ namespace KustoCopyConsole.Runner
                     })
                     //  Keep only those iteration / metric having more than one duplicates
                     .Where(g => g.Count() > 1)
-                    .ToImmutableDictionary(g => g.Key, g => g.ToImmutableArray());
+                    .ToImmutableDictionary(g => g.Key, g => g.Sum(bm => bm.Value));
 
                 foreach (var p in blockMetricMap)
                 {
-                    var aggregatedValue = p.Value.Sum(bm => bm.Value);
+                    var aggregatedValue = p.Value;
 
 #if DEBUG
                     if (aggregatedValue < 0)
