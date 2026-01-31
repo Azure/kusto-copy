@@ -34,6 +34,7 @@ namespace KustoCopyConsole.Runner
                 var pendingBlockCount = Database.QueryAggregatedBlockMetrics(
                     iteration.IterationKey)
                     .Where(p => p.Key != BlockMetric.ExtentMoved)
+                    .Where(p => p.Key != BlockMetric.PlannedRowCount)
                     .Where(p => p.Key != BlockMetric.ExportedRowCount)
                     .Sum(p => p.Value);
 
