@@ -36,9 +36,6 @@ namespace KustoCopyConsole.Runner
                 await UpdateIngestedAsync(iterationKey, dbClient, ct);
                 await FailureDetectionAsync(iterationKey, destinationTable, ct);
             }
-            //  This is done separately to ensure a failure between db and logs wouldn't result
-            //  in blocks being moved
-            await UpdateReadyToMoveAsync(activityName, ct);
 
             return iterationKeys.Any();
         }
@@ -147,34 +144,6 @@ namespace KustoCopyConsole.Runner
             }
 
             return extents;
-        }
-        #endregion
-
-        #region Update Ready to move
-        private async Task UpdateReadyToMoveAsync(string activityName, CancellationToken ct)
-        {
-            var ingestedBlocks = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
-                .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
-                .ToImmutableArray();
-
-            using (var tx = Database.CreateTransaction())
-            {
-                var readyToMoveBlocks = ingestedBlocks
-                    .Select(block => block with
-                    {
-                        State = BlockState.ReadyToMove
-                    });
-
-                Database.Blocks.Query(tx)
-                    .Where(pf => pf.In(
-                        b => b.BlockKey.BlockId,
-                        ingestedBlocks.Select(b => b.BlockKey.BlockId)))
-                    .Delete();
-                Database.Blocks.AppendRecords(readyToMoveBlocks, tx);
-
-                tx.Complete();
-            }
         }
         #endregion
 

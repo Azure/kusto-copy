@@ -15,32 +15,45 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(CancellationToken ct)
         {
             while (!AllActivitiesCompleted())
-            {
+            {   //  All activity / iteration
                 var movedBlockKeys = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.State, BlockState.ExtentMoved))
-                    .Take(100)
+                    .Take(1000)
                     .Select(b => b.BlockKey)
                     .ToImmutableArray();
+                var directoryDeleteTasks = movedBlockKeys
+                    .Select(key => StagingBlobUriProvider.DeleteStagingDirectoryAsync(key, ct))
+                    .ToImmutableArray();
+                var blocksByIterationKey = movedBlockKeys
+                    .GroupBy(key => key.IterationKey);
 
-                if (movedBlockKeys.Any())
+                await Task.WhenAll(directoryDeleteTasks);
+
+                using (var tx = Database.CreateTransaction())
                 {
-                    var directoryDeleteTasks = movedBlockKeys
-                        .Select(key => StagingBlobUriProvider.DeleteStagingDirectoryAsync(key, ct))
-                        .ToImmutableArray();
-                    var iterationGroups = movedBlockKeys
-                        .GroupBy(key => key.IterationKey);
-
-                    await Task.WhenAll(directoryDeleteTasks);
-
-                    foreach (var group in iterationGroups)
+                    foreach (var g in blocksByIterationKey)
                     {
-                        var blockIds = group
+                        var blockIds = g
                             .Select(k => k.BlockId);
-                        var deletedBlockCount = Database.Blocks.Query()
-                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, group.Key))
+                        var deletedBlockCount = Database.Blocks.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
+                            .Delete();
+                        var deletedBlockUrlCount = Database.BlobUrls.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
+                            .Delete();
+                        var deletedExtentCount = Database.Extents.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
+                            .Delete();
+                        var deletedBlockIngestionBatchCount = Database.IngestionBatches.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
                             .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
                             .Delete();
                     }
+
+                    tx.Complete();
                 }
 
                 await SleepAsync(ct);

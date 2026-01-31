@@ -49,7 +49,7 @@ namespace KustoCopyConsole.Runner
                 $"Total={blockCount}, Planned={metrics[BlockMetric.Planned]}, " +
                 $"Exporting={metrics[BlockMetric.Exporting]}, Exported={metrics[BlockMetric.Exported]}, " +
                 $"Queued={metrics[BlockMetric.Queued]}, " +
-                $"Ingested={metrics[BlockMetric.Ingested] + metrics[BlockMetric.ReadyToMove]}, " +
+                $"Ingested={metrics[BlockMetric.Ingested]}, " +
                 $"Moved={metrics[BlockMetric.ExtentMoved]} " +
                 $"({metrics[BlockMetric.ExportedRowCount]:N0} exported rows)");
         }

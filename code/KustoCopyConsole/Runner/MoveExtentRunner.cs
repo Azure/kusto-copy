@@ -3,15 +3,12 @@ using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
+using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
 {
     internal class MoveExtentRunner : RunnerBase
     {
-        #region Inner types
-        private record MovingBlocks(IterationKey IterationKey, IEnumerable<ExtentRecord> Extents);
-        #endregion
-
         private const int MAXIMUM_EXTENT_MOVING = 100;
 
         public MoveExtentRunner(RunnerParameters parameters)
@@ -23,11 +20,11 @@ namespace KustoCopyConsole.Runner
         {
             while (!AllActivitiesCompleted())
             {
-                var blockExtentsToMove = GetExtentsToMove();
+                var extentsToMove = await GetExtentsToMoveAsync(ct);
 
-                if (blockExtentsToMove != null)
+                if (extentsToMove != null)
                 {
-                    await MoveAsync(blockExtentsToMove, ct);
+                    await MoveAsync(extentsToMove, ct);
                 }
                 else
                 {
@@ -36,103 +33,79 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private MovingBlocks? GetExtentsToMove()
+        private async Task<IEnumerable<ExtentRecord>> GetExtentsToMoveAsync(CancellationToken ct)
         {
-            var iterationKey = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.State, BlockState.ReadyToMove))
-                .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
-                .ThenBy(b => b.BlockKey.IterationKey.IterationId)
-                .ThenBy(b => b.BlockKey.BlockId)
-                .Take(1)
-                .Select(b => b.BlockKey.IterationKey)
-                .FirstOrDefault();
+            using (var tx = Database.CreateTransaction())
+            {
+                var readyToMoveBlockIdByIterationKeys = Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Ingested))
+                    //  At most that number
+                    .Take(MAXIMUM_EXTENT_MOVING)
+                    .AsEnumerable()
+                    .GroupBy(b => b.BlockKey.IterationKey, b => b.BlockKey.BlockId)
+                    .ToImmutableArray();
+                var extents = new List<ExtentRecord>(MAXIMUM_EXTENT_MOVING);
 
-            if (iterationKey == null)
-            {
-                return null;
-            }
-            else
-            {
-                return GetExtentsToMove(iterationKey);
+                foreach (var iterationGroup in readyToMoveBlockIdByIterationKeys)
+                {
+                    var readyToMoveExtentsByBlockId = Database.Extents.Query(tx)
+                        .Where(pf => pf.In(e => e.BlockKey.BlockId, iterationGroup))
+                        .GroupBy(e => e.BlockKey.BlockId);
+
+                    foreach (var blockGroup in readyToMoveExtentsByBlockId)
+                    {
+                        if (extents.Count + blockGroup.Count() <= MAXIMUM_EXTENT_MOVING)
+                        {
+                            extents.AddRange(blockGroup);
+                        }
+                    }
+                }
+
+                //  Ensure the ingested blocks are committed to logs
+                //  We need to ensure that before we move the extent and we can't
+                //  detect ingested-state anymore
+                await tx.CompleteAsync(ct);
+
+                return extents;
             }
         }
 
-        private MovingBlocks GetExtentsToMove(IterationKey iterationKey)
+        private async Task MoveAsync(IEnumerable<ExtentRecord> extents, CancellationToken ct)
         {
-            var readyToMoveBlockIds = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.Equal(b => b.State, BlockState.ReadyToMove))
-                .OrderBy(b => b.BlockKey.BlockId)
-                .Take(MAXIMUM_EXTENT_MOVING)
-                .AsEnumerable()
-                .Select(b => b.BlockKey.BlockId)
-                .ToImmutableArray();
-            var readyToMoveExtentsByBlockId = Database.Extents.Query()
-                .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.In(e => e.BlockKey.BlockId, readyToMoveBlockIds))
-                .ToImmutableArray()
-                .GroupBy(e => e.BlockKey.BlockId)
-                .ToImmutableDictionary(g => g.Key, g => g.ToImmutableList());
-            var totalExtentCount = 0;
+            var extentsByIteration = extents
+                .GroupBy(e => e.BlockKey.IterationKey);
 
-            foreach (var blockId in readyToMoveBlockIds)
+            foreach (var g in extentsByIteration)
             {
-                var extents = readyToMoveExtentsByBlockId[blockId];
+                var iterationKey = g.Key;
+                var tempTableName = GetTempTable(iterationKey).TempTableName;
+                var destinationTable = Parameterization.Activities[iterationKey.ActivityName]
+                    .GetDestinationTableIdentity();
+                var commandClient = DbClientFactory.GetDbCommandClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName);
+                var extentIds = g.Select(e => e.ExtentId);
+                var extentCount = await commandClient.MoveExtentsAsync(
+                    new KustoPriority(iterationKey),
+                    tempTableName,
+                    destinationTable.TableName,
+                    extentIds,
+                    ct);
+                var blockIds = g
+                    .Select(e => e.BlockKey.BlockId)
+                    .Distinct();
+                var blocks = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                    .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
+                    .ToImmutableArray();
+                var cleanCount = await commandClient.CleanExtentTagsAsync(
+                    new KustoPriority(iterationKey),
+                    destinationTable.TableName,
+                    blocks.Select(be => be.BlockTag),
+                    ct);
 
-                if (totalExtentCount == 0
-                    || totalExtentCount + extents.Count <= MAXIMUM_EXTENT_MOVING)
-                {
-                    totalExtentCount += extents.Count;
-                }
-                else
-                {
-                    return new MovingBlocks(
-                        iterationKey,
-                        readyToMoveBlockIds
-                        .Where(id => id < blockId)
-                        .Select(id => readyToMoveExtentsByBlockId[id])
-                        .SelectMany(m => m)
-                        .ToImmutableArray());
-                }
+                CommitMove(iterationKey, blocks);
             }
-
-            return new MovingBlocks(
-                iterationKey,
-                readyToMoveExtentsByBlockId.Values
-                .SelectMany(m => m)
-                .ToImmutableArray());
-        }
-
-        private async Task MoveAsync(MovingBlocks movingBlocks, CancellationToken ct)
-        {
-            var iterationKey = movingBlocks.IterationKey;
-            var tempTableName = GetTempTable(iterationKey).TempTableName;
-            var destinationTable = Parameterization.Activities[iterationKey.ActivityName]
-                .GetDestinationTableIdentity();
-            var commandClient = DbClientFactory.GetDbCommandClient(
-                destinationTable.ClusterUri,
-                destinationTable.DatabaseName);
-            var extentCount = await commandClient.MoveExtentsAsync(
-                new KustoPriority(iterationKey),
-                tempTableName,
-                destinationTable.TableName,
-                movingBlocks.Extents
-                .Select(e => e.ExtentId),
-                ct);
-            var blockIds = movingBlocks.Extents
-                .Select(e => e.BlockKey.BlockId)
-                .Distinct();
-            var blocks = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
-                .ToImmutableArray();
-            var cleanCount = await commandClient.CleanExtentTagsAsync(
-                new KustoPriority(iterationKey),
-                destinationTable.TableName,
-                blocks.Select(be => be.BlockTag),
-                ct);
-
-            CommitMove(iterationKey, blocks);
         }
 
         private void CommitMove(IterationKey iterationKey, IEnumerable<BlockRecord> blocks)
@@ -140,27 +113,9 @@ namespace KustoCopyConsole.Runner
             using (var tx = Database.CreateTransaction())
             {
                 Database.Blocks.Query(tx)
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.In(
-                        b => b.BlockKey.BlockId,
-                        blocks.Select(b => b.BlockKey.BlockId)))
-                    .Delete();
-                Database.Extents.Query(tx)
-                    .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.In(
-                        e => e.BlockKey.BlockId,
-                        blocks.Select(b => b.BlockKey.BlockId)))
-                    .Delete();
-                Database.BlobUrls.Query(tx)
-                    .Where(pf => pf.Equal(u => u.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.In(
-                        u => u.BlockKey.BlockId,
-                        blocks.Select(b => b.BlockKey.BlockId)))
-                    .Delete();
-                Database.IngestionBatches.Query(tx)
                     .Where(pf => pf.Equal(i => i.BlockKey.IterationKey, iterationKey))
                     .Where(pf => pf.In(
-                        u => u.BlockKey.BlockId,
+                        b => b.BlockKey.BlockId,
                         blocks.Select(b => b.BlockKey.BlockId)))
                     .Delete();
 
