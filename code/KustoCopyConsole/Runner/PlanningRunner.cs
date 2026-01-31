@@ -19,8 +19,8 @@ namespace KustoCopyConsole.Runner
             long RecordCount);
         #endregion
 
-        private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 30;
-        private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 10;
+        private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 10000;
+        private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 2000;
         private const int MAX_ROW_COUNT_PER_BLOCK = 4000000;
         private const int MAX_ROW_COUNT_BY_PARTITION = 64 * MAX_ROW_COUNT_PER_BLOCK;
 
@@ -126,6 +126,7 @@ namespace KustoCopyConsole.Runner
                 : new DateTimeBoundary(iteration.LastBlockEndIngestionTime, false);
 
             if (await PlanPartitionBlocksAsync(
+                1,
                 queryClient,
                 activity,
                 iteration,
@@ -150,6 +151,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task<bool> PlanPartitionBlocksAsync(
+            int generation,
             DbQueryClient queryClient,
             ActivityParameterization activity,
             IterationRecord iteration,
@@ -176,6 +178,7 @@ namespace KustoCopyConsole.Runner
                     {   //  Split partition
                         //  We include the median in the left half
                         return await PlanPartitionBlocksAsync(
+                            generation + 1,
                             queryClient,
                             activity,
                             iteration,
@@ -185,6 +188,7 @@ namespace KustoCopyConsole.Runner
                             &&
                             //  We exclude the median in the right half
                             await PlanPartitionBlocksAsync(
+                                generation + 1,
                                 queryClient,
                                 activity,
                                 iteration,
