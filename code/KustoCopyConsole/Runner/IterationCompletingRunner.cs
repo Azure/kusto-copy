@@ -33,13 +33,14 @@ namespace KustoCopyConsole.Runner
             {
                 var pendingBlockCount = Database.QueryAggregatedBlockMetrics(
                     iteration.IterationKey)
-                    .Where(p => p.Key != BlockMetric.ExtentMoved)
-                    .Where(p => p.Key != BlockMetric.PlannedRowCount)
-                    .Where(p => p.Key != BlockMetric.ExportedRowCount)
+                    .Where(p => p.Key < BlockMetric.ExtentMoved)
                     .Sum(p => p.Value);
 
                 if (pendingBlockCount == 0)
                 {
+                    var directoryDeleteTask = StagingBlobUriProvider.DeleteStagingRootDirectoryAsync(
+                        iteration.IterationKey,
+                        ct);
                     var tempTable = GetTempTable(iteration.IterationKey);
                     var destinationTable = Parameterization
                         .Activities[iteration.IterationKey.ActivityName]
@@ -52,6 +53,7 @@ namespace KustoCopyConsole.Runner
                         new KustoPriority(iteration.IterationKey),
                         tempTable.TempTableName,
                         ct);
+                    await directoryDeleteTask;
                     CommitCompleteIteration(iteration);
                 }
             }

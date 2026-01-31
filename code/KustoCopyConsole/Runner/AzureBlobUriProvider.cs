@@ -154,6 +154,18 @@ namespace KustoCopyConsole.Runner
             }
         }
 
+        public async Task DeleteStagingRootDirectoryAsync(
+            IterationKey iterationKey,
+            CancellationToken ct)
+        {
+            var subDirectory = GetSubDirectory(iterationKey);
+            var tasks = _providerMap.Values
+                .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
+                .ToImmutableArray();
+
+            await TaskHelper.WhenAllWithErrors(tasks);
+        }
+
         public async Task DeleteStagingDirectoryAsync(BlockKey blockKey, CancellationToken ct)
         {
             var subDirectory = GetSubDirectory(blockKey);
