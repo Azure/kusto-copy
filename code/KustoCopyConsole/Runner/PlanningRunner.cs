@@ -223,7 +223,11 @@ namespace KustoCopyConsole.Runner
                     }
                     Database.Iterations.UpdateRecord(
                         iteration,
-                        iteration with { NextBlockId = nextBlockId },
+                        iteration with
+                        {
+                            NextBlockId = nextBlockId,
+                            LastBlockEndIngestionTime = protoBlocks.Last().MaxIngestionTime
+                        },
                         tx);
 
                     tx.Complete();

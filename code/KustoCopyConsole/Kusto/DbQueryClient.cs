@@ -164,8 +164,8 @@ ExtentIntervals
 | summarize RecordCount=sum(RecordCount), CreatedOn=max(CreatedOn),
     TrimmedMinPartitionIngestionTime=min(MinExtentIngestionTime), TrimmedMaxPartitionIngestionTime=max(MaxExtentIngestionTime)
     by MinPartitionIngestionTime
-| order by MinIngestionTime asc
 | project-away MinPartitionIngestionTime
+| order by TrimmedMinPartitionIngestionTime asc
 | extend TrimmedMinPartitionIngestionTime=tostring(TrimmedMinPartitionIngestionTime)
 | extend TrimmedMaxPartitionIngestionTime=tostring(TrimmedMaxPartitionIngestionTime)
 ";
