@@ -44,7 +44,7 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 9.x
+        dotnet-version: 10.x
     - name: Patch version
       id:  patch-version
       run: python3 deployment/patch-version.py code/KustoCopyConsole/KustoCopyConsole.csproj ${{ github.run_number }}
