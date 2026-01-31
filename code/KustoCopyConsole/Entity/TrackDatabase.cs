@@ -139,6 +139,11 @@ namespace KustoCopyConsole.Entity
                     b.BlockKey.IterationKey,
                     ToBlockMetric(b.State),
                     1));
+            var newBlocksPlannedRowMetrics = newBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    BlockMetric.PlannedRowCount,
+                    b.PlannedRowCount));
             var newBlocksExportedRowMetrics = newBlocks
                 .Select(b => new BlockMetricRecord(
                     b.BlockKey.IterationKey,
@@ -149,6 +154,11 @@ namespace KustoCopyConsole.Entity
                     b.BlockKey.IterationKey,
                     ToBlockMetric(b.State),
                     -1));
+            var deletedPlannedRowMetrics = deletedBlocks
+                .Select(b => new BlockMetricRecord(
+                    b.BlockKey.IterationKey,
+                    BlockMetric.PlannedRowCount,
+                    -b.PlannedRowCount));
             var deletedExportedRowMetrics = deletedBlocks
                 .Select(b => new BlockMetricRecord(
                     b.BlockKey.IterationKey,
@@ -156,8 +166,10 @@ namespace KustoCopyConsole.Entity
                     -b.ExportedRowCount));
             var newMetrics = newBlocksStateMetrics
                 .Concat(newBlocksExportedRowMetrics)
+                .Concat(newBlocksPlannedRowMetrics)
                 .Concat(deletedStateMetrics)
                 .Concat(deletedExportedRowMetrics)
+                .Concat(deletedPlannedRowMetrics)
                 .GroupBy(bm => new
                 {
                     bm.IterationKey,

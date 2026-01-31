@@ -215,6 +215,7 @@ namespace KustoCopyConsole.Runner
                                 protoBlock.MinIngestionTime,
                                 protoBlock.MaxIngestionTime,
                                 protoBlock.CreationTime,
+                                protoBlock.RecordCount,
                                 0,
                                 string.Empty,
                                 string.Empty),

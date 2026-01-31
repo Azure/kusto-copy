@@ -8,6 +8,7 @@
         Queued,
         Ingested,
         ExtentMoved,
+        PlannedRowCount,
         ExportedRowCount
     }
 }

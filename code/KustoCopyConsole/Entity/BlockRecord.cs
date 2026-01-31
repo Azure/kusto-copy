@@ -14,6 +14,7 @@ namespace KustoCopyConsole.Entity
         string IngestionTimeStart,
         string IngestionTimeEnd,
         DateTime? CreationTime,
+        long PlannedRowCount,
         long ExportedRowCount,
         string ExportOperationId,
         string BlockTag) : RecordBase
