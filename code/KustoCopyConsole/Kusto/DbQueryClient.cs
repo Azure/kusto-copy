@@ -1,5 +1,4 @@
-﻿using Kusto.Cloud.Platform.Data;
-using Kusto.Data.Common;
+﻿using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
@@ -7,12 +6,11 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class DbQueryClient
+    internal class DbQueryClient : KustoClientBase
     {
         private static readonly ClientRequestProperties EMPTY_PROPERTIES =
             new ClientRequestProperties();
         private readonly ICslQueryProvider _provider;
-        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly Uri _queryUri;
         private readonly string _databaseName;
 
@@ -21,9 +19,9 @@ namespace KustoCopyConsole.Kusto
             PriorityExecutionQueue<KustoPriority> queue,
             Uri queryUri,
             string databaseName)
+            : base(queue)
         {
             _provider = provider;
-            _queue = queue;
             _queryUri = queryUri;
             _databaseName = databaseName;
         }
@@ -32,7 +30,7 @@ namespace KustoCopyConsole.Kusto
             KustoPriority priority,
             CancellationToken ct)
         {
-            return await _queue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -60,7 +58,7 @@ namespace KustoCopyConsole.Kusto
             DateTimeBoundary? maxIngestionTime,
             CancellationToken ct)
         {
-            return await _queue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -117,7 +115,7 @@ BaseData
             int partitionCount,
             CancellationToken ct)
         {
-            return await _queue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {

@@ -18,7 +18,15 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var credentials = parameterization.CreateCredentials();
+            var stagingBlobUriProvider = new AzureBlobUriProvider(
+                parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
+                credentials);
 
+            Console.Write("Authentication test...");
+
+            await stagingBlobUriProvider.TestAuthenticationAsync(ct);
+
+            Console.WriteLine("  Done");
             Console.Write("Initialize tracking...");
             
             var database = await TrackDatabase.CreateAsync(
@@ -36,10 +44,6 @@ namespace KustoCopyConsole.Runner
                 ct);
 
             Console.WriteLine("  Done");
-
-            var stagingBlobUriProvider = new AzureBlobUriProvider(
-                parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
-                credentials);
 
             var parameters = new RunnerParameters(
                 parameterization,

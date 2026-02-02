@@ -33,6 +33,11 @@ namespace KustoCopyConsole.Runner
 
             public Uri RootDirectoryUri => _directoryClient.Uri;
 
+            public async Task TestAuthenticationAsync(CancellationToken ct)
+            {
+                await _containerClient.GetAccountInfoAsync();
+            }
+
             public async Task<Uri> GetWritableFolderUrisAsync(string subPath, CancellationToken ct)
             {
                 var userDelegationKey = await _keyCache.GetCacheItemAsync(ct);
@@ -116,6 +121,18 @@ namespace KustoCopyConsole.Runner
             _providerMap = stagingStorageDirectories
                 .Select(u => new DirectoryProvider(u, credential))
                 .ToImmutableDictionary(p => p.RootDirectoryUri.ToString(), p => p);
+
+            if (_providerMap.Count == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(stagingStorageDirectories),
+                    "No staging directory provided");
+            }
+        }
+
+        public async Task TestAuthenticationAsync(CancellationToken ct)
+        {
+            await _providerMap.First().Value.TestAuthenticationAsync(ct);
         }
 
         public async Task<IEnumerable<Uri>> GetWritableFolderUrisAsync(

@@ -6,19 +6,17 @@ using System.Data;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class DbCommandClient
+    internal class DbCommandClient : KustoClientBase
     {
-        private readonly Random _random = new();
         private readonly ICslAdminProvider _provider;
-        private readonly PriorityExecutionQueue<KustoPriority> _commandQueue;
 
         public DbCommandClient(
             ICslAdminProvider provider,
             PriorityExecutionQueue<KustoPriority> commandQueue,
             string databaseName)
+            : base(commandQueue)
         {
             _provider = provider;
-            _commandQueue = commandQueue;
             DatabaseName = databaseName;
         }
 
@@ -28,7 +26,7 @@ namespace KustoCopyConsole.Kusto
             KustoPriority priority,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -54,7 +52,7 @@ namespace KustoCopyConsole.Kusto
         {
             if (operationIds.Any())
             {
-                return await _commandQueue.RequestRunAsync(
+                return await RequestRunAsync(
                     priority,
                     async () =>
                     {
@@ -94,7 +92,7 @@ namespace KustoCopyConsole.Kusto
             string ingestionTimeEnd,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -136,7 +134,7 @@ let ['{tableName}'] = ['{tableName}']
             string operationId,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -165,7 +163,7 @@ let ['{tableName}'] = ['{tableName}']
             string tableName,
             CancellationToken ct)
         {
-            await _commandQueue.RequestRunAsync(
+            await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -178,6 +176,8 @@ let ['{tableName}'] = ['{tableName}']
                         DatabaseName,
                         commandText,
                         properties);
+
+                    return 0;
                 });
         }
 
@@ -187,7 +187,7 @@ let ['{tableName}'] = ['{tableName}']
             string tempTableName,
             CancellationToken ct)
         {
-            await _commandQueue.RequestRunAsync(
+            await RequestRunAsync(
                 priority,
                 async () =>
                 {
@@ -243,6 +243,8 @@ let ['{tableName}'] = ['{tableName}']
                             + $"'{result.Reason}'",
                             false);
                     }
+
+                    return 0;
                 });
         }
         #endregion
@@ -253,7 +255,7 @@ let ['{tableName}'] = ['{tableName}']
             string tempTableName,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                priority,
                async () =>
                {
@@ -284,7 +286,7 @@ let ['{tableName}'] = ['{tableName}']
             IEnumerable<string> extentIds,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                priority,
                async () =>
                {
@@ -327,7 +329,7 @@ let ['{tableName}'] = ['{tableName}']
             IEnumerable<string> tags,
             CancellationToken ct)
         {
-            return await _commandQueue.RequestRunAsync(
+            return await RequestRunAsync(
                priority,
                async () =>
                {
