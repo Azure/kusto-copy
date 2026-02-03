@@ -31,6 +31,7 @@ namespace KustoCopyConsole.Entity
         {
             var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(
+                    //DiagnosticPolicy: DiagnosticPolicy.Create(true),
                     LogPolicy: LogPolicy.Create(
                         StorageConfiguration: new StorageConfiguration(
                             blobFolderUri,
@@ -60,6 +61,14 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE)
                 .AddPrimaryKeyProperty(e => e.BlockKey)
                 .AddPrimaryKeyProperty(e => e.ExtentId));
+            var urlIds = dbContext.BlobUrls.Query()
+                .Select(u => u.BlockKey.BlockId)
+                .ToHashSet();
+            var blockIds = dbContext.Blocks.Query()
+                .Select(b => b.BlockKey.BlockId)
+                .ToHashSet();
+            //var q = urlIds.Except(blockIds);
+            //var q2 = blockIds.Except(urlIds);
 
             return dbContext;
         }

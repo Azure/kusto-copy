@@ -62,11 +62,11 @@ namespace KustoCopyConsole.Runner
 
                         if (tempTableMap.ContainsKey(block.BlockKey.IterationKey))
                         {
-                            var task = QueueIngestBlockAsync(
+                            var task = Task.Run(() => QueueIngestBlockAsync(
                                 block,
                                 ingestClient,
                                 tempTableMap[block.BlockKey.IterationKey],
-                                ct);
+                                ct));
 
                             taskQueue.Enqueue(task);
                         }

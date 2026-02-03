@@ -19,8 +19,8 @@ namespace KustoCopyConsole.Runner
             long RecordCount);
         #endregion
 
-        private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 10000;
-        private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 2000;
+        private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 1000;
+        private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 500;
         private const int MAX_ROW_COUNT_PER_BLOCK = 4000000;
         private const int MAX_ROW_COUNT_BY_PARTITION = 64 * MAX_ROW_COUNT_PER_BLOCK;
 
