@@ -22,7 +22,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!IsActivityCompleted(activityName))
             {
-                if (await RunActivityAsync(activityName, ct))
+                if (!await RunActivityAsync(activityName, ct))
                 {
                     await SleepAsync(ct);
                 }

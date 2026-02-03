@@ -9,7 +9,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
-        const int PARALLEL_BLOCKS = 5;
+        const int PARALLEL_BLOCKS = 20;
+        const int BATCH_BLOCKS = 200;
 
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -22,53 +23,60 @@ namespace KustoCopyConsole.Runner
         {
             var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
-            var blocks = Database.Blocks.Query()
+            var blockQueue = new Queue<BlockRecord>(Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
                 .OrderBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(PARALLEL_BLOCKS)
-                .ToImmutableArray();
-
-            if (blocks.Any())
-            {
-                var tempTableMap = blocks
-                    .Select(b => b.BlockKey.IterationKey)
-                    .Distinct()
-                    .Select(key => new
-                    {
-                        Key = key,
-                        TempTable = TryGetTempTable(key)?.TempTableName
-                    })
-                    //  It's possible, although unlikely, the temp table hasn't been created yet
-                    .Where(o => o.TempTable != null)
-                    .ToImmutableDictionary(o => o.Key, o => o.TempTable!);
-
-                if (tempTableMap.Any())
+                .Take(BATCH_BLOCKS));
+            var tempTableMap = blockQueue
+                .Select(b => b.BlockKey.IterationKey)
+                .Distinct()
+                .Select(key => new
                 {
-                    var ingestClient = DbClientFactory.GetIngestClient(
-                        destinationTable.ClusterUri,
-                        destinationTable.DatabaseName);
-                    var tasks = blocks
-                        .Where(b => tempTableMap.ContainsKey(b.BlockKey.IterationKey))
-                        .Select(b => QueueIngestBlockAsync(
-                            b,
-                            ingestClient,
-                            tempTableMap[b.BlockKey.IterationKey],
-                            ct))
-                        .ToImmutableArray();
+                    Key = key,
+                    TempTable = TryGetTempTable(key)?.TempTableName
+                })
+                //  It's possible, although unlikely, the temp table hasn't been created yet
+                .Where(o => o.TempTable != null)
+                .ToImmutableDictionary(o => o.Key, o => o.TempTable!);
 
-                    await TaskHelper.WhenAllWithErrors(tasks);
+            if (blockQueue.Any() && tempTableMap.Any())
+            {
+                var ingestClient = DbClientFactory.GetIngestClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName);
+                var taskQueue = new Queue<Task>(PARALLEL_BLOCKS);
 
-                    return true;
+                while (blockQueue.Count > 0 || taskQueue.Count > 0)
+                {
+                    if (taskQueue.Count >= PARALLEL_BLOCKS || blockQueue.Count == 0)
+                    {   //  Wait for one
+                        var task = taskQueue.Dequeue();
+
+                        await task;
+                    }
+                    else
+                    {
+                        var block = blockQueue.Dequeue();
+
+                        if (tempTableMap.ContainsKey(block.BlockKey.IterationKey))
+                        {
+                            var task = QueueIngestBlockAsync(
+                                block,
+                                ingestClient,
+                                tempTableMap[block.BlockKey.IterationKey],
+                                ct);
+
+                            taskQueue.Enqueue(task);
+                        }
+                    }
                 }
-                else
-                {   //  No temp table was available, we'll process this block later
-                    return false;
-                }
+
+                return true;
             }
             else
-            {
+            {   //  No blocks or temp table was available, we'll process this block later
                 return false;
             }
         }
