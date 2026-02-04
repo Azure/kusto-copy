@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Runner
 {
     internal class AwaitIngestRunner : ActivityRunnerBase
     {
-        private const int MAX_BLOCK_COUNT = 25;
+        private const int MAX_BLOCK_COUNT = 100;
 
         public AwaitIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
