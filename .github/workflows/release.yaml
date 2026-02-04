@@ -12,7 +12,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
-        os: [linux, windows, macos]  # Define platforms
+        os: [linux]  # Define platforms
+        # os: [linux, windows, macos]  # Define platforms
         include:
           - os: linux
             platform: ubuntu-latest
