@@ -21,17 +21,17 @@ jobs:
             ASSETS_NAME: linux-assets
             assetSuffix: linux
           
-          - os: windows
-            platform:  windows-latest
-            dotnetOs:  win-x64
-            ASSETS_NAME:  windows-assets
-            assetSuffix:  windows
+          # - os: windows
+          #   platform:  windows-latest
+          #   dotnetOs:  win-x64
+          #   ASSETS_NAME:  windows-assets
+          #   assetSuffix:  windows
           
-          - os: macos
-            platform:  macos-latest
-            dotnetOs:  osx-x64
-            ASSETS_NAME:  mac-assets
-            assetSuffix:  mac
+          # - os: macos
+          #   platform:  macos-latest
+          #   dotnetOs:  osx-x64
+          #   ASSETS_NAME:  mac-assets
+          #   assetSuffix:  mac
           
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
