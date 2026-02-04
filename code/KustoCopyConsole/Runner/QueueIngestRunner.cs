@@ -9,8 +9,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
-        const int PARALLEL_BLOCKS = 20;
-        const int BATCH_BLOCKS = 200;
+        private const int PARALLEL_BLOCKS = 50;
+        private const int BATCH_BLOCKS = 200;
 
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))

@@ -10,8 +10,8 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbClientFactory : IDisposable
     {
-        private const int MAX_CONCURRENT_DM_COMMAND = 20;
-        private const int MAX_CONCURRENT_INGEST_QUEUING = 25;
+        private const int MAX_CONCURRENT_DM_COMMAND = 10;
+        private const int MAX_CONCURRENT_INGEST_QUEUING = 75;
 
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _allClusterQueryQueueMap;
