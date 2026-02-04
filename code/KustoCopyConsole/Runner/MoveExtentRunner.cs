@@ -3,13 +3,12 @@ using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
-using TrackDb.Lib.Predicate;
 
 namespace KustoCopyConsole.Runner
 {
     internal class MoveExtentRunner : RunnerBase
     {
-        private const int MAXIMUM_EXTENT_MOVING = 100;
+        private const int MAXIMUM_EXTENT_MOVING = 500;
 
         public MoveExtentRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))

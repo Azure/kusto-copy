@@ -78,7 +78,7 @@ namespace KustoCopyConsole.Runner
             int cachedCapacity)
         {   //  The first (by priority) block will determine the activity and iteration
             //  we'll work on
-            var firstPlannedBlocks = Database.Blocks.Query()
+            var firstPlannedBlock = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                 .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
@@ -87,7 +87,7 @@ namespace KustoCopyConsole.Runner
                 .Take(1)
                 .FirstOrDefault();
 
-            if (firstPlannedBlocks != null)
+            if (firstPlannedBlock != null)
             {
                 //  Fetch all blocks being in 'exporting' state
                 var exportingCount = (int)Database.Blocks.Query()
@@ -98,7 +98,9 @@ namespace KustoCopyConsole.Runner
                 var maxExporting =
                     Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
                 var plannedBlocks = Database.Blocks.Query()
-                    .Where(pf => pf.Equal(b => b.BlockKey, firstPlannedBlocks.BlockKey))
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.IterationKey,
+                        firstPlannedBlock.BlockKey.IterationKey))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                     .OrderBy(b => b.BlockKey.BlockId)
                     .Take(maxExporting)
