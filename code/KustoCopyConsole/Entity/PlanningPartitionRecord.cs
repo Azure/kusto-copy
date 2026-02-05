@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace KustoCopyConsole.Entity
 {
     internal record PlanningPartitionRecord(
-        BlockKey BlockKey,
+        IterationKey IterationKey,
         int Generation,
         bool IsLeftExplored,
         long RecordCount,

@@ -13,7 +13,6 @@ namespace KustoCopyConsole.Entity
         IterationKey IterationKey,
         string? CursorStart,
         string CursorEnd,
-        string? LastBlockEndIngestionTime,
         int NextBlockId)
         : RecordBase
     {
