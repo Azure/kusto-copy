@@ -61,15 +61,24 @@ namespace KustoCopyConsole.Runner
 
         private void CommitCompleteIteration(IterationRecord iteration)
         {
-            Database.TempTables.Query()
-                .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
-                .Delete();
-            Database.Iterations.UpdateRecord(
-                iteration,
-                iteration with
-                {
-                    State = IterationState.Completed
-                });
+            using (var tx = Database.CreateTransaction())
+            {
+                Database.TempTables.Query(tx)
+                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                    .Delete();
+                Database.PlanningPartitions.Query(tx)
+                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                    .Delete();
+                Database.Iterations.UpdateRecord(
+                    iteration,
+                    iteration with
+                    {
+                        State = IterationState.Completed
+                    },
+                    tx);
+
+                tx.Complete();
+            }
         }
     }
 }
