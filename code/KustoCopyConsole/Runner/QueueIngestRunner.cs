@@ -2,15 +2,13 @@
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
-        private const int PARALLEL_BLOCKS = 50;
-        private const int BATCH_BLOCKS = 200;
+        private const int BATCH_BLOCKS = 20;
 
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -23,83 +21,69 @@ namespace KustoCopyConsole.Runner
         {
             var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
-            var blockQueue = new Queue<BlockRecord>(Database.Blocks.Query()
+            var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
                 .OrderBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(BATCH_BLOCKS));
-            var tempTableMap = blockQueue
-                .Select(b => b.BlockKey.IterationKey)
-                .Distinct()
-                .Select(key => new
-                {
-                    Key = key,
-                    TempTable = TryGetTempTable(key)?.TempTableName
-                })
-                //  It's possible, although unlikely, the temp table hasn't been created yet
-                .Where(o => o.TempTable != null)
-                .ToImmutableDictionary(o => o.Key, o => o.TempTable!);
+                .Take(BATCH_BLOCKS)
+                .ToImmutableArray();
 
-            if (blockQueue.Any() && tempTableMap.Any())
+            if (blocks.Length > 0)
             {
-                var ingestClient = DbClientFactory.GetIngestClient(
-                    destinationTable.ClusterUri,
-                    destinationTable.DatabaseName);
-                var taskQueue = new Queue<Task>(PARALLEL_BLOCKS);
+                var iterationKey = blocks[0].BlockKey.IterationKey;
+                var tempTable = TryGetTempTable(iterationKey);
 
-                while (blockQueue.Count > 0 || taskQueue.Count > 0)
+                if (tempTable != null)
                 {
-                    if (taskQueue.Count >= PARALLEL_BLOCKS || blockQueue.Count == 0)
-                    {   //  Wait for one
-                        var task = taskQueue.Dequeue();
+                    //  Filter blocks with given iteration key
+                    blocks = blocks
+                        .Where(b => b.BlockKey.IterationKey == iterationKey)
+                        .ToImmutableArray();
 
-                        await task;
-                    }
-                    else
-                    {
-                        var block = blockQueue.Dequeue();
+                    var ingestClient = DbClientFactory.GetIngestClient(
+                        destinationTable.ClusterUri,
+                        destinationTable.DatabaseName);
+                    var urlRecordsMap = Database.BlobUrls.Query()
+                        .Where(pf => pf.Equal(u => u.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(
+                            u => u.BlockKey.BlockId,
+                            blocks.Select(b => b.BlockKey.BlockId)))
+                        .GroupBy(u => u.BlockKey.BlockId)
+                        .ToImmutableDictionary(g => g.Key, g => g.ToImmutableArray());
+                    var tasks = blocks
+                        .Select(b => QueueIngestBlockAsync(
+                            b,
+                            urlRecordsMap[b.BlockKey.BlockId],
+                            ingestClient,
+                            tempTable.TempTableName,
+                            ct))
+                        .ToImmutableArray();
 
-                        if (tempTableMap.ContainsKey(block.BlockKey.IterationKey))
-                        {
-                            var task = Task.Run(() => QueueIngestBlockAsync(
-                                block,
-                                ingestClient,
-                                tempTableMap[block.BlockKey.IterationKey],
-                                ct));
+                    await Task.WhenAll(tasks);
 
-                            taskQueue.Enqueue(task);
-                        }
-                    }
+                    return true;
                 }
+            }
 
-                return true;
-            }
-            else
-            {   //  No blocks or temp table was available, we'll process this block later
-                return false;
-            }
+            //  No blocks or temp table was available
+            return false;
         }
 
         private async Task QueueIngestBlockAsync(
             BlockRecord block,
+            IEnumerable<BlobUrlRecord> urlRecords,
             IngestClient ingestClient,
             string tempTableName,
             CancellationToken ct)
         {
-            var urlRecords = Database.BlobUrls.Query()
-                .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
-                .ToImmutableArray();
-
-            Trace.TraceInformation($"Block {block.BlockKey}:  ingest {urlRecords.Length} urls");
-
             var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
             //  Get Uri with SAS tokens
             var authorizedUriTasks = urlRecords
                 .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(u.Url, ct))
                 .ToImmutableArray();
 
-            await Task.WhenAll(authorizedUriTasks);
+            await TaskHelper.WhenAllWithErrors(authorizedUriTasks);
 
             var authorizedUris = authorizedUriTasks
                 .Select(t => t.Result)
@@ -115,7 +99,7 @@ namespace KustoCopyConsole.Runner
             var ingestionBatches = operationTexts
                 .Select(op => new IngestionBatchRecord(block.BlockKey, op));
 
-            using (var tc = Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 Database.Blocks.UpdateRecord(
                     block,
@@ -124,13 +108,11 @@ namespace KustoCopyConsole.Runner
                         State = BlockState.Queued,
                         BlockTag = blockTag
                     },
-                    tc);
+                    tx);
                 Database.IngestionBatches.AppendRecords(ingestionBatches);
 
-                tc.Complete();
+                tx.Complete();
             }
-
-            Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
         }
     }
 }
