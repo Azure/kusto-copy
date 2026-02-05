@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Runner
     internal class BlockCompletingRunner : RunnerBase
     {
         public BlockCompletingRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(15))
+           : base(parameters, TimeSpan.FromSeconds(20))
         {
         }
 
