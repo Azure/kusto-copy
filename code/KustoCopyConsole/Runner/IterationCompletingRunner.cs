@@ -10,7 +10,7 @@ namespace KustoCopyConsole.Runner
     internal class IterationCompletingRunner : RunnerBase
     {
         public IterationCompletingRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, TimeSpan.FromSeconds(20))
         {
         }
 
