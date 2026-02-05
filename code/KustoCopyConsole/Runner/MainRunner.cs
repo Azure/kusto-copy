@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Runner
         async ValueTask IAsyncDisposable.DisposeAsync()
         {
             await ((IAsyncDisposable)Database).DisposeAsync();
-            ((IDisposable)DbClientFactory).Dispose();
+            await ((IAsyncDisposable)DbClientFactory).DisposeAsync();
         }
 
         public async Task RunAsync(CancellationToken ct)
