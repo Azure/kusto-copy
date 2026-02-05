@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Runner
         private const int MAX_ROW_COUNT_BY_PARTITION = 64 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, TimeSpan.FromSeconds(15))
         {
         }
 
