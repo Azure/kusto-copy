@@ -8,7 +8,7 @@ using System.Data;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class DbClientFactory : IDisposable
+    internal class DbClientFactory : IAsyncDisposable
     {
         private const int MAX_CONCURRENT_DM_COMMAND = 10;
         private const int MAX_CONCURRENT_INGEST_QUEUING = 75;
@@ -112,8 +112,18 @@ namespace KustoCopyConsole.Kusto
         }
         #endregion
 
-        void IDisposable.Dispose()
+        async ValueTask IAsyncDisposable.DisposeAsync()
         {
+            var priorityExecutionQueues = _allClusterQueryQueueMap.Values
+                .Concat(_allClusterCommandQueueMap.Values)
+                .Concat(_destinationClusterDmCommandQueueMap.Values)
+                .Concat(_destinationClusterIngestCommandQueueMap.Values)
+                .Cast<IAsyncDisposable>();
+            var priorityExecutionQueueTasks = priorityExecutionQueues
+                .Select(q => q.DisposeAsync().AsTask())
+                .ToImmutableArray();
+
+            await Task.WhenAll(priorityExecutionQueueTasks);
             ((IDisposable)_providerFactory).Dispose();
         }
 
