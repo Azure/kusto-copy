@@ -18,6 +18,7 @@ namespace KustoCopyConsole.Entity
         private const string ITERATION_TABLE = "Iteration";
         private const string BLOCK_TABLE = "Block";
         private const string BLOCK_METRIC_TABLE = "BlockMetric";
+        private const string PLANNING_PARTITION_TABLE = "PlanningPartition";
         private const string TEMP_TABLE_TABLE = "TempTable";
         private const string BLOB_URL_TABLE = "BlobUrl";
         private const string INGESTION_BATCH_TABLE = "IngestionBatch";
@@ -52,6 +53,9 @@ namespace KustoCopyConsole.Entity
                     ComputeBlockMetric(typedDb, tx);
                 }),
                 TypedTableSchema<BlockMetricRecord>.FromConstructor(BLOCK_METRIC_TABLE),
+                TypedTableSchema<PlanningPartitionRecord>.FromConstructor(PLANNING_PARTITION_TABLE)
+                .AddPrimaryKeyProperty(pp => pp.IterationKey)
+                .AddPrimaryKeyProperty(pp => pp.Generation),
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
@@ -90,6 +94,9 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<BlockMetricRecord> BlockMetrics =>
             Database.GetTypedTable<BlockMetricRecord>(BLOCK_METRIC_TABLE);
+
+        public TypedTable<PlanningPartitionRecord> PlanningPartitions =>
+            Database.GetTypedTable<PlanningPartitionRecord>(PLANNING_PARTITION_TABLE);
 
         public TypedTable<TempTableRecord> TempTables =>
             Database.GetTypedTable<TempTableRecord>(TEMP_TABLE_TABLE);
