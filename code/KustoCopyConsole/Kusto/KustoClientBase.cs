@@ -7,7 +7,7 @@ namespace KustoCopyConsole.Kusto
     internal abstract class KustoClientBase
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
-            .Handle<KustoException>(ex => !ex.IsPermanent)
+            .Handle<KustoException>(ex => ShouldFailException(ex))
             .RetryAsync(5);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
@@ -24,6 +24,22 @@ namespace KustoCopyConsole.Kusto
             //  requests
             return await _kustoRetryPolicy.ExecuteAsync(
                 async () => await _queue.RequestRunAsync(priority, actionAsync));
+        }
+
+        private static bool ShouldFailException(KustoException ex)
+        {
+            if(!ex.IsPermanent)
+            {
+                return false;
+            }
+            else if(ex.InnerException is KustoClientRequestCanceledByUserException)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
         }
     }
 }

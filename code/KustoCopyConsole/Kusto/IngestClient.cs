@@ -1,11 +1,12 @@
 ﻿using Kusto.Data.Common;
+using Kusto.Data.Exceptions;
 using Kusto.Ingest.V2;
 using KustoCopyConsole.Concurrency;
 using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class IngestClient
+    internal class IngestClient : KustoClientBase
     {
         private static readonly IImmutableList<IngestStatus> FAILED_STATUS = [
             IngestStatus.Cancelled,
@@ -13,16 +14,15 @@ namespace KustoCopyConsole.Kusto
             IngestStatus.PartialSuccess];
 
         private readonly IMultiIngest _ingestProvider;
-        private readonly PriorityExecutionQueue<KustoPriority> _queue;
         private readonly string _database;
 
         public IngestClient(
             IMultiIngest ingestProvider,
             PriorityExecutionQueue<KustoPriority> queue,
             string database)
+            : base(queue)
         {
             _ingestProvider = ingestProvider;
-            _queue = queue;
             _database = database;
         }
 
@@ -52,7 +52,7 @@ namespace KustoCopyConsole.Kusto
                 EnableTracking = true
             };
             var queuingTasks = uriBatches
-                .Select(batch => _queue.RequestRunAsync(
+                .Select(batch => RequestRunAsync(
                     priority,
                     async () =>
                     {
@@ -82,7 +82,7 @@ namespace KustoCopyConsole.Kusto
             string operationText,
             CancellationToken ct)
         {
-            return await _queue.RequestRunAsync(
+            return await RequestRunAsync(
                 priority,
                 async () =>
                 {

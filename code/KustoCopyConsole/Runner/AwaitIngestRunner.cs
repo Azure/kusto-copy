@@ -107,12 +107,6 @@ namespace KustoCopyConsole.Runner
                 .ToImmutableDictionary(g => g.Key);
             var blockByTags = blocks
                 .ToImmutableDictionary(b => b.BlockTag);
-            var targetRowCountByBlockId = Database.BlobUrls.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.In(b => b.BlockKey.BlockId, blocks.Select(b => b.BlockKey.BlockId)))
-                .AsEnumerable()
-                .GroupBy(u => u.BlockKey.BlockId)
-                .ToImmutableDictionary(g => g.Key, g => g.Sum(u => u.RowCount));
             var extents = new List<ExtentRecord>();
 
             Trace.TraceInformation($"AwaitIngest:  {allExtentRowCounts.Count} " +
@@ -120,20 +114,19 @@ namespace KustoCopyConsole.Runner
             foreach (var tag in extentRowCountByTags.Keys)
             {
                 if (extentRowCountByTags.TryGetValue(tag, out var extentRowCounts)
-                    && blockByTags.TryGetValue(tag, out var block)
-                    && targetRowCountByBlockId.TryGetValue(block.BlockKey.BlockId, out var targetRowCount))
+                    && blockByTags.TryGetValue(tag, out var block))
                 {
                     var blockExtentRowCount = extentRowCounts
                         .Sum(e => e.RecordCount);
 
-                    if (blockExtentRowCount > targetRowCount)
+                    if (blockExtentRowCount > block.ExportedRowCount)
                     {
                         throw new CopyException(
-                            $"Target row count is {targetRowCount} while " +
+                            $"Exported row count is {block.ExportedRowCount} while " +
                             $"we observe {blockExtentRowCount}",
                             false);
                     }
-                    if (blockExtentRowCount == targetRowCount)
+                    if (blockExtentRowCount == block.ExportedRowCount)
                     {
                         var blockExtents = extentRowCounts
                             .Select(e => new ExtentRecord(block.BlockKey, e.ExtentId, e.RecordCount));
