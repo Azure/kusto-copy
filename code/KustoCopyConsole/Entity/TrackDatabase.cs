@@ -33,11 +33,12 @@ namespace KustoCopyConsole.Entity
             var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(
                     //DiagnosticPolicy: DiagnosticPolicy.Create(true),
-                    LogPolicy: LogPolicy.Create(
-                        StorageConfiguration: new StorageConfiguration(
-                            blobFolderUri,
-                            credentials,
-                            null))),
+                    //LogPolicy: LogPolicy.Create(
+                    //    StorageConfiguration: new StorageConfiguration(
+                    //        blobFolderUri,
+                    //        credentials,
+                    //        null))
+                    ),
                 db => new TrackDatabase(db),
                 ct,
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
@@ -71,8 +72,6 @@ namespace KustoCopyConsole.Entity
             var blockIds = dbContext.Blocks.Query()
                 .Select(b => b.BlockKey.BlockId)
                 .ToHashSet();
-            //var q = urlIds.Except(blockIds);
-            //var q2 = blockIds.Except(urlIds);
 
             return dbContext;
         }

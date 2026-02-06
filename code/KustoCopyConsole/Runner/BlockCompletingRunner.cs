@@ -1,6 +1,7 @@
 ﻿using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -51,12 +52,52 @@ namespace KustoCopyConsole.Runner
                             .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
                             .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
                             .Delete();
+
+                        Trace.TraceInformation(
+                            $"Deleting Block IDs:  {string.Join(",", blockIds)}");
                     }
 
                     tx.Complete();
                 }
 
+                ValidateUrls();
                 await SleepAsync(ct);
+            }
+        }
+
+        [Conditional("DEBUG")]
+        private void ValidateUrls()
+        {
+            using (var tx = Database.CreateTransaction())
+            {
+                var blockKeys = Database.BlobUrls.Query(tx)
+                    .AsEnumerable()
+                    .CountBy(u => u.BlockKey)
+                    .ToImmutableDictionary();
+                var blockIdsByIterationKey = blockKeys.Keys
+                    .GroupBy(k => k.IterationKey)
+                    .ToImmutableDictionary(
+                    g => g.Key,
+                    g => g.Select(i => i.BlockId).ToImmutableArray());
+
+                foreach (var iterationKey in blockIdsByIterationKey.Keys)
+                {
+                    var blockIdsFromUrls = blockIdsByIterationKey[iterationKey];
+                    var blockIdsFromBlocks = Database.Blocks.Query(tx)
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIdsFromUrls))
+                        .Select(b => b.BlockKey.BlockId)
+                        .ToImmutableArray();
+                    var extraBlockIds = blockIdsFromUrls
+                        .Except(blockIdsFromBlocks)
+                        .ToImmutableArray();
+
+                    if (extraBlockIds.Length > 0)
+                    {
+                        throw new InvalidOperationException("Dangling URLs of deleted Blocks");
+                    }
+                }
+
+                tx.CompleteAsync();
             }
         }
     }

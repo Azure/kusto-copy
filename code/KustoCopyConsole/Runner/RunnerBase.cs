@@ -73,6 +73,7 @@ namespace KustoCopyConsole.Runner
             var tempTable = Database.TempTables.Query()
                 .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
                 .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
+                .Where(pf => pf.Equal(t => t.State, TempTableState.Created))
                 .Take(1)
                 .FirstOrDefault();
 
