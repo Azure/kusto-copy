@@ -32,13 +32,12 @@ namespace KustoCopyConsole.Entity
         {
             var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(
-                    //DiagnosticPolicy: DiagnosticPolicy.Create(true),
-                    //LogPolicy: LogPolicy.Create(
-                    //    StorageConfiguration: new StorageConfiguration(
-                    //        blobFolderUri,
-                    //        credentials,
-                    //        null))
-                    ),
+                    DiagnosticPolicy: DiagnosticPolicy.Create(true),
+                    LogPolicy: LogPolicy.Create(
+                        StorageConfiguration: new StorageConfiguration(
+                            blobFolderUri,
+                            credentials,
+                            null))),
                 db => new TrackDatabase(db),
                 ct,
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
