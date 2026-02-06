@@ -11,7 +11,7 @@ namespace KustoCopyConsole.JobParameter
 
         public TableParameterization Destination { get; set; } = new();
 
-        public string? KqlQuery { get; set; } = string.Empty;
+        public string KqlQuery { get; set; } = string.Empty;
 
         public TableOption TableOption { get; set; } = new();
 
@@ -30,14 +30,26 @@ namespace KustoCopyConsole.JobParameter
             TableOption.Validate();
         }
 
-        public TableIdentity GetEffectiveDestinationTableIdentity()
+        public TableIdentity GetSourceTableIdentity()
+        {
+            var sourceTableIdentity = Source.GetTableIdentity();
+
+            return !string.IsNullOrWhiteSpace(Destination.TableName)
+                ? sourceTableIdentity
+                : new TableIdentity(
+                    NormalizedUri.NormalizeUri(sourceTableIdentity.ClusterUri.ToString()),
+                    sourceTableIdentity.DatabaseName,
+                    Source.GetTableIdentity().TableName);
+        }
+
+        public TableIdentity GetDestinationTableIdentity()
         {
             var destinationTableIdentity = Destination.GetTableIdentity();
 
             return !string.IsNullOrWhiteSpace(Destination.TableName)
                 ? destinationTableIdentity
                 : new TableIdentity(
-                    destinationTableIdentity.ClusterUri,
+                    NormalizedUri.NormalizeUri(destinationTableIdentity.ClusterUri.ToString()),
                     destinationTableIdentity.DatabaseName,
                     Source.GetTableIdentity().TableName);
         }

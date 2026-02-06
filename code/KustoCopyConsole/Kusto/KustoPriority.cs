@@ -1,4 +1,4 @@
-﻿using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity.Keys;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Tracing;
@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Kusto
         }
 
         public KustoPriority(BlockKey key)
-            : this(key.ActivityName, key.IterationId, key.BlockId)
+            : this(key.IterationKey.ActivityName, key.IterationKey.IterationId, key.BlockId)
         {
         }
 

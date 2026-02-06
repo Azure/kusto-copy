@@ -1,10 +1,8 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.RowItems.Keys;
+﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -19,35 +17,21 @@ namespace KustoCopyConsole.Runner
         private readonly TaskCompletionSource _allActivityCompletedSource
             = new TaskCompletionSource();
 
-        public RunnerBase(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider,
-            TimeSpan wakePeriod)
+        public RunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
         {
-            Parameterization = parameterization;
-            Credential = credential;
-            Database = database;
-            RowItemGateway = rowItemGateway;
-            DbClientFactory = dbClientFactory;
-            StagingBlobUriProvider = stagingBlobUriProvider;
+            RunnerParameters = parameters;
             _wakePeriod = wakePeriod;
         }
 
-        protected MainJobParameterization Parameterization { get; }
+        protected RunnerParameters RunnerParameters { get; }
 
-        protected TokenCredential Credential { get; }
+        protected MainJobParameterization Parameterization => RunnerParameters.Parameterization;
 
-        protected TrackDatabase Database { get; }
+        protected TrackDatabase Database => RunnerParameters.Database;
 
-        protected RowItemGateway RowItemGateway { get; }
+        protected DbClientFactory DbClientFactory => RunnerParameters.DbClientFactory;
 
-        protected DbClientFactory DbClientFactory { get; }
-
-        protected IStagingBlobUriProvider StagingBlobUriProvider { get; }
+        protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
 
         protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
         {
@@ -89,6 +73,7 @@ namespace KustoCopyConsole.Runner
             var tempTable = Database.TempTables.Query()
                 .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, iterationKey.ActivityName))
                 .Where(pf => pf.Equal(t => t.IterationKey.IterationId, iterationKey.IterationId))
+                .Where(pf => pf.Equal(t => t.State, TempTableState.Created))
                 .Take(1)
                 .FirstOrDefault();
 

@@ -1,32 +1,12 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
-using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
-using System.Diagnostics;
+﻿using KustoCopyConsole.Entity.State;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
     internal abstract class ActivityRunnerBase : RunnerBase
     {
-        public ActivityRunnerBase(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider,
-            TimeSpan wakePeriod)
-            : base(
-                 parameterization,
-                 credential,
-                 database,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 wakePeriod)
+        public ActivityRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
+            : base(parameters, wakePeriod)
         {
         }
 
@@ -42,7 +22,7 @@ namespace KustoCopyConsole.Runner
         {
             while (!IsActivityCompleted(activityName))
             {
-                if (await RunActivityAsync(activityName, ct))
+                if (!await RunActivityAsync(activityName, ct))
                 {
                     await SleepAsync(ct);
                 }

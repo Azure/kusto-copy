@@ -1,33 +1,17 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
+        private const int BATCH_BLOCKS = 20;
 
-        public QueueIngestRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public QueueIngestRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -35,122 +19,99 @@ namespace KustoCopyConsole.Runner
             string activityName,
             CancellationToken ct)
         {
-            var destinationTable = Parameterization.Activities[activityName].Destination
-                .GetTableIdentity();
-            var block = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.ActivityName, activityName))
+            var destinationTable = Parameterization.Activities[activityName]
+                .GetDestinationTableIdentity();
+            var blocks = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
-                .OrderBy(b => b.BlockKey.IterationId)
+                .OrderBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(1)
-                .FirstOrDefault();
+                .Take(BATCH_BLOCKS)
+                .ToImmutableArray();
 
-            if (block != null)
+            if (blocks.Length > 0)
             {
-                var tempTable = TryGetTempTable(block.BlockKey.ToIterationKey());
+                var iterationKey = blocks[0].BlockKey.IterationKey;
+                var tempTable = TryGetTempTable(iterationKey);
 
-                //  It's possible, although unlikely, the temp table hasn't been created yet
-                //  If so, we'll process this block later
-                if (tempTable == null)
+                if (tempTable != null)
                 {
-                    return false;
-                }
-                else
-                {
+                    //  Filter blocks with given iteration key
+                    blocks = blocks
+                        .Where(b => b.BlockKey.IterationKey == iterationKey)
+                        .ToImmutableArray();
+
                     var ingestClient = DbClientFactory.GetIngestClient(
                         destinationTable.ClusterUri,
-                        destinationTable.DatabaseName,
-                        tempTable.TempTableName);
+                        destinationTable.DatabaseName);
+                    var urlRecordsMap = Database.BlobUrls.Query()
+                        .Where(pf => pf.Equal(u => u.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(
+                            u => u.BlockKey.BlockId,
+                            blocks.Select(b => b.BlockKey.BlockId)))
+                        .GroupBy(u => u.BlockKey.BlockId)
+                        .ToImmutableDictionary(g => g.Key, g => g.ToImmutableArray());
+                    var tasks = blocks
+                        .Select(b => QueueIngestBlockAsync(
+                            b,
+                            urlRecordsMap[b.BlockKey.BlockId],
+                            ingestClient,
+                            tempTable.TempTableName,
+                            ct))
+                        .ToImmutableArray();
 
-                    await QueueIngestBlockAsync(block, ingestClient, ct);
+                    await Task.WhenAll(tasks);
 
                     return true;
                 }
             }
-            else
-            {
-                return false;
-            }
+
+            //  No blocks or temp table was available
+            return false;
         }
 
         private async Task QueueIngestBlockAsync(
             BlockRecord block,
+            IEnumerable<BlobUrlRecord> urlRecords,
             IngestClient ingestClient,
+            string tempTableName,
             CancellationToken ct)
         {
-            var urlRecords = Database.BlobUrls.Query()
-                .Where(pf => pf.Equal(u => u.BlockKey.ActivityName, block.BlockKey.ActivityName))
-                .Where(pf => pf.Equal(u => u.BlockKey.IterationId, block.BlockKey.IterationId))
-                .Where(pf => pf.Equal(u => u.BlockKey.BlockId, block.BlockKey.BlockId))
-                .ToImmutableArray();
-
-            Trace.TraceInformation($"Block {block.BlockKey}:  ingest {urlRecords.Length} urls");
-
             var blockTag = $"drop-by:kusto-copy|{Guid.NewGuid()}";
-            var queuingTasks = urlRecords
-                .Select(u => QueueIngestUrlAsync(
-                    ingestClient,
-                    u,
-                    blockTag,
-                    block.MinCreationTime,
-                    ct))
+            //  Get Uri with SAS tokens
+            var authorizedUriTasks = urlRecords
+                .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(u.Url, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(queuingTasks);
-            CommitQueuedBlobs(
-                queuingTasks.Select(o => o.Result),
-                block with
-                {
-                    State = BlockState.Queued,
-                    BlockTag = blockTag
-                });
+            await TaskHelper.WhenAllWithErrors(authorizedUriTasks);
 
-            Trace.TraceInformation($"Block {block.BlockKey}:  {urlRecords.Length} urls queued");
-        }
-
-        private async Task<BlobUrlRecord> QueueIngestUrlAsync(
-            IngestClient ingestClient,
-            BlobUrlRecord blobUrl,
-            string blockTag,
-            DateTime? creationTime,
-            CancellationToken ct)
-        {
-            var authorizedUri = await StagingBlobUriProvider.AuthorizeUriAsync(blobUrl.Url, ct);
-            var serializedQueueResult = await ingestClient.QueueBlobAsync(
-                new KustoPriority(blobUrl.BlockKey),
-                authorizedUri,
+            var authorizedUris = authorizedUriTasks
+                .Select(t => t.Result)
+                .ToImmutableList();
+            //  Queue all blobs
+            var operationTexts = await ingestClient.QueueBlobsAsync(
+                new KustoPriority(block.BlockKey),
+                tempTableName,
+                authorizedUris,
                 blockTag,
-                creationTime,
+                block.CreationTime,
                 ct);
+            var ingestionBatches = operationTexts
+                .Select(op => new IngestionBatchRecord(block.BlockKey, op));
 
-            return blobUrl with
+            using (var tx = Database.CreateTransaction())
             {
-                State = UrlState.Queued,
-                SerializedQueuedResult = serializedQueueResult
-            };
-        }
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with
+                    {
+                        State = BlockState.Queued,
+                        BlockTag = blockTag
+                    },
+                    tx);
+                Database.IngestionBatches.AppendRecords(ingestionBatches);
 
-        private void CommitQueuedBlobs(IEnumerable<BlobUrlRecord> blobUrls, BlockRecord block)
-        {
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.BlobUrls.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        blobUrls.First(),
-                        u => u.BlockKey.ActivityName,
-                        u => u.BlockKey.IterationId,
-                        u => u.BlockKey.BlockId))
-                    .Delete();
-                Database.Blocks.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        block,
-                        b => b.BlockKey.ActivityName,
-                        b => b.BlockKey.IterationId,
-                        b => b.BlockKey.BlockId))
-                    .Delete();
-
-                Database.BlobUrls.AppendRecords(blobUrls, tx);
-                Database.Blocks.AppendRecord(block, tx);
+                tx.Complete();
             }
         }
     }

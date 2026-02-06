@@ -1,10 +1,7 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Kusto.Data;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -27,28 +24,15 @@ namespace KustoCopyConsole.Runner
                 "Skipped"
                 ]);
 
-        public AwaitExportedRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(15))
+        public AwaitExportedRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(15))
         {
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
             var tasks = Parameterization.Activities.Values
-                .GroupBy(a => a.Source.GetTableIdentity().ClusterUri)
+                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
                     g.Select(a => a.ActivityName).ToImmutableArray(),
@@ -67,16 +51,21 @@ namespace KustoCopyConsole.Runner
             {
                 var blockRecords = GetExportingBlocks(activityNames);
 
-                await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
-                //  Sleep
-                await SleepAsync(ct);
+                if (blockRecords.Any())
+                {
+                    await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
+                }
+                else
+                {
+                    await SleepAsync(ct);
+                }
             }
         }
 
         private IImmutableList<BlockRecord> GetExportingBlocks(IEnumerable<string> activityNames)
         {
             var blockRecords = Database.Blocks.Query()
-                .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+                .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                 .Take(MAX_OPERATIONS)
                 .ToImmutableArray();
@@ -117,28 +106,16 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
+                    Database.Blocks.UpdateRecord(
+                        block,
+                        block with
+                        {
+                            ExportOperationId = string.Empty,
+                            State = BlockState.Planned
+                        });
                     TraceWarning(
                         $"Warning!  Operation ID lost:  '{id}' for " +
-                        $"block {block.BlockKey.BlockId} (Iteration={block.BlockKey.IterationId}, " +
-                        $"Activity='{block.BlockKey.ActivityName}') ; block marked for reprocessing");
-                    block = block with
-                    {
-                        ExportOperationId = string.Empty,
-                        State = BlockState.Planned
-                    };
-                    using (var tx = Database.Database.CreateTransaction())
-                    {
-                        Database.Blocks.Query(tx)
-                            .Where(pf => pf.MatchKeys(
-                                block,
-                                b => b.BlockKey.ActivityName,
-                                b => b.BlockKey.IterationId,
-                                b => b.BlockKey.BlockId))
-                            .Delete();
-                        Database.Blocks.AppendRecord(block, tx);
-
-                        tx.Complete();
-                    }
+                        $"block {block.BlockKey} ; block marked for reprocessing");
                 }
             }
         }
@@ -158,30 +135,18 @@ namespace KustoCopyConsole.Runner
                     : "block can't be re-exported";
                 var warning = $"Warning!  Operation ID in state '{status.State}', " +
                     $"status '{status.Status}' " +
-                    $"block {block.BlockKey.BlockId} (Iteration={block.BlockKey.IterationId}, " +
-                    $"Activity='{block.BlockKey.ActivityName}') ; {message}";
+                    $"block {block.BlockKey} ; {message}";
 
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    block = block with
-                    {
-                        ExportOperationId = string.Empty,
-                        State = BlockState.Planned
-                    };
-                    using (var tx = Database.Database.CreateTransaction())
-                    {
-                        Database.Blocks.Query(tx)
-                            .Where(pf => pf.MatchKeys(
-                                block,
-                                b => b.BlockKey.ActivityName,
-                                b => b.BlockKey.IterationId,
-                                b => b.BlockKey.BlockId))
-                            .Delete();
-                        Database.Blocks.AppendRecord(block, tx);
-
-                        tx.Complete();
-                    }
+                    Database.Blocks.UpdateRecord(
+                        block,
+                        block with
+                        {
+                            ExportOperationId = string.Empty,
+                            State = BlockState.Planned
+                        });
                 }
                 else
                 {
@@ -196,9 +161,9 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var tasks = statuses
-                    .Where(s => s.State == "Completed")
-                    .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
-                    .ToImmutableArray();
+                .Where(s => s.State == "Completed")
+                .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
+                .ToImmutableArray();
 
             await TaskHelper.WhenAllWithErrors(tasks);
         }
@@ -208,8 +173,8 @@ namespace KustoCopyConsole.Runner
             BlockRecord block,
             CancellationToken ct)
         {
-            var activityParam = Parameterization.Activities[block.BlockKey.ActivityName];
-            var sourceTable = activityParam.Source.GetTableIdentity();
+            var activityParam = Parameterization.Activities[block.BlockKey.IterationKey.ActivityName];
+            var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);
@@ -219,48 +184,39 @@ namespace KustoCopyConsole.Runner
                 ct);
             var urls = details
                 .Select(d => new BlobUrlRecord(
-                    UrlState.Exported,
                     block.BlockKey,
                     d.BlobUri,
-                    d.RecordCount,
-                    string.Empty))
+                    d.RecordCount))
                 .ToImmutableArray();
-            var newBlock = block with
-            {
-                State = BlockState.Exported,
-                ExportOperationId = string.Empty,
-                ExportedRowCount = details.Sum(d => d.RecordCount)
-            };
 
-            Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
-            using (var tx = Database.Database.CreateTransaction())
+            if (urls.Length > 0)
             {
-                Database.Blocks.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        newBlock,
-                        b => b.BlockKey.ActivityName,
-                        b => b.BlockKey.IterationId,
-                        b => b.BlockKey.BlockId))
-                    .Delete();
-                Database.BlobUrls.AppendRecords(urls, tx);
-                Database.Blocks.AppendRecord(newBlock, tx);
+                var newBlock = block with
+                {
+                    State = BlockState.Exported,
+                    ExportOperationId = string.Empty,
+                    ExportedRowCount = details.Sum(d => d.RecordCount)
+                };
 
-                tx.Complete();
+                Trace.TraceInformation($"Exported block {block.BlockKey}:  {urls.Count()} urls");
+                using (var tx = Database.CreateTransaction())
+                {
+                    Database.Blocks.UpdateRecord(block, newBlock, tx);
+                    Database.BlobUrls.AppendRecords(urls, tx);
+
+                    tx.Complete();
+                }
             }
-            ValidatePlannedRowCount(newBlock, urls);
-        }
-
-        private void ValidatePlannedRowCount(
-            BlockRecord block,
-            IImmutableList<BlobUrlRecord> urls)
-        {
-            var exportedRowCount = urls.Sum(u => u.RowCount);
-
-            if (block.PlannedRowCount != exportedRowCount)
+            else
             {
-                TraceWarning($"Warning!  Block {block.BlockKey} " +
-                    $"had planned row count of {block.PlannedRowCount} but " +
-                    $"exported {exportedRowCount} rows");
+                Database.Blocks.UpdateRecord(
+                    block,
+                    block with
+                    {
+                        ExportOperationId = string.Empty,
+                        State = BlockState.ExtentMoved,
+                        ExportedRowCount = 0
+                    });
             }
         }
         #endregion

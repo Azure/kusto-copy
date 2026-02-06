@@ -1,10 +1,6 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -12,21 +8,8 @@ namespace KustoCopyConsole.Runner
 {
     internal class TempTableCreatingRunner : RunnerBase
     {
-        public TempTableCreatingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(10))
+        public TempTableCreatingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(10))
         {
         }
 
@@ -56,7 +39,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
-            var destination = activity.Destination.GetTableIdentity();
+            var destination = activity.GetDestinationTableIdentity();
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 destination.ClusterUri,
                 destination.DatabaseName);
@@ -84,28 +67,22 @@ namespace KustoCopyConsole.Runner
             TableIdentity destination,
             CancellationToken ct)
         {
-            using (var tx = Database.Database.CreateTransaction())
+            using (var tx = Database.CreateTransaction())
             {
                 var tempTableName = $"kc-{destination.TableName}-{Guid.NewGuid().ToString("N")}";
-
-                tempTableRecord = tempTableRecord with
+                var newTempTableRecord = tempTableRecord with
                 {
                     State = TempTableState.Creating,
                     TempTableName = tempTableName
                 };
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        tempTableRecord,
-                        t => t.IterationKey.ActivityName,
-                        t => t.IterationKey.IterationId))
-                    .Delete();
-                Database.TempTables.AppendRecord(tempTableRecord, tx);
+
+                Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord, tx);
 
                 //  We want to ensure record is persisted (logged) before creating a temp table so
                 //  we don't lose track of the table name
-                await tx.LogAndCompleteAsync();
+                await tx.CompleteAsync(ct);
 
-                return tempTableRecord;
+                return newTempTableRecord;
             }
         }
 
@@ -121,24 +98,15 @@ namespace KustoCopyConsole.Runner
                 destination.TableName,
                 tempTableRecord.TempTableName,
                 ct);
-            tempTableRecord = tempTableRecord with
+
+            var newTempTableRecord = tempTableRecord with
             {
                 State = TempTableState.Created
             };
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.TempTables.Query(tx)
-                    .Where(pf => pf.MatchKeys(
-                        tempTableRecord,
-                        t => t.IterationKey.ActivityName,
-                        t => t.IterationKey.IterationId))
-                    .Delete();
-                Database.TempTables.AppendRecord(tempTableRecord);
 
-                tx.Complete();
-            }
+            Database.TempTables.UpdateRecord(tempTableRecord, newTempTableRecord);
 
-            return tempTableRecord;
+            return newTempTableRecord;
         }
     }
 }

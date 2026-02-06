@@ -2,7 +2,7 @@
 using Kusto.Data;
 using Kusto.Data.Common;
 using Kusto.Data.Net.Client;
-using Kusto.Ingest;
+using Kusto.Ingest.V2;
 using KustoCopyConsole.JobParameter;
 using System.Collections.Immutable;
 
@@ -15,7 +15,7 @@ namespace KustoCopyConsole.Kusto
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dmCommandProviderMap;
-        private readonly ImmutableDictionary<Uri, IKustoQueuedIngestClient> _ingestProviderMap;
+        private readonly ImmutableDictionary<Uri, IMultiIngest> _ingestProviderMap;
 
         #region Constructor
         public ProviderFactory(
@@ -25,11 +25,11 @@ namespace KustoCopyConsole.Kusto
         {
             var sourceClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
+                .Select(a => a.GetSourceTableIdentity().ClusterUri)
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Destination.ClusterUri))
+                .Select(a => a.GetDestinationTableIdentity().ClusterUri)
                 .Distinct();
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)
@@ -52,6 +52,7 @@ namespace KustoCopyConsole.Kusto
                     Uri = uri,
                     Builder = CreateBuilder(credentials, uri, traceApplicationName)
                 });
+            var appVersion = this.GetType().Assembly.GetName().Version;
 
             _queryProviderMap = allBuilders
                 .ToImmutableDictionary(
@@ -68,7 +69,10 @@ namespace KustoCopyConsole.Kusto
             _ingestProviderMap = destinationIngestionBuilders
                 .ToImmutableDictionary(
                 e => e.Uri,
-                e => KustoIngestFactory.CreateQueuedIngestClient(e.Builder));
+                e => QueuedIngestClientBuilder.Create(e.Uri)
+                .WithAuthentication(credentials)
+                .WithClientDetails($"{APPLICATION_NAME}:{appVersion}")
+                .Build());
         }
 
         private static KustoConnectionStringBuilder CreateBuilder(
@@ -112,7 +116,7 @@ namespace KustoCopyConsole.Kusto
             return _dmCommandProviderMap[clusterUri];
         }
 
-        public IKustoQueuedIngestClient GetIngestProvider(Uri clusterUri)
+        public IMultiIngest GetIngestProvider(Uri clusterUri)
         {
             return _ingestProviderMap[clusterUri];
         }

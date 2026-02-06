@@ -1,5 +1,4 @@
-﻿
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 
 namespace KustoCopyConsole.JobParameter
 {

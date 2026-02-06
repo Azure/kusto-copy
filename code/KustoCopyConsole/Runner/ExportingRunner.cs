@@ -1,9 +1,6 @@
-﻿using Azure.Core;
-using KustoCopyConsole.Db;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
-using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Storage;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -19,28 +16,15 @@ namespace KustoCopyConsole.Runner
         private const int BLOCK_BATCH = 50;
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
 
-        public ExportingRunner(
-            MainJobParameterization parameterization,
-            TokenCredential credential,
-            TrackDatabase database,
-            RowItemGateway rowItemGateway,
-            DbClientFactory dbClientFactory,
-            IStagingBlobUriProvider stagingBlobUriProvider)
-           : base(
-                 parameterization,
-                 credential,
-                 database,
-                 rowItemGateway,
-                 dbClientFactory,
-                 stagingBlobUriProvider,
-                 TimeSpan.FromSeconds(5))
+        public ExportingRunner(RunnerParameters parameters)
+           : base(parameters, TimeSpan.FromSeconds(5))
         {
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
             var tasks = Parameterization.Activities.Values
-                .GroupBy(a => a.Source.GetTableIdentity().ClusterUri)
+                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                 .Select(g => Task.Run(() => RunActivitiesAsync(
                     g.Key,
                     g.Select(a => a.ActivityName).ToImmutableArray(),
@@ -55,35 +39,32 @@ namespace KustoCopyConsole.Runner
             IImmutableList<string> activityNames,
             CancellationToken ct)
         {
-            var capacityCache =
-                new CapacityCache(DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD), 0);
+            var capacityCache = new CapacityCache(
+                DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD),
+                0);
 
             while (!AreActivitiesCompleted(activityNames))
             {
                 //  Ensures capacity of source cluster
-                capacityCache = capacityCache.CachedTime < DateTime.Now
-                    ? capacityCache
-                    : new CapacityCache(
+                capacityCache = capacityCache.CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now
+                    ? new CapacityCache(
                         DateTime.Now,
-                        await FetchCapacityAsync(sourceClusterUri, ct));
+                        await FetchCapacityAsync(sourceClusterUri, ct))
+                    : capacityCache;
 
                 var plannedBlocks = FetchPlannedBlocks(activityNames, capacityCache.CachedCapacity);
 
                 if (plannedBlocks.Any())
                 {
-                    var iterationKeys = plannedBlocks
-                        .Select(b => b.BlockKey.ToIterationKey());
-                    var iterationRecordMap = Database.Iterations.Query()
-                        .Where(pf => pf.In(i => i.IterationKey, iterationKeys))
-                        .ToImmutableDictionary(i => i.IterationKey);
+                    var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
+                    var iteration = Database.Iterations.Query()
+                        .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                        .First();
                     var startExportTasks = plannedBlocks
-                        .Select(b => Task.Run(() => StartExportAsync(
-                            b,
-                            iterationRecordMap[b.BlockKey.ToIterationKey()],
-                            ct)))
+                        .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
                         .ToImmutableArray();
 
-                    await Task.WhenAll(startExportTasks);
+                    await TaskHelper.WhenAllWithErrors(startExportTasks);
                 }
                 else
                 {
@@ -95,32 +76,41 @@ namespace KustoCopyConsole.Runner
         private IEnumerable<BlockRecord> FetchPlannedBlocks(
             IEnumerable<string> activityNames,
             int cachedCapacity)
-        {
-            //  Fetch a batch of blocks ready to export
-            var plannedBlocks = Database.Blocks.Query()
-                .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+        {   //  The first (by priority) block will determine the activity and iteration
+            //  we'll work on
+            var firstPlannedBlock = Database.Blocks.Query()
+                .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
-                .OrderBy(b => b.BlockKey.ActivityName)
-                .ThenBy(b => b.BlockKey.IterationId)
+                .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
+                .ThenBy(b => b.BlockKey.IterationKey.IterationId)
                 .ThenBy(b => b.BlockKey.BlockId)
-                .Take(BLOCK_BATCH)
-                .ToImmutableArray();
+                .Take(1)
+                .FirstOrDefault();
 
-            if (plannedBlocks.Any())
+            if (firstPlannedBlock != null)
             {
                 //  Fetch all blocks being in 'exporting' state
                 var exportingCount = (int)Database.Blocks.Query()
-                    .Where(pf => pf.In(b => b.BlockKey.ActivityName, activityNames))
+                    .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                     .Count();
-
                 //  Cap the blocks with available capacity
-                return plannedBlocks
-                    .Take(Math.Max(0, cachedCapacity - exportingCount));
+                var maxExporting =
+                    Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
+                var plannedBlocks = Database.Blocks.Query()
+                    .Where(pf => pf.Equal(
+                        b => b.BlockKey.IterationKey,
+                        firstPlannedBlock.BlockKey.IterationKey))
+                    .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
+                    .OrderBy(b => b.BlockKey.BlockId)
+                    .Take(maxExporting)
+                    .ToImmutableArray();
+
+                return plannedBlocks;
             }
             else
             {
-                return plannedBlocks;
+                return Array.Empty<BlockRecord>();
             }
         }
 
@@ -129,8 +119,8 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activityParam = Parameterization.Activities[blockRecord.BlockKey.ActivityName];
-            var sourceTable = activityParam.Source.GetTableIdentity();
+            var activityParam = Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
+            var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,
                 sourceTable.DatabaseName);
@@ -153,17 +143,7 @@ namespace KustoCopyConsole.Runner
                 ExportOperationId = operationId
             };
 
-            using (var tx = Database.Database.CreateTransaction())
-            {
-                Database.Blocks.Query()
-                    .Where(pf => pf.MatchKeys(
-                        newBlockRecord,
-                        b => b.BlockKey.ActivityName,
-                        b => b.BlockKey.IterationId,
-                        b => b.BlockKey.BlockId))
-                    .Delete();
-                Database.Blocks.AppendRecord(newBlockRecord);
-            }
+            Database.Blocks.UpdateRecord(blockRecord, newBlockRecord);
         }
 
         private async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)

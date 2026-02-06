@@ -8,10 +8,10 @@ using System.Data;
 
 namespace KustoCopyConsole.Kusto
 {
-    internal class DbClientFactory : IDisposable
+    internal class DbClientFactory : IAsyncDisposable
     {
-        private const int MAX_CONCURRENT_DM_COMMAND = 2;
-        private const int MAX_CONCURRENT_INGEST_QUEUING = 25;
+        private const int MAX_CONCURRENT_DM_COMMAND = 10;
+        private const int MAX_CONCURRENT_INGEST_QUEUING = 75;
 
         private readonly ProviderFactory _providerFactory;
         private readonly IImmutableDictionary<Uri, PriorityExecutionQueue<KustoPriority>> _allClusterQueryQueueMap;
@@ -30,11 +30,11 @@ namespace KustoCopyConsole.Kusto
                 new ProviderFactory(parameterization, credentials, traceApplicationName);
             var sourceClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Source.ClusterUri))
+                .Select(a => a.GetSourceTableIdentity().ClusterUri)
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
                 .Values
-                .Select(a => NormalizedUri.NormalizeUri(a.Destination.ClusterUri))
+                .Select(a => a.GetDestinationTableIdentity().ClusterUri)
                 .Distinct();
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)
@@ -112,8 +112,18 @@ namespace KustoCopyConsole.Kusto
         }
         #endregion
 
-        void IDisposable.Dispose()
+        async ValueTask IAsyncDisposable.DisposeAsync()
         {
+            var priorityExecutionQueues = _allClusterQueryQueueMap.Values
+                .Concat(_allClusterCommandQueueMap.Values)
+                .Concat(_destinationClusterDmCommandQueueMap.Values)
+                .Concat(_destinationClusterIngestCommandQueueMap.Values)
+                .Cast<IAsyncDisposable>();
+            var priorityExecutionQueueTasks = priorityExecutionQueues
+                .Select(q => q.DisposeAsync().AsTask())
+                .ToImmutableArray();
+
+            await Task.WhenAll(priorityExecutionQueueTasks);
             ((IDisposable)_providerFactory).Dispose();
         }
 
@@ -162,13 +172,13 @@ namespace KustoCopyConsole.Kusto
             }
         }
 
-        public IngestClient GetIngestClient(Uri clusterUri, string database, string table)
+        public IngestClient GetIngestClient(Uri clusterUri, string database)
         {
             try
             {
                 var queue = _destinationClusterIngestCommandQueueMap[clusterUri];
                 var ingestProvider = _providerFactory.GetIngestProvider(clusterUri);
-                var ingestClient = new IngestClient(ingestProvider, queue, database, table);
+                var ingestClient = new IngestClient(ingestProvider, queue, database);
 
                 return ingestClient;
             }
