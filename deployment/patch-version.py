@@ -18,7 +18,7 @@ if len(sys.argv) != 3:
 else:
     path = sys.argv[1]
     patchNumber = sys.argv[2]
-    
+
     print ('Text file:  %s' % (path))
     print ('Patch Number:  %s' % (patchNumber))
 
@@ -27,20 +27,33 @@ else:
     print('XML content:')
     print(document.toxml())
 
-    #   Set GeneratePackageOnBuild to true
-    generate=document.getElementsByTagName('GeneratePackageOnBuild')[0]
-    generate.firstChild.nodeValue = "true"
-
     #   Add patch to the version
     version=document.getElementsByTagName('Version')[0]
-    version.firstChild.nodeValue += "." + patchNumber
-    fullVersion = version.firstChild.nodeValue
+    patchVersion = version.firstChild.nodeValue
+    versionParts = patchVersion.split('.')
+    if len(versionParts)!=3:
+        print("The project version should have three parts, e.g. 1.2.3 but doesn't:  " % patchVersion)
 
-    #   Output project
-    print('Nuget project content:')
-    print(document.toxml())
-    writeXml(document, path)
+        exit(1)
+    else:
+        version.firstChild.nodeValue = versionParts[0] + '.' + versionParts[1] + '.' + versionParts[2] + "." + patchNumber
+        fullVersion = version.firstChild.nodeValue
 
-    #   Output variable
-    print('Set the full version in GitHub Action output:  %s' % fullVersion)
-    print('##[set-output name=full-version;]%s' % fullVersion)
+        #   Partial versions
+        minorVersion = versionParts[0] + '.' + versionParts[1]
+        majorVersion = versionParts[0]
+
+        #   Output project
+        print('Project content:')
+        print(document.toxml())
+        writeXml(document, path)
+
+        #   Output variable
+        print('Set the full version in GitHub Action output:  %s' % fullVersion)
+        print('##[set-output name=full-version;]%s' % fullVersion)
+        print('Set the patch version in GitHub Action output:  %s' % patchVersion)
+        print('##[set-output name=patch-version;]%s' % patchVersion)
+        print('Set the major version in GitHub Action output:  %s' % minorVersion)
+        print('##[set-output name=minor-version;]%s' % minorVersion)
+        print('Set the minor version in GitHub Action output:  %s' % majorVersion)
+        print('##[set-output name=major-version;]%s' % majorVersion)
