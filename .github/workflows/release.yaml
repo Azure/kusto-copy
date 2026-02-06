@@ -107,11 +107,11 @@ jobs:
       with:
         name: linux-assets
         path: linux-assets
-    - name: Download Mac Assets
-      uses: actions/download-artifact@master
-      with:
-        name: mac-assets
-        path: mac-assets
+    # - name: Download Mac Assets
+    #   uses: actions/download-artifact@master
+    #   with:
+    #     name: mac-assets
+    #     path: mac-assets
     - name: Download Windows Assets
       uses: actions/download-artifact@master
       with:
