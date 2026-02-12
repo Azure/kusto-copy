@@ -35,7 +35,7 @@ namespace KustoCopyConsole.Runner
 
             public async Task TestAuthenticationAsync(CancellationToken ct)
             {
-                await _containerClient.GetAccountInfoAsync();
+                await _containerClient.ExistsAsync();
             }
 
             public async Task<Uri> GetWritableFolderUrisAsync(string subPath, CancellationToken ct)
