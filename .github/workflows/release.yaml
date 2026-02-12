@@ -28,7 +28,9 @@ jobs:
             assetSuffix:  windows
           
           - os: macos
-            platform:  macos-latest
+          # Capacity issue at GitHub, trying a different image
+            # platform:  macos-latest
+            platform:  macOS-14
             dotnetOs:  osx-x64
             ASSETS_NAME:  mac-assets
             assetSuffix:  mac
