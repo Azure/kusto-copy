@@ -12,8 +12,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
-        os: [linux]  # Define platforms
-        # os: [linux, windows, macos]  # Define platforms
+        os: [linux, windows, macos]  # Define platforms
+
         include:
           - os: linux
             platform: ubuntu-latest
@@ -27,11 +27,11 @@ jobs:
             ASSETS_NAME:  windows-assets
             assetSuffix:  windows
           
-          # - os: macos
-          #   platform:  macos-latest
-          #   dotnetOs:  osx-x64
-          #   ASSETS_NAME:  mac-assets
-          #   assetSuffix:  mac
+          - os: macos
+            platform:  macos-latest
+            dotnetOs:  osx-x64
+            ASSETS_NAME:  mac-assets
+            assetSuffix:  mac
           
     env:
       # See OS catalog here:  https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
@@ -107,11 +107,11 @@ jobs:
       with:
         name: linux-assets
         path: linux-assets
-    # - name: Download Mac Assets
-    #   uses: actions/download-artifact@master
-    #   with:
-    #     name: mac-assets
-    #     path: mac-assets
+    - name: Download Mac Assets
+      uses: actions/download-artifact@master
+      with:
+        name: mac-assets
+        path: mac-assets
     - name: Download Windows Assets
       uses: actions/download-artifact@master
       with:
@@ -133,10 +133,10 @@ jobs:
       run:  |
         cd linux-assets/bin
         tar -czvf ../../final-assets/kusto-copy-linux.tar.gz *
-    # - name: Zip Mac executable
-    #   run:  |
-    #     cd mac-assets/bin
-    #     tar -czvf ../../final-assets/kusto-copy-mac.tar.gz *
+    - name: Zip Mac executable
+      run:  |
+        cd mac-assets/bin
+        tar -czvf ../../final-assets/kusto-copy-mac.tar.gz *
     - name: Zip Windows executable
       run:  |
         cd windows-assets/bin
