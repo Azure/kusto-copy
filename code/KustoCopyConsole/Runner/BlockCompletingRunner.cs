@@ -28,7 +28,7 @@ namespace KustoCopyConsole.Runner
                 var blocksByIterationKey = movedBlockKeys
                     .GroupBy(key => key.IterationKey);
 
-                await Task.WhenAll(directoryDeleteTasks);
+                await TaskHelper.WhenAllWithErrors(directoryDeleteTasks);
 
                 using (var tx = Database.CreateTransaction())
                 {

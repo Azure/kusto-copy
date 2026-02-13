@@ -150,7 +150,7 @@ namespace KustoCopyConsole.Concurrency
                 .OrderByDescending(i => i);
 
             //  Observe
-            await Task.WhenAll(completedRequests.Select(o => o.Task));
+            await TaskHelper.WhenAllWithErrors(completedRequests.Select(o => o.Task));
             //  Clean task list
             foreach (var index in completedIndexes)
             {

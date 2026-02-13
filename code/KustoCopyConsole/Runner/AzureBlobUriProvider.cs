@@ -26,8 +26,11 @@ namespace KustoCopyConsole.Runner
 
             public DirectoryProvider(Uri rootFolderUri, TokenCredential credential)
             {
+                var blobClient = new BlobClient(rootFolderUri, credential);
+
+
                 _directoryClient = new DataLakeDirectoryClient(rootFolderUri, credential);
-                _containerClient = new BlobContainerClient(rootFolderUri, credential);
+                _containerClient = blobClient.GetParentBlobContainerClient();
                 _keyCache = new(FetchUserDelegationKey);
             }
 

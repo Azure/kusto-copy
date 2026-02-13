@@ -39,7 +39,7 @@ namespace KustoCopyConsole.Runner
                     ct)))
                 .ToImmutableList();
 
-            await Task.WhenAll(tasks);
+            await TaskHelper.WhenAllWithErrors(tasks);
         }
 
         private async Task RunActivitiesAsync(

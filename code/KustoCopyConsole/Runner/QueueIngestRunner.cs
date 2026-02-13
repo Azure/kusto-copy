@@ -60,7 +60,7 @@ namespace KustoCopyConsole.Runner
                             ct))
                         .ToImmutableArray();
 
-                    await Task.WhenAll(tasks);
+                    await TaskHelper.WhenAllWithErrors(tasks);
 
                     return true;
                 }

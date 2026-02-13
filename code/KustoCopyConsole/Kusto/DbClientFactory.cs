@@ -123,7 +123,7 @@ namespace KustoCopyConsole.Kusto
                 .Select(q => q.DisposeAsync().AsTask())
                 .ToImmutableArray();
 
-            await Task.WhenAll(priorityExecutionQueueTasks);
+            await TaskHelper.WhenAllWithErrors(priorityExecutionQueueTasks);
             ((IDisposable)_providerFactory).Dispose();
         }
 
