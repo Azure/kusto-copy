@@ -1,17 +1,16 @@
-﻿using Kusto.Cloud.Platform.Utils;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
     internal class AwaitIngestRunner : ActivityRunnerBase
     {
-        private const int MAX_BLOCK_COUNT = 1000;
+        private const int MAX_BLOCK_INGESTED_COUNT = 500;
+        private const int MAX_BLOCK_EXTENT_COUNT = 50;
 
         public AwaitIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
@@ -33,7 +32,9 @@ namespace KustoCopyConsole.Runner
 
             foreach (var iterationKey in iterationKeys)
             {
-                await UpdateIngestedAsync(iterationKey, dbClient, ct);
+                while (await UpdateIngestedAsync(iterationKey, dbClient, ct))
+                {
+                }
                 await FailureDetectionAsync(iterationKey, destinationTable, ct);
             }
 
@@ -41,102 +42,110 @@ namespace KustoCopyConsole.Runner
         }
 
         #region Update Ingested
-        private async Task UpdateIngestedAsync(
+        private async Task<bool> UpdateIngestedAsync(
             IterationKey iterationKey,
             DbCommandClient dbClient,
             CancellationToken ct)
         {
-            var queuedBlockByBlockId = Database.Blocks.Query()
-                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
-                .OrderBy(b => b.BlockKey.BlockId)
-                .Take(MAX_BLOCK_COUNT)
-                .ToImmutableDictionary(b => b.BlockKey.BlockId);
+            var tempTable = GetTempTable(iterationKey);
+            var ingestedBlocks = await DetectIngestedBlocksAsync(
+                iterationKey,
+                dbClient,
+                tempTable.TempTableName,
+                ct);
 
-            if (queuedBlockByBlockId.Any())
+            if (ingestedBlocks.Any())
             {
-                var tempTable = GetTempTable(iterationKey);
-                var extents = await DetectIngestedBlocksAsync(
-                    queuedBlockByBlockId.Values,
-                    iterationKey,
-                    dbClient,
+                var extentRowCounts = await dbClient.GetExtentRowCountsAsync(
+                    new KustoPriority(iterationKey),
+                    ingestedBlocks.Select(b => b.BlockTag),
                     tempTable.TempTableName,
                     ct);
+                var blocksByTag = ingestedBlocks
+                    .ToImmutableDictionary(b => b.BlockTag);
+                var extents = extentRowCounts
+                    .Select(erc => new ExtentRecord(
+                        blocksByTag[erc.Tags].BlockKey,
+                        erc.ExtentId,
+                        erc.RecordCount));
 
                 using (var tx = Database.CreateTransaction())
                 {
-                    var ingestedBlockIds = extents
-                        .Select(e => e.BlockKey.BlockId)
-                        .Distinct();
-                    var ingestedBlocks = ingestedBlockIds
-                        .Select(id => queuedBlockByBlockId[id])
-                        .Select(block => block with
-                        {
-                            State = BlockState.Ingested
-                        });
-
                     Database.Blocks.Query(tx)
-                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(
+                            b => b.BlockKey.BlockId,
+                            ingestedBlocks
+                            .Select(b => b.BlockKey.BlockId)))
                         .Delete();
-                    Database.Blocks.AppendRecords(ingestedBlocks, tx);
+                    Database.Blocks.AppendRecords(
+                        ingestedBlocks
+                        .Select(b => b with { State = BlockState.Ingested }),
+                        tx);
                     Database.Extents.AppendRecords(extents, tx);
 
-                    //  We do wait for the ingested status to persist before moving
-                    //  This is to avoid moving extents before the confirmation of
-                    //  ingestion is persisted:  this would result in the block
-                    //  staying in "queued" if the process would restart
-                    await tx.CompleteAsync(ct);
+                    tx.Complete();
                 }
+
+                return true;
+            }
+            else
+            {
+                return false;
             }
         }
 
-        private async Task<IEnumerable<ExtentRecord>> DetectIngestedBlocksAsync(
-            IEnumerable<BlockRecord> blocks,
+        private async Task<IEnumerable<BlockRecord>> DetectIngestedBlocksAsync(
             IterationKey iterationKey,
             DbCommandClient dbClient,
             string tempTableName,
             CancellationToken ct)
         {
-            var allExtentRowCounts = await dbClient.GetExtentRowCountsAsync(
-                new KustoPriority(iterationKey),
-                blocks.Select(b => b.BlockTag),
-                tempTableName,
-                ct);
-            var extentRowCountByTags = allExtentRowCounts
-                .GroupBy(e => e.Tags)
-                .ToImmutableDictionary(g => g.Key);
-            var blockByTags = blocks
-                .ToImmutableDictionary(b => b.BlockTag);
-            var extents = new List<ExtentRecord>();
+            var queuedBlocks = Database.Blocks.Query()
+                .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                .Where(pf => pf.Equal(b => b.State, BlockState.Queued))
+                .OrderBy(b => b.BlockKey.BlockId)
+                .Take(MAX_BLOCK_INGESTED_COUNT)
+                .ToImmutableArray();
 
-            Trace.TraceInformation($"AwaitIngest:  {allExtentRowCounts.Count} " +
-                $"extents found with {extentRowCountByTags.Count} tags");
-            foreach (var tag in extentRowCountByTags.Keys)
+            if (queuedBlocks.Length > 0)
             {
-                if (extentRowCountByTags.TryGetValue(tag, out var extentRowCounts)
-                    && blockByTags.TryGetValue(tag, out var block))
-                {
-                    var blockExtentRowCount = extentRowCounts
-                        .Sum(e => e.RecordCount);
+                var tagRowCounts = await dbClient.GetIngestedTagRowCountsAsync(
+                    new KustoPriority(iterationKey),
+                    queuedBlocks.Select(b => b.BlockTag),
+                    queuedBlocks.Select(b => b.ExportedRowCount),
+                    tempTableName,
+                    ct);
 
-                    if (blockExtentRowCount > block.ExportedRowCount)
+                if (tagRowCounts.Any())
+                {
+                    var queuedBlocksByTags = queuedBlocks.ToImmutableDictionary(b => b.BlockTag);
+                    var overIngestedBlock = tagRowCounts
+                        .Select(trc => new
+                        {
+                            RowCount = trc.RecordCount,
+                            Block = queuedBlocksByTags[trc.Tags]
+                        })
+                        .Where(o => o.Block.ExportedRowCount < o.RowCount)
+                        .FirstOrDefault();
+
+                    if (overIngestedBlock != null)
                     {
                         throw new CopyException(
-                            $"Exported row count is {block.ExportedRowCount} while " +
-                            $"we observe {blockExtentRowCount}",
+                            $"Exported row count is {overIngestedBlock.Block.ExportedRowCount} " +
+                            $"while we ingested {overIngestedBlock.RowCount} rows for block " +
+                            $"{overIngestedBlock.Block.BlockKey}",
                             false);
                     }
-                    if (blockExtentRowCount == block.ExportedRowCount)
-                    {
-                        var blockExtents = extentRowCounts
-                            .Select(e => new ExtentRecord(block.BlockKey, e.ExtentId, e.RecordCount));
 
-                        extents.AddRange(blockExtents);
-                    }
+                    return tagRowCounts
+                        .Select(trc => queuedBlocksByTags[trc.Tags])
+                        .Take(MAX_BLOCK_EXTENT_COUNT)
+                        .ToImmutableArray();
                 }
             }
 
-            return extents;
+            return Array.Empty<BlockRecord>();
         }
         #endregion
 

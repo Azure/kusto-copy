@@ -1,4 +1,5 @@
-﻿using Kusto.Data.Common;
+﻿using Kusto.Cloud.Platform.Data;
+using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
@@ -249,7 +250,44 @@ let ['{tableName}'] = ['{tableName}']
         }
         #endregion
 
-        public async Task<IImmutableList<ExtentRowCount>> GetExtentRowCountsAsync(
+        public async Task<IImmutableList<TagRowCount>> GetIngestedTagRowCountsAsync(
+            KustoPriority priority,
+            IEnumerable<string> tags,
+            IEnumerable<long> expectedRowCounts,
+            string tempTableName,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+               priority,
+               async () =>
+               {
+                   var tagListText = string.Join(",", tags.Select(t => $"'{t}'"));
+                   var rowCountListText = string.Join(",", expectedRowCounts);
+                   var commandText = @$"
+.show table ['{tempTableName}'] extents
+| summarize RowCount=sum(RowCount) by Tags
+| lookup kind=inner (
+    print Tags=dynamic([{tagListText}]), ExpectedRowCount=dynamic([{rowCountListText}])
+    | mv-expand Tags to typeof(string), ExpectedRowCount to typeof(long)) on Tags
+//  We keep only the ingested tags
+| where ExpectedRowCount<=RowCount
+";
+                   var properties = new ClientRequestProperties();
+                   var reader = await _provider.ExecuteControlCommandAsync(
+                       DatabaseName,
+                       commandText,
+                       properties);
+                   var result = reader
+                        .ToEnumerable(r => new TagRowCount(
+                            (string)r["Tags"],
+                            (long)r["RowCount"]))
+                        .ToImmutableArray();
+
+                   return result;
+               });
+        }
+
+        public async Task<IEnumerable<ExtentRowCount>> GetExtentRowCountsAsync(
             KustoPriority priority,
             IEnumerable<string> tags,
             string tempTableName,
@@ -259,23 +297,25 @@ let ['{tableName}'] = ['{tableName}']
                priority,
                async () =>
                {
+                   var tagListText = string.Join(",", tags.Select(t => $"'{t}'"));
                    var commandText = @$"
 .show table ['{tempTableName}'] extents
-| project ExtentId, RowCount, Tags
+| where Tags in ({tagListText})
+| project ExtentId, Tags, RowCount
 ";
                    var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
                        properties);
-                   var result = reader
+                   var results = reader
                         .ToEnumerable(r => new ExtentRowCount(
                             ((Guid)r["ExtentId"]).ToString(),
                             (string)r["Tags"],
                             (long)r["RowCount"]))
                         .ToImmutableArray();
 
-                   return result;
+                   return results;
                });
         }
 
