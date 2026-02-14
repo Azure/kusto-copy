@@ -71,13 +71,22 @@ namespace KustoCopyConsole.Runner
 
                 using (var tx = Database.CreateTransaction())
                 {
+                    var ingestedBlockIds = ingestedBlocks
+                        .Select(b => b.BlockKey.BlockId);
+
                     Database.Blocks.Query(tx)
                         .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                        .Where(pf => pf.In(
-                            b => b.BlockKey.BlockId,
-                            ingestedBlocks
-                            .Select(b => b.BlockKey.BlockId)))
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
                         .Delete();
+                    Database.IngestionBatches.Query(tx)
+                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                        .Delete();
+                    Database.BlobUrls.Query(tx)
+                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                        .Delete();
+
                     Database.Blocks.AppendRecords(
                         ingestedBlocks
                         .Select(b => b with { State = BlockState.Ingested }),
