@@ -32,8 +32,8 @@ namespace KustoCopyConsole
             HelpText = "Set the staging storage directories in the form of storage container uris")]
         public IEnumerable<string> StagingStorageDirectories { get; set; } = Array.Empty<string>();
 
-        [Option('a', "auth", Required = false, HelpText = "Set authentication method.")]
-        public string Authentication { get; set; } = string.Empty;
+        [Option("clientId", Required = false, HelpText = "Managed Identity client ID")]
+        public string ManagedIdentityClientId { get; set; } = string.Empty;
 
         [Option('q', "query", Required = false, HelpText = "Set query, e.g. nyc_taxi.")]
         public string Query { get; set; } = string.Empty;

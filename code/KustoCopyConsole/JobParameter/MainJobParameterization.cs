@@ -20,7 +20,7 @@ namespace KustoCopyConsole.JobParameter
         public IImmutableList<string> StagingStorageDirectories { get; set; } =
             ImmutableArray<string>.Empty;
 
-        public string Authentication { get; set; } = string.Empty;
+        public string ManagedIdentityClientId { get; set; } = string.Empty;
 
         #region Constructors
         public static MainJobParameterization FromOptions(CommandLineOptions options)
@@ -97,7 +97,7 @@ namespace KustoCopyConsole.JobParameter
                         TableOption = new TableOption()
                     })
                 .ToImmutableDictionary(a => a.ActivityName, a => a),
-                Authentication = options.Authentication,
+                ManagedIdentityClientId = options.ManagedIdentityClientId,
                 StagingStorageDirectories = options.StagingStorageDirectories.ToImmutableArray()
             };
 
@@ -121,14 +121,17 @@ namespace KustoCopyConsole.JobParameter
 
         internal TokenCredential CreateCredentials()
         {
-            if (string.IsNullOrWhiteSpace(Authentication))
+            var options = new DefaultAzureCredentialOptions
             {
-                return new AzureCliCredential();
-            }
-            else
+                CredentialProcessTimeout = TimeSpan.FromSeconds(15)
+            };
+
+            if (string.IsNullOrWhiteSpace(ManagedIdentityClientId))
             {
-                throw new NotImplementedException();
+                options.ManagedIdentityClientId = ManagedIdentityClientId;
             }
+
+            return new DefaultAzureCredential(options);
         }
 
         internal string ToYaml()

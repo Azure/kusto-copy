@@ -71,8 +71,9 @@ Parameter|Mandatory|Description|Example
 -|-|-|-
 Source (-s)|x|Source database|https://mycluster.eastus.kusto.windows.net/mydb/mytable
 Destination (-d)|x|Destination database or table|https://yourcluster.eastus.kusto.windows.net/yourdb or https://yourcluster.eastus.kusto.windows.net/yourdb/mytable
-Staging Storage (-t)|x|ADLS gen 2 container|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
+Staging Storage (-t)|x|One or many ADLS gen 2 containers (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 Query (-d)||Optional query|"\| where Level == 'error'"
+Managed Identiy Client ID (--clientId)||If using User Managed Identity|Client ID guid
 
 A couple of comments:
 
