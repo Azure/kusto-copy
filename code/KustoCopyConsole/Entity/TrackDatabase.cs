@@ -32,7 +32,7 @@ namespace KustoCopyConsole.Entity
         {
             var dbContext = await Database.CreateAsync(
                 DatabasePolicy.Create(
-                    DiagnosticPolicy: DiagnosticPolicy.Create(true),
+                    //DiagnosticPolicy: DiagnosticPolicy.Create(true),
                     LogPolicy: LogPolicy.Create(
                         StorageConfiguration: new StorageConfiguration(
                             blobFolderUri,

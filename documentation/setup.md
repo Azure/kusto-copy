@@ -28,7 +28,7 @@ Kusto Copy runs with an Azure Entra ID identity which identity will:
 * Ingest data, create temporary tables and run queries on the destination database
 * Generate read / write SAS tokens in ADLS gen 2 storage container to export data and have it read for ingestion & also write directly audit blobs
 
- By default, the identity of the user logged into Azure CLI.  In general, that is **your identity**.
+Kusto Copy uses [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet).  For long running scenarios (i.e. more than 5-10 minutes), it is recommended to leverage a managed identity.  By default, **your identity** will be used by leveraging Azure CLI login (not recommended for long running scenarios).
 
 ### Source Database permissions
 
