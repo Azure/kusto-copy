@@ -65,12 +65,6 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE)
                 .AddPrimaryKeyProperty(e => e.BlockKey)
                 .AddPrimaryKeyProperty(e => e.ExtentId));
-            var urlIds = dbContext.BlobUrls.Query()
-                .Select(u => u.BlockKey.BlockId)
-                .ToHashSet();
-            var blockIds = dbContext.Blocks.Query()
-                .Select(b => b.BlockKey.BlockId)
-                .ToHashSet();
 
             return dbContext;
         }
