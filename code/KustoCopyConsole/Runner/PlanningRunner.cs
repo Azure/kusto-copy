@@ -201,7 +201,7 @@ namespace KustoCopyConsole.Runner
                     .Select(rp => new PlanningPartitionRecord(
                         iteration.IterationKey,
                         (parentPartition?.Level ?? 0) + 1,
-                        GetPartitionId(parentPartition?.Level, rp.Index),
+                        GetPartitionId(parentPartition?.Level, parentPartition?.PartitionId, rp.Index),
                         rp.Item.RowCount,
                         rp.Item.MinIngestionTime,
                         rp.Item.MaxIngestionTime));
@@ -326,12 +326,13 @@ namespace KustoCopyConsole.Runner
             };
         }
 
-        private int GetPartitionId(int? level, int index)
+        private int GetPartitionId(int? level, int? parentPartitionId, int index)
         {
             return level switch
             {
                 null => index,
-                1 => (int)(GetPartitionResolution(null) / GetPartitionResolution(1)),
+                1 => (int)(GetPartitionResolution(null) / GetPartitionResolution(1))
+                * parentPartitionId!.Value + index,
                 _ => throw new NotSupportedException($"Level {level}")
             };
         }
