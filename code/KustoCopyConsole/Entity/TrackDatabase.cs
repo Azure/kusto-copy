@@ -51,7 +51,13 @@ namespace KustoCopyConsole.Entity
                     var typedDb = (TrackDatabase)db;
 
                     ComputeBlockMetric(typedDb, tx);
-                }),
+                })
+                .OptOutIndex(b => b.IngestionTimeStart)
+                .OptOutIndex(b => b.IngestionTimeEnd)
+                .OptOutIndex(b => b.CreationTime)
+                .OptOutIndex(b => b.PlannedRowCount)
+                .OptOutIndex(b => b.ExportedRowCount)
+                .OptOutIndex(b => b.ExportOperationId),
                 TypedTableSchema<BlockMetricRecord>.FromConstructor(BLOCK_METRIC_TABLE),
                 TypedTableSchema<PlanningPartitionRecord>.FromConstructor(PLANNING_PARTITION_TABLE)
                 .AddPrimaryKeyProperty(pp => pp.IterationKey)
@@ -60,11 +66,16 @@ namespace KustoCopyConsole.Entity
                 .AddPrimaryKeyProperty(t => t.IterationKey),
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
                 .AddPrimaryKeyProperty(b => b.BlockKey)
-                .AddPrimaryKeyProperty(b => b.Url),
-                TypedTableSchema<IngestionBatchRecord>.FromConstructor(INGESTION_BATCH_TABLE),
+                .AddPrimaryKeyProperty(b => b.Url)
+                .OptOutIndex(b => b.Url)
+                .OptOutIndex(b => b.RowCount),
+                TypedTableSchema<IngestionBatchRecord>.FromConstructor(INGESTION_BATCH_TABLE)
+                .OptOutIndex(i => i.OperationText),
                 TypedTableSchema<ExtentRecord>.FromConstructor(EXTENT_TABLE)
                 .AddPrimaryKeyProperty(e => e.BlockKey)
-                .AddPrimaryKeyProperty(e => e.ExtentId));
+                .AddPrimaryKeyProperty(e => e.ExtentId)
+                .OptOutIndex(e => e.ExtentId)
+                .OptOutIndex(e => e.RowCount));
 
             return dbContext;
         }
