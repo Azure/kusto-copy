@@ -48,7 +48,7 @@ namespace KustoCopyConsole.Runner
                 await RunIterationAsync(activityParam, iteration, queryClient, ct);
             }
 
-            return iterations.Any();
+            return false;
         }
 
         private async Task RunIterationAsync(
