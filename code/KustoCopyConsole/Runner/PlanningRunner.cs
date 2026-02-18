@@ -1,5 +1,4 @@
-﻿using Kusto.Cloud.Platform.Utils.DecayCache;
-using KustoCopyConsole.Entity;
+﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
