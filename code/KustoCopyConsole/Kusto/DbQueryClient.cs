@@ -150,6 +150,7 @@ BaseData
 | lookup kind=leftouter ExtentIdCreationTime on ExtentId
 | summarize RowCount=sum(RowCount), MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime), CreatedOn=max(CreatedOn)
     by PartitionBin
+| order by MinIngestionTime asc
 | extend MinIngestionTime=tostring(MinIngestionTime)
 | extend MaxIngestionTime=tostring(MaxIngestionTime)
 | project-away PartitionBin
