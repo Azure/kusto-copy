@@ -23,7 +23,6 @@ namespace KustoCopyConsole.Runner
         private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 1200;
         private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 600;
         private const int MAX_ROW_COUNT_PER_BLOCK = 4000000;
-        private const int MAX_ROW_COUNT_BY_PARTITION = 64 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
@@ -36,35 +35,38 @@ namespace KustoCopyConsole.Runner
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Starting, IterationState.Planning]))
                 .ToImmutableArray();
+            var activityParam = Parameterization.Activities[activityName];
+            var source = activityParam.GetSourceTableIdentity();
+            var destination = activityParam.GetDestinationTableIdentity();
+            var queryClient = DbClientFactory.GetDbQueryClient(
+                source.ClusterUri,
+                source.DatabaseName);
 
             foreach (var iteration in iterations)
             {
-                await PlanIterationAsync(iteration, ct);
+                await RunIterationAsync(activityParam, iteration, queryClient, ct);
             }
 
             return iterations.Any();
         }
 
-        private async Task PlanIterationAsync(IterationRecord iteration, CancellationToken ct)
+        private async Task RunIterationAsync(
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            DbQueryClient queryClient,
+            CancellationToken ct)
         {
-            var activity = Parameterization.Activities[iteration.IterationKey.ActivityName];
-            var source = activity.GetSourceTableIdentity();
-            var destination = activity.GetDestinationTableIdentity();
-            var queryClient = DbClientFactory.GetDbQueryClient(
-                source.ClusterUri,
-                source.DatabaseName);
-
             if (iteration.State == IterationState.Starting)
             {
                 var cursor = await queryClient.GetCurrentCursorAsync(
                     new KustoPriority(iteration.IterationKey),
                     ct);
 
-                iteration = PlanningIteration(iteration, cursor);
+                iteration = TransitionToPlanning(iteration, cursor);
             }
             if (iteration.State == IterationState.Planning && ShouldPlan(iteration.IterationKey))
             {
-                await PlanBlocksAsync(queryClient, activity, iteration.IterationKey, ct);
+                await PlanBlocksAsync(queryClient, activityParam, iteration.IterationKey, ct);
             }
         }
 
@@ -91,7 +93,7 @@ namespace KustoCopyConsole.Runner
         }
         #endregion
 
-        private IterationRecord PlanningIteration(IterationRecord iteration, string cursor)
+        private IterationRecord TransitionToPlanning(IterationRecord iteration, string cursor)
         {
             using (var tx = Database.CreateTransaction())
             {
@@ -118,7 +120,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task PlanBlocksAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             IterationKey iterationKey,
             CancellationToken ct)
         {
@@ -135,7 +137,7 @@ namespace KustoCopyConsole.Runner
             }
             while (await PlanPartitionAsync(
                 queryClient,
-                activity,
+                activityParam,
                 iterationKey,
                 lastPlanningPartition,
                 ct)
@@ -144,7 +146,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<bool> PlanPartitionAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             IterationKey iterationKey,
             PlanningPartitionRecord? lastPlanningPartition,
             CancellationToken ct)
@@ -153,7 +155,7 @@ namespace KustoCopyConsole.Runner
             {
                 return await InitialPartitionAsync(
                     queryClient,
-                    activity,
+                    activityParam,
                     iterationKey,
                     ct);
             }
@@ -161,7 +163,7 @@ namespace KustoCopyConsole.Runner
             {
                 return await SubPlanPartitionAsync(
                     queryClient,
-                    activity,
+                    activityParam,
                     lastPlanningPartition,
                     ct);
             }
@@ -169,7 +171,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<bool> InitialPartitionAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             IterationKey iterationKey,
             CancellationToken ct)
         {
@@ -178,8 +180,8 @@ namespace KustoCopyConsole.Runner
                 .First();
             var stats = await queryClient.GetRecordStatsAsync(
                 new KustoPriority(iterationKey),
-                activity.GetSourceTableIdentity().TableName,
-                activity.KqlQuery,
+                activityParam.GetSourceTableIdentity().TableName,
+                activityParam.KqlQuery,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 null,
@@ -211,7 +213,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<bool> SubPlanPartitionAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             PlanningPartitionRecord parentPartition,
             CancellationToken ct)
         {
@@ -243,8 +245,8 @@ namespace KustoCopyConsole.Runner
                     .First();
                 var statsLeftTask = queryClient.GetRecordStatsAsync(
                     new KustoPriority(parentPartition.IterationKey),
-                    activity.GetSourceTableIdentity().TableName,
-                    activity.KqlQuery,
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
                     iteration.CursorStart,
                     iteration.CursorEnd,
                     new DateTimeBoundary(parentPartition.MinIngestionTime, true),
@@ -253,8 +255,8 @@ namespace KustoCopyConsole.Runner
                     ct);
                 var statsRightTask = queryClient.GetRecordStatsAsync(
                     new KustoPriority(parentPartition.IterationKey),
-                    activity.GetSourceTableIdentity().TableName,
-                    activity.KqlQuery,
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
                     iteration.CursorStart,
                     iteration.CursorEnd,
                     //  Exclude median
@@ -282,7 +284,7 @@ namespace KustoCopyConsole.Runner
             {   //  Harvest blocks
                 return await LoadBlocksAsync(
                     queryClient,
-                    activity,
+                    activityParam,
                     parentPartition,
                     ct);
             }
@@ -301,7 +303,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<bool> LoadBlocksAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             PlanningPartitionRecord parentPartition,
             CancellationToken ct)
         {
@@ -309,7 +311,7 @@ namespace KustoCopyConsole.Runner
                 (int)Math.Ceiling((double)parentPartition.RecordCount / MAX_ROW_COUNT_PER_BLOCK);
             var protoBlocks = await LoadProtoBlocksAsync(
                 queryClient,
-                activity,
+                activityParam,
                 parentPartition.IterationKey,
                 parentPartition.MinIngestionTime,
                 parentPartition.MaxIngestionTime,
@@ -359,7 +361,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task<IReadOnlyCollection<ProtoBlock>> LoadProtoBlocksAsync(
             DbQueryClient queryClient,
-            ActivityParameterization activity,
+            ActivityParameterization activityParam,
             IterationKey iterationKey,
             string minIngestionTime,
             string maxIngestionTime,
@@ -371,8 +373,8 @@ namespace KustoCopyConsole.Runner
                 .First();
             var rawProtoBlocks = await queryClient.GetProtoBlocksAsync(
                 new KustoPriority(iterationKey),
-                activity.GetSourceTableIdentity().TableName,
-                activity.KqlQuery,
+                activityParam.GetSourceTableIdentity().TableName,
+                activityParam.KqlQuery,
                 iteration.CursorStart,
                 iteration.CursorEnd,
                 minIngestionTime,
@@ -392,7 +394,7 @@ namespace KustoCopyConsole.Runner
                 {
                     var subProtoBlocks = await LoadProtoBlocksAsync(
                         queryClient,
-                        activity,
+                        activityParam,
                         iterationKey,
                         protoBlock.MinIngestionTime,
                         protoBlock.MaxIngestionTime,
