@@ -9,12 +9,9 @@ namespace KustoCopyConsole.Entity
 {
     internal record PlanningPartitionRecord(
         IterationKey IterationKey,
-        //  1:  Split by 1d
-        //  2:  Split by 1m
-        //  3:  Split by 0.01s
         int Level,
         int PartitionId,
-        long RecordCount,
+        long RowCount,
         string MinIngestionTime,
         string MaxIngestionTime) : RecordBase
     {

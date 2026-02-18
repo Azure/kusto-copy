@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<PlanningPartitionRecord>.FromConstructor(PLANNING_PARTITION_TABLE)
                 .OptOutIndex(p => p.MinIngestionTime)
                 .OptOutIndex(p => p.MaxIngestionTime)
-                .OptOutIndex(p => p.RecordCount)
+                .OptOutIndex(p => p.RowCount)
                 ,
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
