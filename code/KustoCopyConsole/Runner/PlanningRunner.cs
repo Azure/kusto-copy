@@ -1,4 +1,5 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Kusto.Cloud.Platform.Utils.DecayCache;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
@@ -128,7 +129,8 @@ namespace KustoCopyConsole.Runner
             {
                 lastPlanningPartition = Database.PlanningPartitions.Query()
                     .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
-                    .OrderByDescending(pp => pp.Generation)
+                    .OrderByDescending(pp => pp.Level)
+                    .ThenBy(pp => pp.PartitionId)
                     .Take(1)
                     .FirstOrDefault();
             }
@@ -161,7 +163,6 @@ namespace KustoCopyConsole.Runner
                 return await SubPlanPartitionAsync(
                     queryClient,
                     activity,
-                    iterationKey,
                     lastPlanningPartition,
                     ct);
             }
@@ -191,7 +192,7 @@ namespace KustoCopyConsole.Runner
                 var planningPartition = new PlanningPartitionRecord(
                     iteration.IterationKey,
                     0,
-                    false,
+                    0,
                     stats.RecordCount,
                     stats.MinIngestionTime,
                     stats.MedianIngestionTime,
@@ -203,6 +204,8 @@ namespace KustoCopyConsole.Runner
             }
             else
             {
+                ClearPlanning(iterationKey);
+
                 return false;
             }
         }
@@ -210,56 +213,70 @@ namespace KustoCopyConsole.Runner
         private async Task<bool> SubPlanPartitionAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
-            IterationKey iterationKey,
-            PlanningPartitionRecord lastPlanningPartition,
+            PlanningPartitionRecord parentPartition,
             CancellationToken ct)
         {
-            if (lastPlanningPartition.RecordCount > MAX_ROW_COUNT_BY_PARTITION)
+            void AppendPartition(
+                PlanningPartitionRecord parentPartition,
+                RecordStats stats,
+                int partitionId,
+                TransactionContext tx)
+            {
+                if (stats.RecordCount > 0)
+                {
+                    Database.PlanningPartitions.AppendRecord(
+                        new PlanningPartitionRecord(
+                            parentPartition.IterationKey,
+                            parentPartition.Level + 1,
+                            partitionId,
+                            stats.RecordCount,
+                            stats.MinIngestionTime,
+                            stats.MedianIngestionTime,
+                            stats.MaxIngestionTime),
+                        tx);
+                }
+            }
+
+            if (parentPartition.RecordCount > MAX_ROW_COUNT_BY_PARTITION)
             {   //  Sub partition
                 var iteration = Database.Iterations.Query()
-                    .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                    .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
                     .First();
-                var stats = await queryClient.GetRecordStatsAsync(
-                    new KustoPriority(iterationKey),
+                var statsLeftTask = queryClient.GetRecordStatsAsync(
+                    new KustoPriority(parentPartition.IterationKey),
                     activity.GetSourceTableIdentity().TableName,
                     activity.KqlQuery,
                     iteration.CursorStart,
                     iteration.CursorEnd,
-                    !lastPlanningPartition.IsLeftExplored
-                    ? new DateTimeBoundary(lastPlanningPartition.MinIngestionTime, true)
-                    //  Exclude median
-                    : new DateTimeBoundary(lastPlanningPartition.MedianIngestionTime, false),
-                    !lastPlanningPartition.IsLeftExplored
+                    new DateTimeBoundary(parentPartition.MinIngestionTime, true),
                     //  Include median
-                    ? new DateTimeBoundary(lastPlanningPartition.MedianIngestionTime, true)
-                    : new DateTimeBoundary(lastPlanningPartition.MaxIngestionTime, true),
+                    new DateTimeBoundary(parentPartition.MedianIngestionTime, true),
                     ct);
+                var statsRightTask = queryClient.GetRecordStatsAsync(
+                    new KustoPriority(parentPartition.IterationKey),
+                    activity.GetSourceTableIdentity().TableName,
+                    activity.KqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
+                    //  Exclude median
+                    new DateTimeBoundary(parentPartition.MedianIngestionTime, false),
+                    new DateTimeBoundary(parentPartition.MaxIngestionTime, true),
+                    ct);
+                var statsLeft = await statsLeftTask;
+                var statsRight = await statsRightTask;
 
-                if (stats.RecordCount > 0)
-                {
-                    var planningPartition = new PlanningPartitionRecord(
-                        iteration.IterationKey,
-                        lastPlanningPartition.Generation + 1,
-                        false,
-                        stats.RecordCount,
-                        stats.MinIngestionTime,
-                        stats.MedianIngestionTime,
-                        stats.MaxIngestionTime);
+                using (var tx = Database.CreateTransaction())
+                {   //  Delete Parent
+                    DeletePartition(parentPartition, tx);
+                    //  Append children
+                    AppendPartition(parentPartition, statsLeft, 0, tx);
+                    AppendPartition(parentPartition, statsRight, 1, tx);
 
-                    Database.PlanningPartitions.AppendRecord(planningPartition);
+                    var result = ClearPlanning(parentPartition.IterationKey, tx);
 
-                    return true;
-                }
-                else
-                {
-                    using (var tx = Database.CreateTransaction())
-                    {
-                        var result = ClearOneSide(lastPlanningPartition, false, tx);
+                    tx.Complete();
 
-                        tx.Complete();
-
-                        return result;
-                    }
+                    return result;
                 }
             }
             else
@@ -267,74 +284,36 @@ namespace KustoCopyConsole.Runner
                 return await LoadBlocksAsync(
                     queryClient,
                     activity,
-                    iterationKey,
-                    lastPlanningPartition,
+                    parentPartition,
                     ct);
             }
         }
 
-        private bool ClearOneSide(
-            PlanningPartitionRecord planningPartition,
-            bool doNotSplit,
+        private void DeletePartition(
+            PlanningPartitionRecord partition,
             TransactionContext tx)
         {
-            if (!doNotSplit && !planningPartition.IsLeftExplored)
-            {   //  We clear the left side
-                Database.PlanningPartitions.UpdateRecord(
-                    planningPartition,
-                    planningPartition with { IsLeftExplored = true },
-                    tx);
-
-                return true;
-            }
-            else
-            {   //  We clear the right side, so we go up
-                Database.PlanningPartitions.Query(tx)
-                    .Where(pf => pf.Equal(pp => pp.IterationKey, planningPartition.IterationKey))
-                    .Where(pf => pf.Equal(pp => pp.Generation, planningPartition.Generation))
-                    .Delete();
-
-                var lastPlanningPartition = Database.PlanningPartitions.Query(tx)
-                    .Where(pf => pf.Equal(pp => pp.IterationKey, planningPartition.IterationKey))
-                    .OrderByDescending(pp => pp.Generation)
-                    .Take(1)
-                    .FirstOrDefault();
-
-                if (lastPlanningPartition == null)
-                {   //  We cleared all partitions:  we're done
-                    var iteration = Database.Iterations.Query(tx)
-                        .Where(pf => pf.Equal(i => i.IterationKey, planningPartition.IterationKey))
-                        .First();
-
-                    Database.Iterations.UpdateRecord(
-                        iteration,
-                        iteration with { State = IterationState.Planned },
-                        tx);
-
-                    return false;
-                }
-                else
-                {   //  Go up
-                    return ClearOneSide(lastPlanningPartition, false, tx);
-                }
-            }
+            Database.PlanningPartitions.Query(tx)
+                .Where(pf => pf.Equal(pp => pp.IterationKey, partition.IterationKey))
+                .Where(pf => pf.Equal(pp => pp.Level, partition.Level))
+                .Where(pf => pf.Equal(pp => pp.PartitionId, partition.PartitionId))
+                .Delete();
         }
 
         private async Task<bool> LoadBlocksAsync(
             DbQueryClient queryClient,
             ActivityParameterization activity,
-            IterationKey iterationKey,
-            PlanningPartitionRecord planningPartition,
+            PlanningPartitionRecord parentPartition,
             CancellationToken ct)
         {
             var partitionCount =
-                (int)Math.Ceiling((double)planningPartition.RecordCount / MAX_ROW_COUNT_PER_BLOCK);
+                (int)Math.Ceiling((double)parentPartition.RecordCount / MAX_ROW_COUNT_PER_BLOCK);
             var protoBlocks = await LoadProtoBlocksAsync(
                 queryClient,
                 activity,
-                iterationKey,
-                planningPartition.MinIngestionTime,
-                planningPartition.MaxIngestionTime,
+                parentPartition.IterationKey,
+                parentPartition.MinIngestionTime,
+                parentPartition.MaxIngestionTime,
                 partitionCount,
                 ct);
 
@@ -344,7 +323,7 @@ namespace KustoCopyConsole.Runner
                 {
                     //  Refresh iteration entity
                     var iteration = Database.Iterations.Query(tx)
-                        .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                        .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
                         .First();
 
                     var nextBlockId = iteration.NextBlockId;
@@ -364,13 +343,14 @@ namespace KustoCopyConsole.Runner
                                 string.Empty),
                             tx);
                     }
+                    DeletePartition(parentPartition, tx);
                     Database.Iterations.UpdateRecord(
                         iteration,
                         iteration with { NextBlockId = nextBlockId },
                         tx);
                 }
 
-                var result = ClearOneSide(planningPartition, true, tx);
+                var result = ClearPlanning(parentPartition.IterationKey, tx);
 
                 tx.Complete();
 
@@ -425,6 +405,31 @@ namespace KustoCopyConsole.Runner
             }
 
             return normalizeProtoBlocks;
+        }
+
+        private bool ClearPlanning(IterationKey iterationKey, TransactionContext? tx = null)
+        {
+            var planning = Database.PlanningPartitions.Query(tx)
+                .Take(1)
+                .FirstOrDefault();
+
+            if (planning == null)
+            {   //  We cleared all partitions:  we're done
+                var iteration = Database.Iterations.Query(tx)
+                    .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                    .First();
+
+                Database.Iterations.UpdateRecord(
+                    iteration,
+                    iteration with { State = IterationState.Planned },
+                    tx);
+
+                return false;
+            }
+            else
+            {
+                return true;
+            }
         }
     }
 }

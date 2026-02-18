@@ -59,9 +59,7 @@ namespace KustoCopyConsole.Entity
                 .OptOutIndex(b => b.ExportedRowCount)
                 .OptOutIndex(b => b.ExportOperationId),
                 TypedTableSchema<BlockMetricRecord>.FromConstructor(BLOCK_METRIC_TABLE),
-                TypedTableSchema<PlanningPartitionRecord>.FromConstructor(PLANNING_PARTITION_TABLE)
-                .AddPrimaryKeyProperty(pp => pp.IterationKey)
-                .AddPrimaryKeyProperty(pp => pp.Generation),
+                TypedTableSchema<PlanningPartitionRecord>.FromConstructor(PLANNING_PARTITION_TABLE),
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
                 TypedTableSchema<BlobUrlRecord>.FromConstructor(BLOB_URL_TABLE)
