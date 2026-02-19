@@ -30,7 +30,7 @@ jobs:
           - os: macos
           # Capacity issue at GitHub, trying a different image
             # platform:  macos-latest
-            platform:  macOS-14
+            platform:  macos-15
             dotnetOs:  osx-x64
             ASSETS_NAME:  mac-assets
             assetSuffix:  mac
