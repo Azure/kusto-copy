@@ -1,5 +1,4 @@
 ﻿using KustoCopyConsole.Entity.Keys;
-using KustoCopyConsole.Entity.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,11 +9,10 @@ namespace KustoCopyConsole.Entity
 {
     internal record PlanningPartitionRecord(
         IterationKey IterationKey,
-        int Generation,
-        bool IsLeftExplored,
-        long RecordCount,
+        int Level,
+        int PartitionId,
+        long RowCount,
         string MinIngestionTime,
-        string MedianIngestionTime,
         string MaxIngestionTime) : RecordBase
     {
         public override void Validate()

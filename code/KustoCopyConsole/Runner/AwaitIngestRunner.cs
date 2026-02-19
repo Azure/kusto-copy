@@ -47,61 +47,63 @@ namespace KustoCopyConsole.Runner
             DbCommandClient dbClient,
             CancellationToken ct)
         {
-            var tempTable = GetTempTable(iterationKey);
-            var ingestedBlocks = await DetectIngestedBlocksAsync(
-                iterationKey,
-                dbClient,
-                tempTable.TempTableName,
-                ct);
+            var tempTable = TryGetTempTable(iterationKey);
 
-            if (ingestedBlocks.Any())
+            if (tempTable != null)
             {
-                var extentRowCounts = await dbClient.GetExtentRowCountsAsync(
-                    new KustoPriority(iterationKey),
-                    ingestedBlocks.Select(b => b.BlockTag),
+                var ingestedBlocks = await DetectIngestedBlocksAsync(
+                    iterationKey,
+                    dbClient,
                     tempTable.TempTableName,
                     ct);
-                var blocksByTag = ingestedBlocks
-                    .ToImmutableDictionary(b => b.BlockTag);
-                var extents = extentRowCounts
-                    .Select(erc => new ExtentRecord(
-                        blocksByTag[erc.Tags].BlockKey,
-                        erc.ExtentId,
-                        erc.RecordCount));
 
-                using (var tx = Database.CreateTransaction())
+                if (ingestedBlocks.Any())
                 {
-                    var ingestedBlockIds = ingestedBlocks
-                        .Select(b => b.BlockKey.BlockId);
+                    var extentRowCounts = await dbClient.GetExtentRowCountsAsync(
+                        new KustoPriority(iterationKey),
+                        ingestedBlocks.Select(b => b.BlockTag),
+                        tempTable.TempTableName,
+                        ct);
+                    var blocksByTag = ingestedBlocks
+                        .ToImmutableDictionary(b => b.BlockTag);
+                    var extents = extentRowCounts
+                        .Select(erc => new ExtentRecord(
+                            blocksByTag[erc.Tags].BlockKey,
+                            erc.ExtentId,
+                            erc.RecordCount));
 
-                    Database.Blocks.Query(tx)
-                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
-                        .Delete();
-                    Database.IngestionBatches.Query(tx)
-                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
-                        .Delete();
-                    Database.BlobUrls.Query(tx)
-                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                        .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
-                        .Delete();
+                    using (var tx = Database.CreateTransaction())
+                    {
+                        var ingestedBlockIds = ingestedBlocks
+                            .Select(b => b.BlockKey.BlockId);
 
-                    Database.Blocks.AppendRecords(
-                        ingestedBlocks
-                        .Select(b => b with { State = BlockState.Ingested }),
-                        tx);
-                    Database.Extents.AppendRecords(extents, tx);
+                        Database.Blocks.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                            .Delete();
+                        Database.IngestionBatches.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                            .Delete();
+                        Database.BlobUrls.Query(tx)
+                            .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                            .Where(pf => pf.In(b => b.BlockKey.BlockId, ingestedBlockIds))
+                            .Delete();
 
-                    tx.Complete();
+                        Database.Blocks.AppendRecords(
+                            ingestedBlocks
+                            .Select(b => b with { State = BlockState.Ingested }),
+                            tx);
+                        Database.Extents.AppendRecords(extents, tx);
+
+                        tx.Complete();
+                    }
+
+                    return true;
                 }
-
-                return true;
             }
-            else
-            {
-                return false;
-            }
+         
+            return false;
         }
 
         private async Task<IEnumerable<BlockRecord>> DetectIngestedBlocksAsync(
