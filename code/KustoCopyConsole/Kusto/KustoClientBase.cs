@@ -1,6 +1,7 @@
 ﻿using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
 using Polly;
+using System.Net.Sockets;
 
 namespace KustoCopyConsole.Kusto
 {
@@ -37,6 +38,11 @@ namespace KustoCopyConsole.Kusto
                 return false;
             }
             else if (ex is KustoRequestThrottledException te)
+            {
+                return false;
+            }
+            //  Network transient errors
+            else if (ex.InnerException is SocketException || ex.InnerException is IOException)
             {
                 return false;
             }
