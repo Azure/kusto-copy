@@ -1,6 +1,7 @@
 ﻿using Kusto.Data.Exceptions;
 using KustoCopyConsole.Concurrency;
 using Polly;
+using System.Diagnostics;
 using System.Net.Sockets;
 
 namespace KustoCopyConsole.Kusto
@@ -29,21 +30,21 @@ namespace KustoCopyConsole.Kusto
 
         private static bool ShouldFailException(KustoException ex)
         {
-            if (!ex.IsPermanent)
+            if (!ex.IsPermanent
+                || ex.InnerException is KustoClientRequestCanceledByUserException
+                || ex is KustoRequestThrottledException
+                //  Network transient errors
+                || ex.InnerException is SocketException
+                || ex.InnerException is IOException)
             {
-                return false;
-            }
-            else if (ex.InnerException is KustoClientRequestCanceledByUserException)
-            {
-                return false;
-            }
-            else if (ex is KustoRequestThrottledException te)
-            {
-                return false;
-            }
-            //  Network transient errors
-            else if (ex.InnerException is SocketException || ex.InnerException is IOException)
-            {
+                Trace.TraceWarning($"Transient error:  {ex.GetType().Name} '{ex.Message}'");
+                if (ex.InnerException != null)
+                {
+                    Trace.TraceWarning($"   Inner:  {ex.InnerException.GetType().Name}" +
+                        $" '{ex.InnerException.Message}'");
+                }
+                Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
+
                 return false;
             }
             else
