@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Kusto
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
             .Handle<KustoException>(ex => ShouldFailException(ex))
-            .RetryAsync(5);
+            .WaitAndRetryAsync(5, retryAttempt => TimeSpan.FromSeconds(Math.Max(30, Math.Pow(2, retryAttempt))));
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 
@@ -28,11 +28,15 @@ namespace KustoCopyConsole.Kusto
 
         private static bool ShouldFailException(KustoException ex)
         {
-            if(!ex.IsPermanent)
+            if (!ex.IsPermanent)
             {
                 return false;
             }
-            else if(ex.InnerException is KustoClientRequestCanceledByUserException)
+            else if (ex.InnerException is KustoClientRequestCanceledByUserException)
+            {
+                return false;
+            }
+            else if (ex is KustoRequestThrottledException te)
             {
                 return false;
             }
