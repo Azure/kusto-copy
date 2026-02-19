@@ -11,9 +11,8 @@ namespace KustoCopyConsole.Entity
         IterationKey IterationKey,
         int Level,
         int PartitionId,
-        long RecordCount,
+        long RowCount,
         string MinIngestionTime,
-        string MedianIngestionTime,
         string MaxIngestionTime) : RecordBase
     {
         public override void Validate()

@@ -7,9 +7,8 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto.Data
 {
-    internal record RecordStats(
-        long RecordCount,
+    internal record RowPartition(
+        long RowCount,
         string MinIngestionTime,
-        string MaxIngestionTime,
-        string MedianIngestionTime);
+        string MaxIngestionTime);
 }
