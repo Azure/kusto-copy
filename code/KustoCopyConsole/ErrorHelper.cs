@@ -12,7 +12,7 @@ namespace KustoCopyConsole
         private static void DisplayExceptionInternal(Exception ex, string tab = "")
         {
             Trace.TraceError(
-                $"{tab}Exception encountered:  {ex.GetType().FullName} ; {ex.Message}");
+                $"{tab}Exception encountered:  {ex.GetType().Name} ; {ex.Message}");
             Trace.TraceError($"{tab}Stack trace:  {ex.StackTrace}");
             if (ex.InnerException != null)
             {
