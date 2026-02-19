@@ -45,11 +45,11 @@ namespace KustoCopyConsole.Kusto
                 }
                 Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
 
-                return false;
+                return true;
             }
             else
             {
-                return true;
+                return false;
             }
         }
     }
