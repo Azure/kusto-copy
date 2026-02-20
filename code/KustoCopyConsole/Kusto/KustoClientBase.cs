@@ -9,8 +9,8 @@ namespace KustoCopyConsole.Kusto
     internal abstract class KustoClientBase
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
-            .Handle<KustoException>(ex => ShouldRetryException(ex))
-            .WaitAndRetryAsync(10, retryAttempt => TimeSpan.FromSeconds(Math.Max(30, Math.Pow(2, retryAttempt))));
+            .Handle<KustoException>()
+            .WaitAndRetryAsync(10, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 
@@ -28,29 +28,26 @@ namespace KustoCopyConsole.Kusto
                 async () => await _queue.RequestRunAsync(priority, actionAsync));
         }
 
-        private static bool ShouldRetryException(KustoException ex)
+        private static TimeSpan TimeSpanToRetry(int retryAttempt)
         {
-            if (!ex.IsPermanent
-                || ex.InnerException is KustoClientRequestCanceledByUserException
-                || ex is KustoRequestThrottledException
-                //  Network transient errors
-                || ex.InnerException is SocketException
-                || ex.InnerException is IOException)
-            {
-                Trace.TraceWarning($"Transient error:  {ex.GetType().Name} '{ex.Message}'");
-                if (ex.InnerException != null)
-                {
-                    Trace.TraceWarning($"   Inner:  {ex.InnerException.GetType().Name}" +
-                        $" '{ex.InnerException.Message}'");
-                }
-                Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
+            return TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, retryAttempt)));
+        }
 
-                return true;
-            }
-            else
+        private static void OnRetry(
+            Exception ex,
+            TimeSpan delay,
+            int retryCount,
+            Context context)
+        {
+            Trace.TraceWarning(
+                $"Transient error (retryCount = {retryCount}, CorrelationId={context.CorrelationId}):" +
+                $"  {ex.GetType().Name} '{ex.Message}'");
+            if (ex.InnerException != null)
             {
-                return false;
+                Trace.TraceWarning($"   Inner:  {ex.InnerException.GetType().Name}" +
+                    $" '{ex.InnerException.Message}'");
             }
+            Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
         }
     }
 }
