@@ -1,16 +1,14 @@
-﻿using Kusto.Data.Exceptions;
-using KustoCopyConsole.Concurrency;
+﻿using KustoCopyConsole.Concurrency;
 using Polly;
 using System.Diagnostics;
-using System.Net.Sockets;
 
 namespace KustoCopyConsole.Kusto
 {
     internal abstract class KustoClientBase
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
-            .Handle<KustoException>()
-            .WaitAndRetryAsync(10, TimeSpanToRetry, OnRetry);
+            .Handle<HttpIOException>()
+            .WaitAndRetryAsync(20, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 

@@ -1,5 +1,4 @@
-﻿using Kusto.Cloud.Platform.Data;
-using Kusto.Data.Common;
+﻿using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System.Collections.Immutable;
