@@ -48,6 +48,7 @@ namespace KustoCopyConsole.Runner
                 foreach (var iterationGroup in readyToMoveBlockIdByIterationKeys)
                 {
                     var readyToMoveExtentsByBlockId = Database.Extents.Query(tx)
+                        .Where(pf => pf.Equal(e => e.BlockKey.IterationKey, iterationGroup.Key))
                         .Where(pf => pf.In(e => e.BlockKey.BlockId, iterationGroup))
                         .GroupBy(e => e.BlockKey.BlockId);
 
