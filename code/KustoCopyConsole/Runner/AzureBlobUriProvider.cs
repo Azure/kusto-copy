@@ -12,6 +12,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace KustoCopyConsole.Runner
 {
@@ -26,10 +27,34 @@ namespace KustoCopyConsole.Runner
 
             public DirectoryProvider(Uri rootFolderUri, TokenCredential credential)
             {
-                var blobClient = new BlobClient(rootFolderUri, credential);
+                var blobClient = new BlobClient(
+                    rootFolderUri,
+                    credential,
+                    new BlobClientOptions
+                    {
+                        Retry =
+                        {
+                            Mode = RetryMode.Exponential,
+                            Delay = TimeSpan.FromSeconds(1),
+                            MaxDelay = TimeSpan.FromSeconds(15),
+                            MaxRetries = 20
+                        }
+                    });
+                var directoryClient = new DataLakeDirectoryClient(
+                    rootFolderUri,
+                    credential,
+                    new DataLakeClientOptions
+                    {
+                        Retry =
+                        {
+                            Mode = RetryMode.Exponential,
+                            Delay = TimeSpan.FromSeconds(1),
+                            MaxDelay = TimeSpan.FromSeconds(15),
+                            MaxRetries = 20
+                        }
+                    });
 
-
-                _directoryClient = new DataLakeDirectoryClient(rootFolderUri, credential);
+                _directoryClient = directoryClient;
                 _containerClient = blobClient.GetParentBlobContainerClient();
                 _keyCache = new(FetchUserDelegationKey);
             }
@@ -147,7 +172,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.GetWritableFolderUrisAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
 
             var uris = tasks
                 .Select(t => t.Result)
@@ -183,7 +208,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         public async Task DeleteStagingDirectoryAsync(BlockKey blockKey, CancellationToken ct)
@@ -193,7 +218,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         private string GetSubDirectory(IterationKey iterationKey)

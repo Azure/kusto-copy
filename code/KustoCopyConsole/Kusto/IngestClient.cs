@@ -70,7 +70,7 @@ namespace KustoCopyConsole.Kusto
                     }))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(queuingTasks);
+            await Task.WhenAll(queuingTasks);
 
             return queuingTasks
                 .Select(t => t.Result)

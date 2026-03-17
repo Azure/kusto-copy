@@ -89,7 +89,7 @@ namespace KustoCopyConsole.Runner
             var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
 
-            await TaskHelper.WhenAllWithErrors(
+            await Task.WhenAll(
                 Task.Run(() => progressRunner.RunAsync(ct)),
                 Task.Run(() => planningRunner.RunAsync(ct)),
                 Task.Run(() => tempTableRunner.RunAsync(ct)),

@@ -60,7 +60,7 @@ namespace KustoCopyConsole.Runner
                             ct))
                         .ToImmutableArray();
 
-                    await TaskHelper.WhenAllWithErrors(tasks);
+                    await Task.WhenAll(tasks);
 
                     return true;
                 }
@@ -83,7 +83,7 @@ namespace KustoCopyConsole.Runner
                 .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(u.Url, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(authorizedUriTasks);
+            await Task.WhenAll(authorizedUriTasks);
 
             var authorizedUris = authorizedUriTasks
                 .Select(t => t.Result)

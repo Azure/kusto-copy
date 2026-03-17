@@ -39,7 +39,7 @@ namespace KustoCopyConsole.Runner
                     ct)))
                 .ToImmutableList();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         private async Task RunActivitiesAsync(
@@ -165,7 +165,7 @@ namespace KustoCopyConsole.Runner
                 .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         private async Task ProcessOperationAsync(

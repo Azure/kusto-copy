@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Runner
                     ct)))
                 .ToImmutableList();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         private async Task RunActivitiesAsync(
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Runner
                         .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
                         .ToImmutableArray();
 
-                    await TaskHelper.WhenAllWithErrors(startExportTasks);
+                    await Task.WhenAll(startExportTasks);
                 }
                 else
                 {
@@ -97,13 +97,17 @@ namespace KustoCopyConsole.Runner
                 //  Cap the blocks with available capacity
                 var maxExporting =
                     Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
+                //  Cap the blocks with override capacity
+                var cappedExporting = Parameterization.ExportCount == null
+                    ? maxExporting
+                    : Math.Min(maxExporting, Parameterization.ExportCount.Value);
                 var plannedBlocks = Database.Blocks.Query()
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey,
                         firstPlannedBlock.BlockKey.IterationKey))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                     .OrderBy(b => b.BlockKey.BlockId)
-                    .Take(maxExporting)
+                    .Take(cappedExporting)
                     .ToImmutableArray();
 
                 return plannedBlocks;
