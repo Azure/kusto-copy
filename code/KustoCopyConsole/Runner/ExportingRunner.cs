@@ -94,20 +94,20 @@ namespace KustoCopyConsole.Runner
                     .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                     .Count();
+                //  Cap the blocks with override capacity
+                var cappedCachedCapacity = Parameterization.ExportCount == null
+                    ? cachedCapacity
+                    : Math.Min(cachedCapacity, Parameterization.ExportCount.Value);
                 //  Cap the blocks with available capacity
                 var maxExporting =
-                    Math.Min(BLOCK_BATCH, Math.Max(0, cachedCapacity - exportingCount));
-                //  Cap the blocks with override capacity
-                var cappedExporting = Parameterization.ExportCount == null
-                    ? maxExporting
-                    : Math.Min(maxExporting, Parameterization.ExportCount.Value);
+                    Math.Min(BLOCK_BATCH, Math.Max(0, cappedCachedCapacity - exportingCount));
                 var plannedBlocks = Database.Blocks.Query()
                     .Where(pf => pf.Equal(
                         b => b.BlockKey.IterationKey,
                         firstPlannedBlock.BlockKey.IterationKey))
                     .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
                     .OrderBy(b => b.BlockKey.BlockId)
-                    .Take(cappedExporting)
+                    .Take(maxExporting)
                     .ToImmutableArray();
 
                 return plannedBlocks;
