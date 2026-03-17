@@ -26,7 +26,7 @@ namespace KustoCopyConsole.Runner
                     .Select(t => Task.Run(() => EnsureTempTableCreatedAsync(t, ct)))
                     .ToImmutableArray();
 
-                await TaskHelper.WhenAllWithErrors(tasks);
+                await Task.WhenAll(tasks);
                 if (!tasks.Any())
                 {
                     await SleepAsync(ct);

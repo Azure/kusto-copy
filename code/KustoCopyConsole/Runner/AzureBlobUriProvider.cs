@@ -147,7 +147,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.GetWritableFolderUrisAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
 
             var uris = tasks
                 .Select(t => t.Result)
@@ -183,7 +183,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         public async Task DeleteStagingDirectoryAsync(BlockKey blockKey, CancellationToken ct)
@@ -193,7 +193,7 @@ namespace KustoCopyConsole.Runner
                 .Select(c => c.DeleteStagingDirectoryAsync(subDirectory, ct))
                 .ToImmutableArray();
 
-            await TaskHelper.WhenAllWithErrors(tasks);
+            await Task.WhenAll(tasks);
         }
 
         private string GetSubDirectory(IterationKey iterationKey)

@@ -12,7 +12,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            await TaskHelper.WhenAllWithErrors(Parameterization.Activities.Keys
+            await Task.WhenAll(Parameterization.Activities.Keys
                 .Select(a => Task.Run(() => RunActivityLoopAsync(a, ct))));
         }
 
