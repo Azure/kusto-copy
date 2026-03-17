@@ -43,5 +43,11 @@ namespace KustoCopyConsole
             Required = false,
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
         public bool IsContinuousRun { get; set; } = false;
+
+        [Option(
+            "export",
+            Required = false,
+            HelpText = "Parallel export count")]
+        public int? ExportCount { get; set; } = null;
     }
 }

@@ -16,6 +16,8 @@ namespace KustoCopyConsole.JobParameter
             ImmutableDictionary<string, ActivityParameterization>.Empty;
 
         public bool IsContinuousRun { get; set; } = false;
+        
+        public int? ExportCount { get; set; } = null;
 
         public IImmutableList<string> StagingStorageDirectories { get; set; } =
             ImmutableArray<string>.Empty;
@@ -77,6 +79,7 @@ namespace KustoCopyConsole.JobParameter
             var parameterization = new MainJobParameterization
             {
                 IsContinuousRun = options.IsContinuousRun,
+                ExportCount = options.ExportCount,
                 Activities = ImmutableList.Create(
                     new ActivityParameterization
                     {
