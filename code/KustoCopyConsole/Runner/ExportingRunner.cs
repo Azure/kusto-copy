@@ -17,7 +17,7 @@ namespace KustoCopyConsole.Runner
         private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
 
         public ExportingRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, TimeSpan.FromSeconds(10))
         {
         }
 

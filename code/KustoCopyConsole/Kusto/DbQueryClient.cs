@@ -164,8 +164,9 @@ DataByExtent
 | extend RowNum = row_number()
 | summarize
     RowCount = sum(RowCount),
-    MinInfo = arg_min(RowNum, MinIngestionTime),
-    MaxInfo = arg_max(RowNum, MaxIngestionTime, CreatedOn)
+    CreatedOn = max(CreatedOn),
+    Info1 = arg_min(RowNum, MinIngestionTime),
+    Info2 = arg_max(RowNum, MaxIngestionTime)
   by BlockId
 | project RowCount, MinIngestionTime, MaxIngestionTime, CreatedOn";
                     var reader = await _provider.ExecuteQueryAsync(

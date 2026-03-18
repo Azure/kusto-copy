@@ -25,7 +25,7 @@ namespace KustoCopyConsole.Runner
                 ]);
 
         public AwaitExportedRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(15))
+           : base(parameters, TimeSpan.FromSeconds(10))
         {
         }
 
@@ -55,10 +55,8 @@ namespace KustoCopyConsole.Runner
                 {
                     await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
                 }
-                else
-                {
-                    await SleepAsync(ct);
-                }
+
+                await SleepAsync(ct);
             }
         }
 
