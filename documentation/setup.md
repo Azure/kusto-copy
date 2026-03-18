@@ -74,6 +74,7 @@ Destination (-d)|x|Destination database or table|https://yourcluster.eastus.kust
 Staging Storage (-t)|x|One or many ADLS gen 2 containers (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 Query (-d)||Optional query|"\| where Level == 'error'"
 Managed Identiy Client ID (--clientId)||If using User Managed Identity|Client ID guid
+Export Count (--export)||Maximum parallel export (default is maximum # of slots)|20
 
 A couple of comments:
 

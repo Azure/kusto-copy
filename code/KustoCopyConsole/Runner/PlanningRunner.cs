@@ -22,8 +22,8 @@ namespace KustoCopyConsole.Runner
 
         private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 2000;
         private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 1000;
-        private const int MAX_ROW_COUNT_PER_BLOCK = 4000000;
-        private const int MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
+        private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
+        private const long MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
@@ -270,52 +270,6 @@ namespace KustoCopyConsole.Runner
             return mergedRowPartitions;
         }
 
-        private IEnumerable<ProtoBlock> Merge(IEnumerable<ProtoBlock> protoBlocks)
-        {
-            DateTime? Max(DateTime? a, DateTime? b)
-            {
-                return a == null && b == null
-                    ? null
-                    : a == null && b != null
-                    ? b
-                    : a != null && b == null
-                    ? a
-                    : a!.Value > b!.Value
-                    ? a
-                    : b;
-            }
-
-            var mergedProtoBlocks = new List<ProtoBlock>(protoBlocks.Count());
-            var bufferProtoBlock = (ProtoBlock?)null;
-
-            foreach (var protoBlock in protoBlocks)
-            {
-                if (bufferProtoBlock == null)
-                {
-                    bufferProtoBlock = protoBlock;
-                }
-                else if (bufferProtoBlock.RowCount + protoBlock.RowCount < MAX_ROW_COUNT_PER_BLOCK)
-                {   //  Merge
-                    bufferProtoBlock = new ProtoBlock(
-                        bufferProtoBlock.RowCount + protoBlock.RowCount,
-                        bufferProtoBlock.MinIngestionTime,
-                        protoBlock.MaxIngestionTime,
-                        Max(bufferProtoBlock.CreationTime, protoBlock.CreationTime));
-                }
-                else
-                {
-                    mergedProtoBlocks.Add(bufferProtoBlock);
-                    bufferProtoBlock = protoBlock;
-                }
-            }
-            if (bufferProtoBlock != null)
-            {
-                mergedProtoBlocks.Add(bufferProtoBlock);
-            }
-
-            return mergedProtoBlocks;
-        }
-
         private TimeSpan GetPartitionResolution(int? level)
         {
             return level switch
@@ -396,7 +350,7 @@ namespace KustoCopyConsole.Runner
             var iteration = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
                 .First();
-            var rawProtoBlocks = await queryClient.GetProtoBlocksAsync(
+            var protoBlocks = await queryClient.GetProtoBlocksAsync(
                 new KustoPriority(parentPartition.IterationKey),
                 activityParam.GetSourceTableIdentity().TableName,
                 activityParam.KqlQuery,
@@ -405,10 +359,10 @@ namespace KustoCopyConsole.Runner
                 parentPartition.MinIngestionTime,
                 parentPartition.MaxIngestionTime,
                 TimeSpan.FromSeconds(0.01),
+                MAX_ROW_COUNT_PER_BLOCK,
                 ct);
-            var mergedProtoBlocks = Merge(rawProtoBlocks);
 
-            return mergedProtoBlocks;
+            return protoBlocks;
         }
 
         private bool ClearPlanning(IterationKey iterationKey, TransactionContext? tx = null)

@@ -114,6 +114,7 @@ BaseData
             string minIngestionTime,
             string maxIngestionTime,
             TimeSpan partitionResolution,
+            long maxRowCountPerBlock,
             CancellationToken ct)
         {
             return await RequestRunAsync(
@@ -128,6 +129,7 @@ BaseData
 let MinIngestionTime = datetime({minIngestionTime});
 let MaxIngestionTime = datetime({maxIngestionTime});
 let PartitionResolution = timespan({partitionResolution});
+let MaxRowCountPerBlock = long({maxRowCountPerBlock});
 let BaseData = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at(""{cursorEnd}"")
@@ -144,17 +146,28 @@ let ShowCommand = toscalar(strcat(
     "")""));
 let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
     | project ExtentId, CreatedOn=MaxCreatedOn;
-BaseData
-| summarize RowCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
-    by PartitionBin=bin(ingestion_time(), PartitionResolution), ExtentId=extent_id()
-| lookup kind=leftouter ExtentIdCreationTime on ExtentId
-| summarize RowCount=sum(RowCount), MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime), CreatedOn=max(CreatedOn)
-    by PartitionBin
-| order by MinIngestionTime asc
-| extend MinIngestionTime=tostring(MinIngestionTime)
-| extend MaxIngestionTime=tostring(MaxIngestionTime)
-| project-away PartitionBin
-";
+//  Get the data by extent
+let DataByExtent = BaseData
+    | summarize RowCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+        by PartitionBin=bin(ingestion_time(), PartitionResolution), ExtentId=extent_id()
+    | lookup kind=leftouter ExtentIdCreationTime on ExtentId
+    | summarize RowCount=sum(RowCount), MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime), CreatedOn=max(CreatedOn)
+        by PartitionBin
+    | order by MinIngestionTime asc
+    | extend MinIngestionTime=tostring(MinIngestionTime)
+    | extend MaxIngestionTime=tostring(MaxIngestionTime)
+    | project-away PartitionBin;
+//  Merge the data into MaxRowCountPerBlock blocks
+DataByExtent
+| extend CummulativeSum = row_cumsum(RowCount)
+| extend BlockId = (CummulativeSum - 1) / MaxRowCountPerBlock
+| extend RowNum = row_number()
+| summarize
+    RowCount = sum(RowCount),
+    MinInfo = arg_min(RowNum, MinIngestionTime),
+    MaxInfo = arg_max(RowNum, MaxIngestionTime, CreatedOn)
+  by BlockId
+| project RowCount, MinIngestionTime, MaxIngestionTime, CreatedOn";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
