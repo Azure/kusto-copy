@@ -98,11 +98,15 @@ namespace KustoCopyConsole.Runner
                     .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                     .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
                     .ToImmutableArray();
-                var cleanCount = await commandClient.CleanExtentTagsAsync(
-                    new KustoPriority(iterationKey),
-                    destinationTable.TableName,
-                    blocks.Select(be => be.BlockTag),
-                    ct);
+
+                if (!Parameterization.KeepTags)
+                {
+                    var cleanCount = await commandClient.CleanExtentTagsAsync(
+                        new KustoPriority(iterationKey),
+                        destinationTable.TableName,
+                        blocks.Select(be => be.BlockTag),
+                        ct);
+                }
 
                 CommitMove(iterationKey, blocks);
             }
