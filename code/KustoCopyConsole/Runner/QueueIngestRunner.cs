@@ -77,7 +77,7 @@ namespace KustoCopyConsole.Runner
             string tempTableName,
             CancellationToken ct)
         {
-            var blockTag = $"drop-by:kusto-copy|{block.BlockKey.BlockId};{Guid.NewGuid()}";
+            var blockTag = $"drop-by:kusto-copy|block-{block.BlockKey.BlockId};{Guid.NewGuid()}";
             //  Get Uri with SAS tokens
             var authorizedUriTasks = urlRecords
                 .Select(u => StagingBlobUriProvider.AuthorizeUriAsync(u.Url, ct))
