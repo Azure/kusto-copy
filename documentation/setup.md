@@ -75,6 +75,7 @@ Staging Storage (-t)|x|One or many ADLS gen 2 containers (can be a sub folder)|h
 Query (-d)||Optional query|"\| where Level == 'error'"
 Managed Identiy Client ID (--clientId)||If using User Managed Identity|Client ID guid
 Export Count (--export)||Maximum parallel export (default is maximum # of slots)|20
+Keep Tags (--keep-tags)||Keep tags in destination table (default is false)|true
 
 A couple of comments:
 
