@@ -202,7 +202,7 @@ let ['{tableName}'] = ['{tableName}']
     {{
         ""MaximumBatchingTimeSpan"" : ""00:00:15"",
         ""MaximumNumberOfItems"" : 2000,
-        ""MaximumRawDataSizeMB"": 2048
+        ""MaximumRawDataSizeMB"": 4096
     }}
     ```
 
