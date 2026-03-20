@@ -141,6 +141,9 @@ namespace KustoCopyConsole
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");
                     await mainRunner.RunAsync(cancellationTokenSource.Token);
+                    Trace.WriteLine("");
+                    Trace.WriteLine("Copy completed");
+                    Trace.WriteLine("");
                 }
             }
             catch (Exception ex)
