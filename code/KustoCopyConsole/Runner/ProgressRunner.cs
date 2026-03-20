@@ -45,7 +45,7 @@ namespace KustoCopyConsole.Runner
                 .Sum(p => p.Value);
 
             Console.WriteLine(
-                $"Progress:  " +
+                $"Progress [{iteration.State}]:  " +
                 $"Total={blockCount}, Planned={metrics[BlockMetric.Planned]}, " +
                 $"Exporting={metrics[BlockMetric.Exporting]}, Exported={metrics[BlockMetric.Exported]}, " +
                 $"Queued={metrics[BlockMetric.Queued]}, " +

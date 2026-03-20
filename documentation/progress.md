@@ -9,3 +9,8 @@ Progress [Planned]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40
 
 In the following section, you'll understand what each number means.
 
+## Blocks
+
+## Starting / Planning / Planned / Completed
+
+## State Machine
