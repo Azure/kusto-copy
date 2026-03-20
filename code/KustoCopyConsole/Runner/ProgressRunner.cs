@@ -43,6 +43,9 @@ namespace KustoCopyConsole.Runner
                 //  Only take the states part of the metrics
                 .Where(p => (int)p.Key < Enum.GetValues<BlockState>().Length)
                 .Sum(p => p.Value);
+            var completionPercentage = blockCount > 0
+                ? 100 * metrics[BlockMetric.ExtentMoved] / blockCount
+                : 0;
 
             Console.WriteLine(
                 $"Progress [{iteration.State}]:  " +
@@ -50,7 +53,7 @@ namespace KustoCopyConsole.Runner
                 $"Exporting={metrics[BlockMetric.Exporting]}, Exported={metrics[BlockMetric.Exported]}, " +
                 $"Queued={metrics[BlockMetric.Queued]}, " +
                 $"Ingested={metrics[BlockMetric.Ingested]}, " +
-                $"Moved={metrics[BlockMetric.ExtentMoved]}");
+                $"Moved={metrics[BlockMetric.ExtentMoved]} - %{completionPercentage}");
             Console.WriteLine(
                 $"({metrics[BlockMetric.PlannedRowCount]:N0} planned rows / " +
                 $"{metrics[BlockMetric.ExportedRowCount]:N0} exported rows)");
