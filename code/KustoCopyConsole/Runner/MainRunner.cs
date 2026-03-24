@@ -30,7 +30,7 @@ namespace KustoCopyConsole.Runner
 
             Console.WriteLine("  Done");
             Console.Write("Initialize tracking...");
-            
+
             var database = await TrackDatabase.CreateAsync(
                 new Uri($"{parameterization.StagingStorageDirectories.First()}/tracking"),
                 credentials,
@@ -91,8 +91,8 @@ namespace KustoCopyConsole.Runner
             var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
             var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
-
-            await Task.WhenAll(
+            var runnerTasks = new[]
+            {
                 Task.Run(() => progressRunner.RunAsync(ct)),
                 Task.Run(() => planningRunner.RunAsync(ct)),
                 Task.Run(() => tempTableRunner.RunAsync(ct)),
@@ -104,7 +104,29 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => blockCompletingRunner.RunAsync(ct)),
                 Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)),
                 Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                Task.Run(() => activityCompletingRunner.RunAsync(ct)));
+                Task.Run(() => activityCompletingRunner.RunAsync(ct))
+            };
+            var monitorTask = Task.Run(async () =>
+            {   // Monitor for first failure and cancel
+                var remainingTasks = runnerTasks.ToList();
+
+                while (remainingTasks.Count > 0)
+                {
+                    var completed = await Task.WhenAny(remainingTasks);
+
+                    if (completed.IsFaulted || completed.IsCanceled)
+                    {
+                        await _cts.CancelAsync();
+                        break; // Stop monitoring once we've triggered cancellation
+                    }
+
+                    remainingTasks.Remove(completed);
+                }
+            });
+
+            // Wait for all runners to complete (will be fast after cancellation)
+            await Task.WhenAll(runnerTasks);
+            await monitorTask;
         }
 
         private void SyncActivities(TransactionContext tx)
