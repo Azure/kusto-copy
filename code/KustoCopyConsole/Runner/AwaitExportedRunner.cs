@@ -31,15 +31,23 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tasks = Parameterization.Activities.Values
-                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
-                .Select(g => Task.Run(() => RunActivitiesAsync(
-                    g.Key,
-                    g.Select(a => a.ActivityName).ToImmutableArray(),
-                    ct)))
-                .ToImmutableList();
+            while (!AreActivitiesCompleted())
+            {
+                var activityNames = Database.Activities.Query()
+                    .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                    .Select(a => a.ActivityName)
+                    .ToHashSet();
+                var tasks = Parameterization.Activities.Values
+                    .Where(a => activityNames.Contains(a.ActivityName))
+                    .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
+                    .Select(g => Task.Run(() => RunActivitiesAsync(
+                        g.Key,
+                        g.Select(a => a.ActivityName).ToImmutableArray(),
+                        ct)))
+                    .ToImmutableList();
 
-            await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks);
+            }
         }
 
         private async Task RunActivitiesAsync(
@@ -47,28 +55,16 @@ namespace KustoCopyConsole.Runner
             IImmutableList<string> activityNames,
             CancellationToken ct)
         {
-            while (!AreActivitiesCompleted(activityNames))
-            {
-                var blockRecords = GetExportingBlocks(activityNames);
-
-                if (blockRecords.Any())
-                {
-                    await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
-                }
-
-                await SleepAsync(ct);
-            }
-        }
-
-        private IImmutableList<BlockRecord> GetExportingBlocks(IEnumerable<string> activityNames)
-        {
             var blockRecords = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exporting))
                 .Take(MAX_OPERATIONS)
                 .ToImmutableArray();
 
-            return blockRecords;
+            if (blockRecords.Any())
+            {
+                await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
+            }
         }
 
         private async Task UpdateOperationsAsync(
