@@ -136,7 +136,7 @@ namespace KustoCopyConsole
                     new Version(AssemblyVersion),
                     parameterization,
                     $"KUSTO-COPY;{AssemblyVersion}",
-                    cancellationTokenSource.Token))
+                    cancellationTokenSource))
                 {
                     Trace.WriteLine("Processing...");
                     Trace.WriteLine("");

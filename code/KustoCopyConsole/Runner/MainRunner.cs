@@ -10,12 +10,14 @@ namespace KustoCopyConsole.Runner
 {
     internal class MainRunner : RunnerBase, IAsyncDisposable
     {
+        private readonly CancellationTokenSource _cts;
+
         #region Constructors
         internal static async Task<MainRunner> CreateAsync(
             Version appVersion,
             MainJobParameterization parameterization,
             string traceApplicationName,
-            CancellationToken ct)
+            CancellationTokenSource cts)
         {
             var credentials = parameterization.CreateCredentials();
             var stagingBlobUriProvider = new AzureBlobUriProvider(
@@ -24,7 +26,7 @@ namespace KustoCopyConsole.Runner
 
             Console.Write("Authentication test...");
 
-            await stagingBlobUriProvider.TestAuthenticationAsync(ct);
+            await stagingBlobUriProvider.TestAuthenticationAsync(cts.Token);
 
             Console.WriteLine("  Done");
             Console.Write("Initialize tracking...");
@@ -32,7 +34,7 @@ namespace KustoCopyConsole.Runner
             var database = await TrackDatabase.CreateAsync(
                 new Uri($"{parameterization.StagingStorageDirectories.First()}/tracking"),
                 credentials,
-                ct);
+                cts.Token);
 
             Console.WriteLine("  Done");
             Console.Write("Initialize Kusto connections...");
@@ -41,7 +43,7 @@ namespace KustoCopyConsole.Runner
                 parameterization,
                 credentials,
                 traceApplicationName,
-                ct);
+                cts.Token);
 
             Console.WriteLine("  Done");
 
@@ -52,12 +54,13 @@ namespace KustoCopyConsole.Runner
                 dbClientFactory,
                 stagingBlobUriProvider);
 
-            return new MainRunner(parameters);
+            return new MainRunner(parameters, cts);
         }
 
-        private MainRunner(RunnerParameters parameters)
+        private MainRunner(RunnerParameters parameters, CancellationTokenSource cts)
             : base(parameters, TimeSpan.Zero)
         {
+            _cts = cts;
         }
         #endregion
 
