@@ -27,10 +27,7 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableArray();
 
                 await Task.WhenAll(tasks);
-                if (!tasks.Any())
-                {
-                    await SleepAsync(ct);
-                }
+                await SleepAsync(ct);
             }
         }
 

@@ -72,6 +72,7 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableList();
 
                 await Task.WhenAll(tasks);
+                await SleepAsync(ct);
             }
         }
 
