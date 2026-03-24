@@ -33,10 +33,9 @@ namespace KustoCopyConsole.Runner
 
         protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
 
-        protected bool AreActivitiesCompleted(params IEnumerable<string> activityNames)
+        protected bool AreActivitiesCompleted()
         {
             var isCompleted = Database.Activities.Query()
-                .Where(pf => pf.In(a => a.ActivityName, activityNames))
                 .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
                 .Count() == 0;
 
@@ -59,7 +58,9 @@ namespace KustoCopyConsole.Runner
 
         protected async Task SleepAsync(CancellationToken ct)
         {
-            await Task.WhenAny(_allActivityCompletedSource.Task, Task.Delay(_wakePeriod, ct));
+            await Task.WhenAny(
+                _allActivityCompletedSource.Task,
+                Task.Delay(_wakePeriod, ct));
         }
 
         protected void TraceWarning(string text)

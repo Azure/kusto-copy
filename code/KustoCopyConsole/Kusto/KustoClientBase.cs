@@ -20,10 +20,11 @@ namespace KustoCopyConsole.Kusto
         protected async Task<T> RequestRunAsync<T>(
             KustoPriority priority,
             Func<Task<T>> actionAsync)
-        {   //  Retry is done on a separate request:  if there is pressure on usage, we cycle the
-            //  requests
-            return await _kustoRetryPolicy.ExecuteAsync(
-                async () => await _queue.RequestRunAsync(priority, actionAsync));
+        {
+            // Retry happens within a single queue slot
+            return await _queue.RequestRunAsync(
+                priority,
+                async () => await _kustoRetryPolicy.ExecuteAsync(actionAsync));
         }
 
         private static TimeSpan TimeSpanToRetry(int retryAttempt)
