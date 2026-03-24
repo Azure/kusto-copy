@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Kusto
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
             .Handle<Exception>()
-            .WaitAndRetryAsync(20, TimeSpanToRetry, OnRetry);
+            .WaitAndRetryAsync(3, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 
@@ -29,7 +29,9 @@ namespace KustoCopyConsole.Kusto
 
         private static TimeSpan TimeSpanToRetry(int retryAttempt)
         {
-            return TimeSpan.FromSeconds(Math.Min(120, Math.Pow(2, retryAttempt)));
+            var delay = TimeSpan.FromSeconds(Math.Min(120, Math.Pow(2, retryAttempt)));
+
+            return delay;
         }
 
         private static void OnRetry(

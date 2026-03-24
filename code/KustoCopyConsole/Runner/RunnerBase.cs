@@ -61,6 +61,8 @@ namespace KustoCopyConsole.Runner
             await Task.WhenAny(
                 _allActivityCompletedSource.Task,
                 Task.Delay(_wakePeriod, ct));
+
+            ct.ThrowIfCancellationRequested();
         }
 
         protected void TraceWarning(string text)
