@@ -23,59 +23,87 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var tasks = Parameterization.Activities.Values
-                .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
-                .Select(g => Task.Run(() => RunActivitiesAsync(
-                    g.Key,
-                    g.Select(a => a.ActivityName).ToImmutableArray(),
-                    ct)))
-                .ToImmutableList();
+            var cacheMap = new Dictionary<Uri, CapacityCache>();
 
-            await Task.WhenAll(tasks);
+            while (!AreActivitiesCompleted())
+            {
+                var activityNames = Database.Activities.Query()
+                    .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                    .Select(a => a.ActivityName)
+                    .ToHashSet();
+                var groupings = Parameterization.Activities.Values
+                    .Where(a => activityNames.Contains(a.ActivityName))
+                    .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
+                    .Select(g => new
+                    {
+                        SourceClusterUri = g.Key,
+                        ActivityNames = g.Select(a => a.ActivityName).ToImmutableArray()
+                    })
+                    .ToImmutableDictionary(g => g.SourceClusterUri);
+
+                //  Ensures cached capacity of source cluster
+                foreach (var grouping in groupings.Values)
+                {
+                    if (!cacheMap.ContainsKey(grouping.SourceClusterUri)
+                        || cacheMap[grouping.SourceClusterUri].CachedTime
+                        + CAPACITY_REFRESH_PERIOD < DateTime.Now)
+                    {
+                        cacheMap[grouping.SourceClusterUri] = new CapacityCache(
+                            DateTime.Now,
+                            await FetchCapacityAsync(grouping.SourceClusterUri, ct));
+                    }
+                }
+                //  Retired unused capacity
+                foreach (var sourceClusterUri in cacheMap.Keys)
+                {
+                    if (!groupings.ContainsKey(sourceClusterUri))
+                    {
+                        cacheMap.Remove(sourceClusterUri);
+                    }
+                }
+
+                var tasks = groupings
+                    .Values
+                    .Select(g => Task.Run(() => RunActivitiesAsync(
+                        g.SourceClusterUri,
+                        cacheMap[g.SourceClusterUri].CachedCapacity,
+                        g.ActivityNames,
+                        ct)))
+                    .ToImmutableList();
+
+                await Task.WhenAll(tasks);
+            }
         }
 
         private async Task RunActivitiesAsync(
             Uri sourceClusterUri,
+            int capacity,
             IImmutableList<string> activityNames,
             CancellationToken ct)
         {
-            var capacityCache = new CapacityCache(
-                DateTime.Now.Subtract(CAPACITY_REFRESH_PERIOD),
-                0);
+            var plannedBlocks = FetchPlannedBlocks(activityNames, capacity);
 
-            while (!AreActivitiesCompleted(activityNames))
+            if (plannedBlocks.Any())
             {
-                //  Ensures capacity of source cluster
-                capacityCache = capacityCache.CachedTime + CAPACITY_REFRESH_PERIOD < DateTime.Now
-                    ? new CapacityCache(
-                        DateTime.Now,
-                        await FetchCapacityAsync(sourceClusterUri, ct))
-                    : capacityCache;
+                var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
+                var iteration = Database.Iterations.Query()
+                    .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                    .First();
+                var startExportTasks = plannedBlocks
+                    .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
+                    .ToImmutableArray();
 
-                var plannedBlocks = FetchPlannedBlocks(activityNames, capacityCache.CachedCapacity);
-
-                if (plannedBlocks.Any())
-                {
-                    var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
-                    var iteration = Database.Iterations.Query()
-                        .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
-                        .First();
-                    var startExportTasks = plannedBlocks
-                        .Select(b => Task.Run(() => StartExportAsync(b, iteration, ct)))
-                        .ToImmutableArray();
-
-                    await Task.WhenAll(startExportTasks);
-                }
-                else
-                {
-                    await SleepAsync(ct);
-                }
+                await Task.WhenAll(startExportTasks);
+            }
+            else
+            {
+                await SleepAsync(ct);
             }
         }
 
         private IEnumerable<BlockRecord> FetchPlannedBlocks(
             IEnumerable<string> activityNames,
-            int cachedCapacity)
+            int capacity)
         {   //  The first (by priority) block will determine the activity and iteration
             //  we'll work on
             var firstPlannedBlock = Database.Blocks.Query()
@@ -96,8 +124,8 @@ namespace KustoCopyConsole.Runner
                     .Count();
                 //  Cap the blocks with override capacity
                 var cappedCachedCapacity = Parameterization.ExportCount == null
-                    ? cachedCapacity
-                    : Math.Min(cachedCapacity, Parameterization.ExportCount.Value);
+                    ? capacity
+                    : Math.Min(capacity, Parameterization.ExportCount.Value);
                 //  Cap the blocks with available capacity
                 var maxExporting =
                     Math.Min(BLOCK_BATCH, Math.Max(0, cappedCachedCapacity - exportingCount));
