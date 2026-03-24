@@ -30,7 +30,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var iterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
@@ -47,8 +47,6 @@ namespace KustoCopyConsole.Runner
             {
                 await RunIterationAsync(activityParam, iteration, queryClient, ct);
             }
-
-            return false;
         }
 
         private async Task RunIterationAsync(

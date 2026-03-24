@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity.State;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -12,31 +13,21 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            await Task.WhenAll(Parameterization.Activities.Keys
-                .Select(a => Task.Run(() => RunActivityLoopAsync(a, ct))));
-        }
-
-        protected abstract Task<bool> RunActivityAsync(string activityName, CancellationToken ct);
-
-        private async Task RunActivityLoopAsync(string activityName, CancellationToken ct)
-        {
-            while (!IsActivityCompleted(activityName))
+            while (!AreActivitiesCompleted())
             {
-                if (!await RunActivityAsync(activityName, ct))
+                var activityNames = Database.Activities.Query()
+                    .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                    .Select(a => a.ActivityName)
+                    .ToImmutableArray();
+
+                foreach (var activityName in activityNames)
                 {
-                    await SleepAsync(ct);
+                    await RunActivityAsync(activityName, ct);
                 }
+                await SleepAsync(ct);
             }
         }
 
-        private bool IsActivityCompleted(string activityName)
-        {
-            var isCompleted = Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.ActivityName, activityName))
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
-                .Count() == 1;
-
-            return isCompleted;
-        }
+        protected abstract Task RunActivityAsync(string activityName, CancellationToken ct);
     }
 }

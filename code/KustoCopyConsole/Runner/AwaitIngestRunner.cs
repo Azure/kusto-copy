@@ -17,7 +17,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override async Task<bool> RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
                 Parameterization.Activities[activityName].GetDestinationTableIdentity();
@@ -37,8 +37,6 @@ namespace KustoCopyConsole.Runner
                 }
                 await FailureDetectionAsync(iterationKey, destinationTable, ct);
             }
-
-            return iterationKeys.Any();
         }
 
         #region Update Ingested

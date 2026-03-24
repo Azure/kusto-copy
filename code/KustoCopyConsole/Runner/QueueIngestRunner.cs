@@ -15,9 +15,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override async Task<bool> RunActivityAsync(
-            string activityName,
-            CancellationToken ct)
+        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable = Parameterization.Activities[activityName]
                 .GetDestinationTableIdentity();
@@ -61,13 +59,8 @@ namespace KustoCopyConsole.Runner
                         .ToImmutableArray();
 
                     await Task.WhenAll(tasks);
-
-                    return true;
                 }
             }
-
-            //  No blocks or temp table was available
-            return false;
         }
 
         private async Task QueueIngestBlockAsync(
