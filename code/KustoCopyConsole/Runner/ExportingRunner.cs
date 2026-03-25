@@ -13,8 +13,8 @@ namespace KustoCopyConsole.Runner
         private record CapacityCache(DateTime CachedTime, int CachedCapacity);
         #endregion
 
-        private const int BLOCK_BATCH = 50;
-        private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(5);
+        private const int BLOCK_BATCH = 10;
+        private static readonly TimeSpan CAPACITY_REFRESH_PERIOD = TimeSpan.FromMinutes(2);
 
         public ExportingRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(10))
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Runner
 
                 var tasks = groupings
                     .Values
-                    .Select(g => Task.Run(() => RunActivitiesAsync(
+                    .Select(g => Task.Run(() => RunClusterExportAsync(
                         g.SourceClusterUri,
                         cacheMap[g.SourceClusterUri].CachedCapacity,
                         g.ActivityNames,
@@ -76,7 +76,23 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task RunActivitiesAsync(
+        private async Task RunClusterExportAsync(
+            Uri sourceClusterUri,
+            int capacity,
+            IImmutableList<string> activityNames,
+            CancellationToken ct)
+        {
+            while (await ExportBatchAsync(
+                sourceClusterUri,
+                capacity,
+                activityNames,
+                ct))
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+        }
+
+        private async Task<bool> ExportBatchAsync(
             Uri sourceClusterUri,
             int capacity,
             IImmutableList<string> activityNames,
@@ -84,7 +100,7 @@ namespace KustoCopyConsole.Runner
         {
             var plannedBlocks = FetchPlannedBlocks(activityNames, capacity);
 
-            if (plannedBlocks.Any())
+            if (plannedBlocks.Count() > 0)
             {
                 var iterationKey = plannedBlocks.First().BlockKey.IterationKey;
                 var iteration = Database.Iterations.Query()
@@ -95,11 +111,11 @@ namespace KustoCopyConsole.Runner
                     .ToImmutableArray();
 
                 await Task.WhenAll(startExportTasks);
+
+                return true;
             }
-            else
-            {
-                await SleepAsync(ct);
-            }
+         
+            return false;
         }
 
         private IEnumerable<BlockRecord> FetchPlannedBlocks(

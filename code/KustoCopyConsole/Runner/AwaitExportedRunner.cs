@@ -62,7 +62,7 @@ namespace KustoCopyConsole.Runner
                 .Take(MAX_OPERATIONS)
                 .ToImmutableArray();
 
-            if (blockRecords.Any())
+            if (blockRecords.Length > 0)
             {
                 await UpdateOperationsAsync(sourceClusterUri, blockRecords, ct);
             }
