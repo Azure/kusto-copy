@@ -45,7 +45,8 @@ namespace KustoCopyConsole.Kusto
                         .FirstOrDefault();
 
                     return cursor!;
-                });
+                },
+                ct);
         }
 
         public async Task<IEnumerable<RowPartition>> PartitionRowsAsync(
@@ -102,7 +103,8 @@ BaseData
                         .ToImmutableArray();
 
                     return rowPartitions;
-                });
+                },
+                ct);
         }
 
         public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksAsync(
@@ -183,7 +185,8 @@ DataByExtent
                         .ToImmutableArray();
 
                     return results;
-                });
+                },
+                ct);
         }
     }
 }

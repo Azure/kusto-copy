@@ -67,7 +67,8 @@ namespace KustoCopyConsole.Kusto
                         var operationText = operation.ToJsonString();
 
                         return operationText;
-                    }))
+                    },
+                    ct))
                 .ToImmutableArray();
 
             await Task.WhenAll(queuingTasks);
@@ -90,7 +91,8 @@ namespace KustoCopyConsole.Kusto
                     var summary = await _ingestProvider.GetOperationSummaryAsync(operation, ct);
 
                     return FAILED_STATUS.Contains(summary.Status);
-                });
+                },
+                ct);
         }
     }
 }

@@ -37,9 +37,16 @@ namespace KustoCopyConsole.Concurrency
 
             public override async Task ExecuteAsync()
             {
-                var value = await _asyncAction();
+                try
+                {
+                    var value = await _asyncAction();
 
-                Source.SetResult(value);
+                    Source.SetResult(value);
+                }
+                catch (Exception ex)
+                {
+                    Source.SetException(ex);
+                }
             }
         }
         #endregion

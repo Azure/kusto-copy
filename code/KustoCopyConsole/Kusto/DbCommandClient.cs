@@ -42,7 +42,8 @@ namespace KustoCopyConsole.Kusto
                         .First();
 
                     return (int)result;
-                });
+                },
+                ct);
         }
 
         public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
@@ -73,7 +74,8 @@ namespace KustoCopyConsole.Kusto
                             .ToImmutableArray();
 
                         return result;
-                    });
+                    },
+                    ct);
             }
             else
             {
@@ -126,7 +128,8 @@ let ['{tableName}'] = ['{tableName}']
                         .First();
 
                     return operationId.ToString();
-                });
+                },
+                ct);
         }
 
         public async Task<IImmutableList<ExportDetail>> ShowExportDetailsAsync(
@@ -154,7 +157,8 @@ let ['{tableName}'] = ['{tableName}']
                         .ToImmutableArray();
 
                     return result;
-                });
+                },
+                ct);
         }
 
         #region Table Management
@@ -178,7 +182,8 @@ let ['{tableName}'] = ['{tableName}']
                         properties);
 
                     return 0;
-                });
+                },
+                ct);
         }
 
         public async Task CreateTempTableAsync(
@@ -245,7 +250,8 @@ let ['{tableName}'] = ['{tableName}']
                     }
 
                     return 0;
-                });
+                },
+                ct);
         }
         #endregion
 
@@ -283,7 +289,8 @@ let ['{tableName}'] = ['{tableName}']
                         .ToImmutableArray();
 
                    return result;
-               });
+               },
+               ct);
         }
 
         public async Task<IEnumerable<ExtentRowCount>> GetExtentRowCountsAsync(
@@ -315,7 +322,8 @@ let ['{tableName}'] = ['{tableName}']
                         .ToImmutableArray();
 
                    return results;
-               });
+               },
+               ct);
         }
 
         public async Task<int> MoveExtentsAsync(
@@ -359,7 +367,8 @@ let ['{tableName}'] = ['{tableName}']
                    }
 
                    return results.Count();
-               });
+               },
+               ct);
         }
 
         public async Task<int> CleanExtentTagsAsync(
@@ -402,7 +411,8 @@ let ['{tableName}'] = ['{tableName}']
                    }
 
                    return results.Count();
-               });
+               },
+               ct);
         }
     }
 }

@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Kusto
     {
         private static AsyncPolicy _kustoRetryPolicy = Policy
             .Handle<Exception>()
-            .WaitAndRetryAsync(3, TimeSpanToRetry, OnRetry);
+            .WaitAndRetryAsync(1, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 
@@ -19,12 +19,13 @@ namespace KustoCopyConsole.Kusto
 
         protected async Task<T> RequestRunAsync<T>(
             KustoPriority priority,
-            Func<Task<T>> actionAsync)
+            Func<Task<T>> actionAsync,
+            CancellationToken ct)
         {
             // Retry happens within a single queue slot
             return await _queue.RequestRunAsync(
                 priority,
-                async () => await _kustoRetryPolicy.ExecuteAsync(actionAsync));
+                async () => await _kustoRetryPolicy.ExecuteAsync(_ => actionAsync(), ct));
         }
 
         private static TimeSpan TimeSpanToRetry(int retryAttempt)
