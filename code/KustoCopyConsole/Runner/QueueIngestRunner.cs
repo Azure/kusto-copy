@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Runner
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
-        private const int BATCH_BLOCKS = 20;
+        private const int BATCH_BLOCKS = 10;
 
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
@@ -17,8 +17,14 @@ namespace KustoCopyConsole.Runner
 
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
-            var destinationTable = Parameterization.Activities[activityName]
-                .GetDestinationTableIdentity();
+            while (await RunBatchAsync(activityName, ct))
+            {
+                ct.ThrowIfCancellationRequested();
+            }
+        }
+
+        protected override async Task<bool> RunBatchAsync(string activityName, CancellationToken ct)
+        {
             var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Exported))
@@ -29,6 +35,8 @@ namespace KustoCopyConsole.Runner
 
             if (blocks.Length > 0)
             {
+                var destinationTable = Parameterization.Activities[activityName]
+                    .GetDestinationTableIdentity();
                 var iterationKey = blocks[0].BlockKey.IterationKey;
                 var tempTable = TryGetTempTable(iterationKey);
 
@@ -59,8 +67,12 @@ namespace KustoCopyConsole.Runner
                         .ToImmutableArray();
 
                     await Task.WhenAll(tasks);
+
+                    return true;
                 }
             }
+
+            return false;
         }
 
         private async Task QueueIngestBlockAsync(

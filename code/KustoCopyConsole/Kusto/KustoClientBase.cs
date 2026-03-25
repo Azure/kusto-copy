@@ -9,7 +9,7 @@ namespace KustoCopyConsole.Kusto
         private static readonly AsyncPolicy _kustoRetryPolicy = Policy
             .Handle<Exception>()
             //  About 10 minutes
-            .WaitAndRetryAsync(1, TimeSpanToRetry, OnRetry);
+            .WaitAndRetryAsync(10, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
 
