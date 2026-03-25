@@ -4,6 +4,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
@@ -116,9 +117,9 @@ namespace KustoCopyConsole.Runner
 
                     if (completed.IsFaulted || completed.IsCanceled)
                     {
-                        Console.WriteLine();
-                        Console.WriteLine("Failure detected");
-                        Console.WriteLine();
+                        Trace.TraceWarning("");
+                        Trace.TraceWarning("Failure detected");
+                        Trace.TraceWarning("");
                         await _cts.CancelAsync();
                         break; // Stop monitoring once we've triggered cancellation
                     }

@@ -62,6 +62,12 @@ namespace KustoCopyConsole.Runner
                 _allActivityCompletedSource.Task,
                 Task.Delay(_wakePeriod, ct));
 
+            if(ct.IsCancellationRequested)
+            {
+                Trace.TraceWarning("");
+                Trace.TraceWarning($"General failure:  {GetType().Name}");
+                Trace.TraceWarning("");
+            }
             ct.ThrowIfCancellationRequested();
         }
 
