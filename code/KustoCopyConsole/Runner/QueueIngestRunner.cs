@@ -61,6 +61,8 @@ namespace KustoCopyConsole.Runner
                     await Task.WhenAll(tasks);
                 }
             }
+
+            await SleepAsync(ct);
         }
 
         private async Task QueueIngestBlockAsync(

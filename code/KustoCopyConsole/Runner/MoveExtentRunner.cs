@@ -21,7 +21,7 @@ namespace KustoCopyConsole.Runner
             {
                 var extentsToMove = await GetExtentsToMoveAsync(ct);
 
-                if (extentsToMove != null)
+                if (extentsToMove.Any())
                 {
                     await MoveAsync(extentsToMove, ct);
                 }
