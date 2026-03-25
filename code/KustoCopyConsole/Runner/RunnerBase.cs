@@ -64,9 +64,9 @@ namespace KustoCopyConsole.Runner
 
             if(ct.IsCancellationRequested)
             {
-                Trace.TraceWarning("");
-                Trace.TraceWarning($"General failure:  {GetType().Name}");
-                Trace.TraceWarning("");
+                Trace.TraceInformation("");
+                Trace.TraceInformation($"General failure:  {GetType().Name}");
+                Trace.TraceInformation("");
             }
             ct.ThrowIfCancellationRequested();
         }

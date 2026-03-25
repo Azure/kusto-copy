@@ -117,9 +117,9 @@ namespace KustoCopyConsole.Runner
 
                     if (completed.IsFaulted || completed.IsCanceled)
                     {
-                        Trace.TraceWarning("");
-                        Trace.TraceWarning("Failure detected");
-                        Trace.TraceWarning("");
+                        Trace.TraceInformation("");
+                        Trace.TraceInformation("Failure detected");
+                        Trace.TraceInformation("");
                         await _cts.CancelAsync();
                         break; // Stop monitoring once we've triggered cancellation
                     }
