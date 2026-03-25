@@ -148,11 +148,13 @@ namespace KustoCopyConsole
             }
             catch (Exception ex)
             {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("Encountered error");
+                Console.WriteLine();
                 await cancellationTokenSource.CancelAsync();
                 if (ex is AuthenticationFailedException afe)
                 {
-                    Console.WriteLine();
-                    Console.WriteLine();
                     Console.WriteLine($"Authentication error:  '{afe.Message}'");
                 }
                 throw;

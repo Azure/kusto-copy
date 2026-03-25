@@ -6,8 +6,9 @@ namespace KustoCopyConsole.Kusto
 {
     internal abstract class KustoClientBase
     {
-        private static AsyncPolicy _kustoRetryPolicy = Policy
+        private static readonly AsyncPolicy _kustoRetryPolicy = Policy
             .Handle<Exception>()
+            //  About 10 minutes
             .WaitAndRetryAsync(1, TimeSpanToRetry, OnRetry);
 
         private readonly PriorityExecutionQueue<KustoPriority> _queue;
