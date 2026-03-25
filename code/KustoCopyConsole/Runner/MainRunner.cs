@@ -117,9 +117,22 @@ namespace KustoCopyConsole.Runner
 
                     if (completed.IsFaulted || completed.IsCanceled)
                     {
-                        Trace.TraceInformation("");
-                        Trace.TraceInformation("Failure detected");
-                        Trace.TraceInformation("");
+                        Trace.TraceError("");
+
+                        if (completed.Exception != null)
+                        {
+                            var ex = completed.Exception;
+
+                            Trace.TraceError(
+                                $"Permanent error:  {ex.GetType().Name} '{ex.Message}'");
+                            if (ex.InnerException != null)
+                            {
+                                Trace.TraceError($"   Inner:  {ex.InnerException.GetType().Name}" +
+                                    $" '{ex.InnerException.Message}'");
+                            }
+                            Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
+                            Trace.TraceError("");
+                        }
                         await _cts.CancelAsync();
                         break; // Stop monitoring once we've triggered cancellation
                     }
