@@ -24,6 +24,7 @@ namespace KustoCopyConsole.Runner
                 if (extentsToMove.Any())
                 {
                     await MoveAsync(extentsToMove, ct);
+                    ct.ThrowIfCancellationRequested();
                 }
                 else
                 {
