@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        protected override async Task<bool> RunBatchAsync(string activityName, CancellationToken ct)
+        protected async Task<bool> RunBatchAsync(string activityName, CancellationToken ct)
         {
             var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
