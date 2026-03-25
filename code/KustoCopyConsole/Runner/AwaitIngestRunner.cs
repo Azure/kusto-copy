@@ -3,6 +3,7 @@ using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -10,7 +11,6 @@ namespace KustoCopyConsole.Runner
     internal class AwaitIngestRunner : ActivityRunnerBase
     {
         private const int MAX_BLOCK_INGESTED_COUNT = 500;
-        private const int MAX_BLOCK_EXTENT_COUNT = 50;
 
         public AwaitIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
@@ -100,7 +100,7 @@ namespace KustoCopyConsole.Runner
                     return true;
                 }
             }
-         
+
             return false;
         }
 
@@ -129,28 +129,34 @@ namespace KustoCopyConsole.Runner
                 if (tagRowCounts.Any())
                 {
                     var queuedBlocksByTags = queuedBlocks.ToImmutableDictionary(b => b.BlockTag);
-                    var overIngestedBlock = tagRowCounts
+                    var overIngestedBlocks = tagRowCounts
                         .Select(trc => new
                         {
                             RowCount = trc.RecordCount,
                             Block = queuedBlocksByTags[trc.Tags]
                         })
                         .Where(o => o.Block.ExportedRowCount < o.RowCount)
-                        .FirstOrDefault();
+                        .ToArray();
+                    var rightSizedBlocks = tagRowCounts
+                        .Select(trc => new
+                        {
+                            RowCount = trc.RecordCount,
+                            Block = queuedBlocksByTags[trc.Tags]
+                        })
+                        .Where(o => o.Block.ExportedRowCount == o.RowCount)
+                        .Select(o => o.Block)
+                        .ToArray();
 
-                    if (overIngestedBlock != null)
+                    foreach (var overIngestedBlock in overIngestedBlocks)
                     {
-                        throw new CopyException(
+                        Trace.TraceWarning(
                             $"Exported row count is {overIngestedBlock.Block.ExportedRowCount} " +
                             $"while we ingested {overIngestedBlock.RowCount} rows for block " +
-                            $"{overIngestedBlock.Block.BlockKey}",
-                            false);
+                            $"{overIngestedBlock.Block.BlockKey}");
                     }
+                    ReturnToPlanned(overIngestedBlocks.Select(o => o.Block));
 
-                    return tagRowCounts
-                        .Select(trc => queuedBlocksByTags[trc.Tags])
-                        .Take(MAX_BLOCK_EXTENT_COUNT)
-                        .ToImmutableArray();
+                    return rightSizedBlocks;
                 }
             }
 
@@ -200,25 +206,28 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private void ReturnToPlanned(BlockRecord block)
+        private void ReturnToPlanned(params IEnumerable<BlockRecord> blocks)
         {
             using (var tx = Database.CreateTransaction())
             {
-                Database.Blocks.UpdateRecord(
-                    block,
-                    block with
-                    {
-                        State = BlockState.Planned,
-                        ExportOperationId = string.Empty,
-                        BlockTag = string.Empty
-                    },
-                    tx);
-                Database.BlobUrls.Query(tx)
-                    .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
-                    .Delete();
-                Database.IngestionBatches.Query(tx)
-                    .Where(pf => pf.Equal(i => i.BlockKey, block.BlockKey))
-                    .Delete();
+                foreach (var block in blocks)
+                {
+                    Database.Blocks.UpdateRecord(
+                        block,
+                        block with
+                        {
+                            State = BlockState.Planned,
+                            ExportOperationId = string.Empty,
+                            BlockTag = string.Empty
+                        },
+                        tx);
+                    Database.BlobUrls.Query(tx)
+                        .Where(pf => pf.Equal(u => u.BlockKey, block.BlockKey))
+                        .Delete();
+                    Database.IngestionBatches.Query(tx)
+                        .Where(pf => pf.Equal(i => i.BlockKey, block.BlockKey))
+                        .Delete();
+                }
 
                 tx.Complete();
             }
