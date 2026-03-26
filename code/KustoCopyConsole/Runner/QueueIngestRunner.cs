@@ -114,7 +114,7 @@ namespace KustoCopyConsole.Runner
                         BlockTag = blockTag
                     },
                     tx);
-                Database.IngestionBatches.AppendRecords(ingestionBatches);
+                Database.IngestionBatches.AppendRecords(ingestionBatches, tx);
 
                 tx.Complete();
             }

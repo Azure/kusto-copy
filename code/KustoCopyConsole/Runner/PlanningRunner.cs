@@ -206,7 +206,7 @@ namespace KustoCopyConsole.Runner
 
                 using (var tx = Database.CreateTransaction())
                 {
-                    Database.PlanningPartitions.AppendRecords(planningPartitions);
+                    Database.PlanningPartitions.AppendRecords(planningPartitions, tx);
                     DeletePartition(parentPartition, tx);
 
                     tx.Complete();
