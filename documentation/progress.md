@@ -4,16 +4,14 @@ Kusto Copy reports progress every 5 seconds or so.  Progress report looks like t
 
 ```
 Progress [Planned]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - %28
-(500,000,000 planned rows / 250,000,000 exported rows)
 ```
 
 In the following section, you'll understand what each number means.
 
-But if you want the quick way, just look at the percentage of completion:
+But if you want the **quick way**, just look at the percentage of completion:
 
 <pre>
 Progress [Planned]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - <mark>%28</mark>
-(500,000,000 planned rows / 250,000,000 exported rows)
 </pre>
 
 ## Blocks
@@ -28,7 +26,6 @@ The total number of blocks is shown in the progress:
 
 <pre>
 Progress [Planned]:  Total=<mark>210</mark>, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - %28
-(500,000,000 planned rows / 250,000,000 exported rows)
 </pre>
 
 
@@ -38,7 +35,6 @@ The iteration state is displayed within the brackets:
 
 <pre>
 Progress [<mark>Planned</mark>]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - %28
-(500,000,000 planned rows / 250,000,000 exported rows)
 </pre>
 
 The state takes one of the following values:
@@ -62,7 +58,6 @@ Progress displays the number of blocks in each state.  Those should sum up to th
 
 <pre>
 Progress [Planned]:  Total=210, Planned=<mark>10</mark>, Exporting=<mark>20</mark>, Exported=<mark>30</mark>, Queued=<mark>40</mark>, Ingested=<mark>50</mark>, Moved=<mark>60</mark> - %28
-(500,000,000 planned rows / 250,000,000 exported rows)
 </pre>
 
 Here are the different state values:
@@ -80,28 +75,16 @@ To understand the different between `Ingested` & `Moved`, it is important to not
 
 In theory, each block should go from one state to the next but there are a few exceptions.  For instance, if an error occured during `Exporting`, a block will be sent back to `Planned`.
 
-## Row count
-
-Progress displays two row counts:
-
-<pre>
-Progress [Planned]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - %28
-(<mark>500,000,000</mark> planned rows / <mark>250,000,000</mark> exported rows)
-</pre>
-
-`Planned rows` is the count returned by the query planning the block.
-
-`Exported rows` is the number of rows exported to blobs.
-
-Those two numbers should be equal once every block is exported.  The only way they could differ is if rows were deleted in between.
-
 ## How do I measure progress?
 
 You should look at the block count in each state.  A copy is completed when all blocks (i.e. the total number of blocks) is in state `moved`.
 
-The ratio of `Moved` blocks (over `Total`) block should give you a percentage of completion.  This is the percentage displayed in progress:
+The ratio of `Moved` blocks (over `Total`) block should give you a percentage of completion.
+
+The percentage displayed in progress is based on row counts, the total planned rows and the moved rows.
 
 <pre>
 Progress [Planned]:  Total=210, Planned=10, Exporting=20, Exported=30, Queued=40, Ingested=50, Moved=60 - <mark>%28</mark>
-(500,000,000 planned rows / 250,000,000 exported rows)
 </pre>
+
+This should end with %100 unless data got deleted between the planning phase and the copy ending.
