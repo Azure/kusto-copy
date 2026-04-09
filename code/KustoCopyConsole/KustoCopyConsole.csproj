@@ -30,7 +30,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="track-db" Version="1.12.3.100" />
+		<PackageReference Include="track-db" Version="1.12.4.103" />
 		<PackageReference Include="Azure.Storage.Files.DataLake" Version="12.25.0" />
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="14.1.1" />
