@@ -52,9 +52,6 @@ namespace KustoCopyConsole.Runner
                             .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, g.Key))
                             .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
                             .Delete();
-
-                        Trace.TraceInformation(
-                            $"Deleting Block IDs:  {string.Join(",", blockIds)}");
                     }
 
                     tx.Complete();

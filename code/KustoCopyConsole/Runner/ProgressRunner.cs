@@ -1,12 +1,13 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
+using Spectre.Console;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
-using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -26,37 +27,56 @@ namespace KustoCopyConsole.Runner
                     var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
                         .ToImmutableArray();
+                    var progressTable = new Table();
 
+                    progressTable.AddColumn("Activity");
+                    progressTable.AddColumn("Iteration State");
+                    progressTable.AddColumn("Total");
+                    progressTable.AddColumn("%");
+                    progressTable.AddColumn("Planned");
+                    progressTable.AddColumn("Exported");
+                    progressTable.AddColumn("Ingested");
+                    progressTable.AddColumn("Moved");
                     foreach (var iteration in activeIterations)
                     {
-                        ReportProgress(iteration, tx);
+                        var metrics = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
+
+                        ReportProgress(iteration, metrics, progressTable);
                     }
+                    AnsiConsole.Write(progressTable);
                 }
                 await SleepAsync(ct);
             }
         }
 
-        private void ReportProgress(IterationRecord iteration, TransactionContext tx)
+        private void ReportProgress(
+            IterationRecord iteration,
+            IImmutableDictionary<BlockMetric, long> metrics,
+            Table progressTable)
         {
-            var metrics = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
-            var blockCount = metrics
+            var totalBlockCount = metrics
                 //  Only take the states part of the metrics
                 .Where(p => (int)p.Key < Enum.GetValues<BlockState>().Length)
                 .Sum(p => p.Value);
-            var completionPercentage = blockCount > 0
-                ? 100 * metrics[BlockMetric.ExtentMoved] / blockCount
+            var movedRowCount = metrics[BlockMetric.MovedRowCount];
+            var totalPlannedRowCount = metrics[BlockMetric.TotalPlannedRowCount];
+            var completionPercentage = totalPlannedRowCount > 0
+                ? 100 * movedRowCount / totalPlannedRowCount
                 : 0;
+            var planned = metrics[BlockMetric.Planned]+ metrics[BlockMetric.Exporting];
+            var exported = metrics[BlockMetric.Exported]+ metrics[BlockMetric.Queued];
+            var ingested = metrics[BlockMetric.Ingested];
+            var moved = metrics[BlockMetric.ExtentMoved];
 
-            Console.WriteLine(
-                $"Progress [{iteration.State}]:  " +
-                $"Total={blockCount}, Planned={metrics[BlockMetric.Planned]}, " +
-                $"Exporting={metrics[BlockMetric.Exporting]}, Exported={metrics[BlockMetric.Exported]}, " +
-                $"Queued={metrics[BlockMetric.Queued]}, " +
-                $"Ingested={metrics[BlockMetric.Ingested]}, " +
-                $"Moved={metrics[BlockMetric.ExtentMoved]} - %{completionPercentage}");
-            Console.WriteLine(
-                $"({metrics[BlockMetric.PlannedRowCount]:N0} planned rows / " +
-                $"{metrics[BlockMetric.ExportedRowCount]:N0} exported rows)");
+            progressTable.AddRow(
+                iteration.IterationKey.ActivityName,
+                iteration.State.ToString(),
+                $"{totalBlockCount:N0}",
+                $"% {completionPercentage}",
+                $"{planned:N0}",
+                $"{exported:N0}",
+                $"{ingested:N0}",
+                $"{moved:N0}");
         }
     }
 }

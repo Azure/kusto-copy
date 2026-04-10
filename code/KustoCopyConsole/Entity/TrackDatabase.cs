@@ -50,7 +50,7 @@ namespace KustoCopyConsole.Entity
                 {
                     var typedDb = (TrackDatabase)db;
 
-                    ComputeBlockMetric(typedDb, tx);
+                    BlockToBlockMetric(typedDb, tx);
                 })
                 .OptOutIndex(b => b.IngestionTimeStart)
                 .OptOutIndex(b => b.IngestionTimeEnd)
@@ -63,6 +63,12 @@ namespace KustoCopyConsole.Entity
                 .OptOutIndex(p => p.MinIngestionTime)
                 .OptOutIndex(p => p.MaxIngestionTime)
                 .OptOutIndex(p => p.RowCount)
+                .AddTrigger((db, tx) =>
+                {
+                    var typedDb = (TrackDatabase)db;
+
+                    PlanningPartitionToBlockMetric(typedDb, tx);
+                })
                 ,
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
@@ -147,7 +153,7 @@ namespace KustoCopyConsole.Entity
             return sumValue;
         }
 
-        private static void ComputeBlockMetric(TrackDatabase db, TransactionContext tx)
+        private static void BlockToBlockMetric(TrackDatabase db, TransactionContext tx)
         {
             var newBlocks = db.Blocks.Query(tx)
                 .WithinTransactionOnly();
@@ -160,37 +166,20 @@ namespace KustoCopyConsole.Entity
                     b.BlockKey.IterationKey,
                     ToBlockMetric(b.State),
                     1));
-            var newBlocksPlannedRowMetrics = newBlocks
+            var newBlocksMovedRowMetrics = newBlocks
+                .Where(b => b.State == BlockState.ExtentMoved)
                 .Select(b => new BlockMetricRecord(
                     b.BlockKey.IterationKey,
-                    BlockMetric.PlannedRowCount,
-                    b.PlannedRowCount));
-            var newBlocksExportedRowMetrics = newBlocks
-                .Select(b => new BlockMetricRecord(
-                    b.BlockKey.IterationKey,
-                    BlockMetric.ExportedRowCount,
+                    BlockMetric.MovedRowCount,
                     b.ExportedRowCount));
             var deletedStateMetrics = deletedBlocks
                 .Select(b => new BlockMetricRecord(
                     b.BlockKey.IterationKey,
                     ToBlockMetric(b.State),
                     -1));
-            var deletedPlannedRowMetrics = deletedBlocks
-                .Select(b => new BlockMetricRecord(
-                    b.BlockKey.IterationKey,
-                    BlockMetric.PlannedRowCount,
-                    -b.PlannedRowCount));
-            var deletedExportedRowMetrics = deletedBlocks
-                .Select(b => new BlockMetricRecord(
-                    b.BlockKey.IterationKey,
-                    BlockMetric.ExportedRowCount,
-                    -b.ExportedRowCount));
             var newMetrics = newBlocksStateMetrics
-                .Concat(newBlocksExportedRowMetrics)
-                .Concat(newBlocksPlannedRowMetrics)
+                .Concat(newBlocksMovedRowMetrics)
                 .Concat(deletedStateMetrics)
-                .Concat(deletedExportedRowMetrics)
-                .Concat(deletedPlannedRowMetrics)
                 .GroupBy(bm => new
                 {
                     bm.IterationKey,
@@ -202,6 +191,20 @@ namespace KustoCopyConsole.Entity
                     g.Sum(bm => bm.Value)));
 
             db.BlockMetrics.AppendRecords(newMetrics, tx);
+        }
+
+        private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
+        {
+            var newPlanningPartitions = db.PlanningPartitions.Query(tx)
+                .WithinTransactionOnly();
+            var newTotalPlannedRowCountMetrics = newPlanningPartitions
+                .Where(pf => pf.Equal(p => p.PartitionId, 0))
+                .Select(p => new BlockMetricRecord(
+                    p.IterationKey,
+                    BlockMetric.TotalPlannedRowCount,
+                    p.RowCount));
+
+            db.BlockMetrics.AppendRecords(newTotalPlannedRowCountMetrics, tx);
         }
 
         private static BlockMetric ToBlockMetric(BlockState state)
