@@ -15,12 +15,14 @@ namespace KustoCopyConsole.JobParameter
         public IImmutableDictionary<string, ActivityParameterization> Activities { get; set; } =
             ImmutableDictionary<string, ActivityParameterization>.Empty;
 
-        public bool IsContinuousRun { get; set; } = false;
+        public TableOption TableOption { get; set; } = new TableOption();
         
+        public bool IsContinuousRun { get; set; } = false;
+
         public int? ExportCount { get; set; } = null;
 
         public bool KeepTags { get; private set; }
-        
+
         public IImmutableList<string> StagingStorageDirectories { get; set; } =
             ImmutableArray<string>.Empty;
 
@@ -82,7 +84,7 @@ namespace KustoCopyConsole.JobParameter
             {
                 IsContinuousRun = options.IsContinuousRun,
                 ExportCount = options.ExportCount,
-                KeepTags= options.KeepTags,
+                KeepTags = options.KeepTags,
                 Activities = ImmutableList.Create(
                     new ActivityParameterization
                     {
@@ -99,8 +101,7 @@ namespace KustoCopyConsole.JobParameter
                             DatabaseName = destinationDb,
                             TableName = destinationTable
                         },
-                        KqlQuery = options.Query.Trim(),
-                        TableOption = new TableOption()
+                        KqlQuery = options.Query.Trim()
                     })
                 .ToImmutableDictionary(a => a.ActivityName, a => a),
                 ManagedIdentityClientId = options.ManagedIdentityClientId,
