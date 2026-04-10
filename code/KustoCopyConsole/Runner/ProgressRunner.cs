@@ -63,9 +63,9 @@ namespace KustoCopyConsole.Runner
             var completionPercentage = totalPlannedRowCount > 0
                 ? 100 * movedRowCount / totalPlannedRowCount
                 : 0;
-            var planned = metrics[BlockMetric.Planned];
-            var exported = metrics[BlockMetric.Exporting] + metrics[BlockMetric.Exported];
-            var ingested = metrics[BlockMetric.Queued] + metrics[BlockMetric.Ingested];
+            var planned = metrics[BlockMetric.Planned]+ metrics[BlockMetric.Exporting];
+            var exported = metrics[BlockMetric.Exported]+ metrics[BlockMetric.Queued];
+            var ingested = metrics[BlockMetric.Ingested];
             var moved = metrics[BlockMetric.ExtentMoved];
 
             progressTable.AddRow(
