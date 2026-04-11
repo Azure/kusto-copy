@@ -7,105 +7,129 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace KustoCopyConsole.JobParameter
 {
     internal class MainJobParameterization
     {
-        public IImmutableDictionary<string, ActivityParameterization> Activities { get; set; } =
-            ImmutableDictionary<string, ActivityParameterization>.Empty;
+        public List<ActivityParameterization> Activities { get; set; } = new();
+
+        public TableOption TableOption { get; set; } = new TableOption();
 
         public bool IsContinuousRun { get; set; } = false;
-        
+
         public int? ExportCount { get; set; } = null;
 
         public bool KeepTags { get; private set; }
-        
-        public IImmutableList<string> StagingStorageDirectories { get; set; } =
-            ImmutableArray<string>.Empty;
+
+        public List<string> StagingStorageDirectories { get; set; } = new();
 
         public string ManagedIdentityClientId { get; set; } = string.Empty;
 
         #region Constructors
         public static MainJobParameterization FromOptions(CommandLineOptions options)
         {
-            if (string.IsNullOrWhiteSpace(options.Source))
-            {
-                throw new CopyException($"Source is expected", false);
-            }
-            if (string.IsNullOrWhiteSpace(options.Destination))
-            {
-                throw new CopyException($"Destination is expected", false);
-            }
+            var parameterization = string.IsNullOrWhiteSpace(options.Yaml)
+                ? new MainJobParameterization()
+                : LoadYaml(options.Yaml);
 
-            if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
+            if (options.StagingStorageDirectories.Any())
             {
-                throw new CopyException($"Can't parse source:  '{options.Source}'", false);
+                parameterization.StagingStorageDirectories =
+                    options.StagingStorageDirectories.ToList();
             }
-            if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
+            if (!string.IsNullOrWhiteSpace(options.Source))
             {
-                throw new CopyException(
-                    $"Can't parse destination:  '{options.Destination}'",
-                    false);
-            }
-            var sourceBuilder = new UriBuilder(source);
-            var sourcePathParts = sourceBuilder.Path.Split('/');
-            var destinationBuilder = new UriBuilder(destination);
-            var destinationPathParts = destinationBuilder.Path.Split('/');
+                if (string.IsNullOrWhiteSpace(options.Destination))
+                {
+                    throw new CopyException(
+                        "Destination is expected when source is provided",
+                        false);
+                }
+                if (!Uri.TryCreate(options.Source, UriKind.Absolute, out var source))
+                {
+                    throw new CopyException($"Can't parse source:  '{options.Source}'", false);
+                }
+                if (!Uri.TryCreate(options.Destination, UriKind.Absolute, out var destination))
+                {
+                    throw new CopyException(
+                        $"Can't parse destination:  '{options.Destination}'",
+                        false);
+                }
 
-            if (sourcePathParts.Length != 3)
-            {
-                throw new CopyException(
-                    $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
-                    false);
-            }
-            if (destinationPathParts.Length < 2 || destinationPathParts.Length > 3)
-            {
-                throw new CopyException(
-                    $"Destination ('{options.Destination}') should be of the form " +
-                    $"'https://mycluster.eastus.kusto.windows.net/mydb' or " +
-                    $"'https://mycluster.eastus.kusto.windows.net/mydb/mytable'",
-                    false);
-            }
+                var sourceBuilder = new UriBuilder(options.Source);
+                var destinationBuilder = new UriBuilder(options.Destination);
+                var sourcePathParts = sourceBuilder.Path.Split('/');
+                var destinationPathParts = destinationBuilder.Path.Split('/');
 
-            var sourceDb = sourcePathParts[1];
-            var sourceTable = sourcePathParts[2];
-            var destinationDb = destinationPathParts[1];
-            var destinationTable = destinationPathParts.Length == 3
-                ? destinationPathParts[2]
-                : string.Empty;
+                if (sourcePathParts.Length != 3)
+                {
+                    throw new CopyException(
+                        $"Source ('{options.Source}') should be of the form 'https://help.kusto.windows.net/Samples/nyc_taxi'",
+                        false);
+                }
+                if (destinationPathParts.Length < 2 || destinationPathParts.Length > 3)
+                {
+                    throw new CopyException(
+                        $"Destination ('{options.Destination}') should be of the form " +
+                        $"'https://mycluster.eastus.kusto.windows.net/mydb' or " +
+                        $"'https://mycluster.eastus.kusto.windows.net/mydb/mytable'",
+                        false);
+                }
 
-            sourceBuilder.Path = string.Empty;
-            destinationBuilder.Path = string.Empty;
+                var sourceDb = sourcePathParts[1];
+                var sourceTable = sourcePathParts[2];
+                var destinationDb = destinationPathParts[1];
+                var destinationTable = destinationPathParts.Length == 3
+                    ? destinationPathParts[2]
+                    : string.Empty;
 
-            var parameterization = new MainJobParameterization
-            {
-                IsContinuousRun = options.IsContinuousRun,
-                ExportCount = options.ExportCount,
-                KeepTags= options.KeepTags,
-                Activities = ImmutableList.Create(
-                    new ActivityParameterization
+                sourceBuilder.Path = string.Empty;
+                destinationBuilder.Path = string.Empty;
+
+                var activity = new ActivityParameterization
+                {
+                    ActivityName = "default",
+                    Source = new TableParameterization
                     {
-                        ActivityName = "default",
-                        Source = new TableParameterization
-                        {
-                            ClusterUri = sourceBuilder.ToString(),
-                            DatabaseName = sourceDb,
-                            TableName = sourceTable
-                        },
-                        Destination = new TableParameterization
-                        {
-                            ClusterUri = destinationBuilder.ToString(),
-                            DatabaseName = destinationDb,
-                            TableName = destinationTable
-                        },
-                        KqlQuery = options.Query.Trim(),
-                        TableOption = new TableOption()
-                    })
-                .ToImmutableDictionary(a => a.ActivityName, a => a),
-                ManagedIdentityClientId = options.ManagedIdentityClientId,
-                StagingStorageDirectories = options.StagingStorageDirectories.ToImmutableArray()
-            };
+                        ClusterUri = sourceBuilder.ToString(),
+                        DatabaseName = sourceDb,
+                        TableName = sourceTable
+                    },
+                    Destination = new TableParameterization
+                    {
+                        ClusterUri = destinationBuilder.ToString(),
+                        DatabaseName = destinationDb,
+                        TableName = destinationTable
+                    },
+                    KqlQuery = options.Query.Trim()
+                };
+
+                parameterization.Activities = new([activity]);
+            }
+            else if (!string.IsNullOrWhiteSpace(options.Destination))
+            {
+                throw new CopyException(
+                    "Source is expected when destination is provided",
+                    false);
+            }
+            if (!string.IsNullOrWhiteSpace(options.ManagedIdentityClientId))
+            {
+                parameterization.ManagedIdentityClientId = options.ManagedIdentityClientId;
+            }
+            if (options.IsContinuousRun != null)
+            {
+                parameterization.IsContinuousRun = options.IsContinuousRun.Value;
+            }
+            if (options.ExportCount != null)
+            {
+                parameterization.ExportCount = options.ExportCount;
+            }
+            if (options.KeepTags != null)
+            {
+                parameterization.KeepTags = options.KeepTags.Value;
+            }
 
             parameterization.Validate();
 
@@ -113,9 +137,28 @@ namespace KustoCopyConsole.JobParameter
         }
         #endregion
 
+        public ActivityParameterization GetActivity(string activityName)
+        {
+            foreach (var activityParameterization in Activities)
+            {
+                if (activityParameterization.ActivityName == activityName)
+                {
+                    return activityParameterization;
+                }
+            }
+
+            throw new ArgumentException(
+                $"Activity '{activityName}' is not found",
+                nameof(activityName));
+        }
+
         internal void Validate()
         {
-            foreach (var a in Activities.Values)
+            if (StagingStorageDirectories.Count == 0)
+            {
+                throw new CopyException("Staging directories are expected", false);
+            }
+            foreach (var a in Activities)
             {
                 a.Validate();
             }
@@ -142,10 +185,23 @@ namespace KustoCopyConsole.JobParameter
 
         internal string ToYaml()
         {
-            var serializer = new SerializerBuilder().Build();
+            var serializer = new SerializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .Build();
             var yaml = serializer.Serialize(this);
 
             return yaml;
+        }
+
+        private static MainJobParameterization LoadYaml(string yamlPath)
+        {
+            var yamlContent = File.ReadAllText(yamlPath);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .Build();
+            var parameterization = deserializer.Deserialize<MainJobParameterization>(yamlContent);
+
+            return parameterization;
         }
 
         private void ValidateStagingUri(string uriText)

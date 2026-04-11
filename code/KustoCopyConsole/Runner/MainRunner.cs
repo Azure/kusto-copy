@@ -150,15 +150,22 @@ namespace KustoCopyConsole.Runner
         {
             var allActivities = Database.Activities.Query(tx)
                 .ToImmutableArray();
-            var newActivityNames = Parameterization.Activities.Keys.Except(
-                allActivities.Select(a => a.ActivityName));
+            //  Activities in the config but not in the database
+            var newActivityNames = Parameterization.Activities
+                .Select(a => a.ActivityName)
+                .Except(allActivities.Select(a => a.ActivityName));
+            //  Disappeared activites
+            var oldActivityNames = allActivities
+                .Select(a => a.ActivityName)
+                .Except(Parameterization.Activities.Select(a => a.ActivityName))
+                .ToHashSet();
 
             foreach (var a in allActivities)
             {
-                if (Parameterization.Activities.TryGetValue(
-                    a.ActivityName,
-                    out var paramActivity))
+                if (!oldActivityNames.Contains(a.ActivityName))
                 {
+                    var paramActivity = Parameterization.GetActivity(a.ActivityName);
+                    ;
                     if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
                     {
                         throw new CopyException(
@@ -186,7 +193,7 @@ namespace KustoCopyConsole.Runner
             }
             foreach (var name in newActivityNames)
             {
-                var paramActivity = Parameterization.Activities[name];
+                var paramActivity = Parameterization.GetActivity(name);
                 var activity = new ActivityRecord(
                     ActivityState.Active,
                     paramActivity.ActivityName,
@@ -200,7 +207,7 @@ namespace KustoCopyConsole.Runner
 
         private void EnsureIterations(TransactionContext tx)
         {
-            foreach (var name in Parameterization.Activities.Keys)
+            foreach (var name in Parameterization.Activities.Select(a => a.ActivityName))
             {
                 var lastIteration = Database.Iterations.Query(tx)
                     .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))

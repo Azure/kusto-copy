@@ -43,7 +43,7 @@ namespace KustoCopyConsole.Runner
                         ct);
                     var tempTable = GetTempTable(iteration.IterationKey);
                     var destinationTable = Parameterization
-                        .Activities[iteration.IterationKey.ActivityName]
+                        .GetActivity(iteration.IterationKey.ActivityName)
                         .GetDestinationTableIdentity();
                     var dbClient = DbClientFactory.GetDbCommandClient(
                         destinationTable.ClusterUri,

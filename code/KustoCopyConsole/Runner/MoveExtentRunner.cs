@@ -80,7 +80,7 @@ namespace KustoCopyConsole.Runner
             {
                 var iterationKey = g.Key;
                 var tempTableName = GetTempTable(iterationKey).TempTableName;
-                var destinationTable = Parameterization.Activities[iterationKey.ActivityName]
+                var destinationTable = Parameterization.GetActivity(iterationKey.ActivityName)
                     .GetDestinationTableIdentity();
                 var commandClient = DbClientFactory.GetDbCommandClient(
                     destinationTable.ClusterUri,

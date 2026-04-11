@@ -31,7 +31,7 @@ namespace KustoCopyConsole.Runner
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
                     .Select(a => a.ActivityName)
                     .ToHashSet();
-                var groupings = Parameterization.Activities.Values
+                var groupings = Parameterization.Activities
                     .Where(a => activityNames.Contains(a.ActivityName))
                     .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                     .Select(g => new
@@ -168,7 +168,8 @@ namespace KustoCopyConsole.Runner
             IterationRecord iterationRecord,
             CancellationToken ct)
         {
-            var activityParam = Parameterization.Activities[blockRecord.BlockKey.IterationKey.ActivityName];
+            var activityParam =
+                Parameterization.GetActivity(blockRecord.BlockKey.IterationKey.ActivityName);
             var sourceTable = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 sourceTable.ClusterUri,

@@ -24,11 +24,9 @@ namespace KustoCopyConsole.Kusto
             string traceApplicationName)
         {
             var sourceClusterUris = parameterization.Activities
-                .Values
                 .Select(a => a.GetSourceTableIdentity().ClusterUri)
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
-                .Values
                 .Select(a => a.GetDestinationTableIdentity().ClusterUri)
                 .Distinct();
             var allClusterUris = sourceClusterUris
