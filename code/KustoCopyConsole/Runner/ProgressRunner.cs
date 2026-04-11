@@ -26,9 +26,9 @@ namespace KustoCopyConsole.Runner
                 {
                     var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
-                        .OrderBy(i => i.IterationKey.ActivityName)
-                        .ThenBy(i => i.IterationKey.IterationId)
-                        .ToImmutableArray();
+                        .OrderBy(i => i.IterationKey.IterationId)
+                        .ThenBy(i => i.IterationKey.ActivityName)
+                        .ToArray();
                     var progressTable = new Table();
 
                     progressTable.AddColumn("Activity");

@@ -37,9 +37,12 @@ namespace KustoCopyConsole.Runner
                     .Select(g => new
                     {
                         SourceClusterUri = g.Key,
-                        ActivityNames = g.Select(a => a.ActivityName).ToImmutableArray()
+                        ActivityNames = g
+                        .Select(a => a.ActivityName)
+                        .OrderBy(n => n)
+                        .ToArray()
                     })
-                    .ToImmutableDictionary(g => g.SourceClusterUri);
+                    .ToDictionary(g => g.SourceClusterUri);
 
                 //  Ensures cached capacity of source cluster
                 foreach (var grouping in groupings.Values)
@@ -69,7 +72,7 @@ namespace KustoCopyConsole.Runner
                         cacheMap[g.SourceClusterUri].CachedCapacity,
                         g.ActivityNames,
                         ct)))
-                    .ToImmutableList();
+                    .ToArray();
 
                 await Task.WhenAll(tasks);
                 await SleepAsync(ct);
@@ -79,7 +82,7 @@ namespace KustoCopyConsole.Runner
         private async Task RunClusterExportAsync(
             Uri sourceClusterUri,
             int capacity,
-            IImmutableList<string> activityNames,
+            string[] activityNames,
             CancellationToken ct)
         {
             while (await ExportBatchAsync(
@@ -95,7 +98,7 @@ namespace KustoCopyConsole.Runner
         private async Task<bool> ExportBatchAsync(
             Uri sourceClusterUri,
             int capacity,
-            IImmutableList<string> activityNames,
+            string[] activityNames,
             CancellationToken ct)
         {
             var plannedBlocks = FetchPlannedBlocks(activityNames, capacity);
@@ -114,7 +117,7 @@ namespace KustoCopyConsole.Runner
 
                 return true;
             }
-         
+
             return false;
         }
 
@@ -126,8 +129,8 @@ namespace KustoCopyConsole.Runner
             var firstPlannedBlock = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, BlockState.Planned))
-                .OrderBy(b => b.BlockKey.IterationKey.ActivityName)
-                .ThenBy(b => b.BlockKey.IterationKey.IterationId)
+                .OrderBy(b => b.BlockKey.IterationKey.IterationId)
+                .ThenBy(b => b.BlockKey.IterationKey.ActivityName)
                 .ThenBy(b => b.BlockKey.BlockId)
                 .Take(1)
                 .FirstOrDefault();

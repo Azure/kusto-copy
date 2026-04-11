@@ -35,7 +35,9 @@ namespace KustoCopyConsole.Runner
             var iterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Starting, IterationState.Planning]))
-                .ToImmutableArray();
+                .OrderBy(i => i.IterationKey.IterationId)
+                .ThenBy(i => i.IterationKey.ActivityName)
+                .ToArray();
             var activityParam = Parameterization.GetActivity(activityName);
             var source = activityParam.GetSourceTableIdentity();
             var destination = activityParam.GetDestinationTableIdentity();
