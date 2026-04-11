@@ -26,6 +26,8 @@ namespace KustoCopyConsole.Runner
                 {
                     var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
+                        .OrderBy(i => i.IterationKey.ActivityName)
+                        .ThenBy(i => i.IterationKey.IterationId)
                         .ToImmutableArray();
                     var progressTable = new Table();
 
@@ -63,8 +65,8 @@ namespace KustoCopyConsole.Runner
             var completionPercentage = totalPlannedRowCount > 0
                 ? 100 * movedRowCount / totalPlannedRowCount
                 : 0;
-            var planned = metrics[BlockMetric.Planned]+ metrics[BlockMetric.Exporting];
-            var exported = metrics[BlockMetric.Exported]+ metrics[BlockMetric.Queued];
+            var planned = metrics[BlockMetric.Planned] + metrics[BlockMetric.Exporting];
+            var exported = metrics[BlockMetric.Exported] + metrics[BlockMetric.Queued];
             var ingested = metrics[BlockMetric.Ingested];
             var moved = metrics[BlockMetric.ExtentMoved];
 
