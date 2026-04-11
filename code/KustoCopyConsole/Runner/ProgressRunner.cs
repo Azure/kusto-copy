@@ -66,7 +66,7 @@ namespace KustoCopyConsole.Runner
                 : 0;
             var planned = metrics[BlockMetric.Planned] + metrics[BlockMetric.Exporting];
             var exported = metrics[BlockMetric.Exported] + metrics[BlockMetric.Queued];
-            var ingested = metrics[BlockMetric.Ingested];
+            var ingested = metrics[BlockMetric.Ingested] + metrics[BlockMetric.ExtentMoving];
             var moved = metrics[BlockMetric.ExtentMoved];
 
             progressTable.AddRow(
