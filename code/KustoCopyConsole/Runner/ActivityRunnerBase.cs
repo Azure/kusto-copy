@@ -18,7 +18,8 @@ namespace KustoCopyConsole.Runner
                 var activityNames = Database.Activities.Query()
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
                     .Select(a => a.ActivityName)
-                    .ToImmutableArray();
+                    .OrderBy(n => n)
+                    .ToArray();
 
                 foreach (var activityName in activityNames)
                 {
