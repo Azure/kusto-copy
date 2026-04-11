@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -14,7 +13,7 @@ namespace KustoCopyConsole.Runner
     internal class ProgressRunner : RunnerBase
     {
         public ProgressRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, TimeSpan.FromSeconds(20))
         {
         }
 
@@ -26,7 +25,9 @@ namespace KustoCopyConsole.Runner
                 {
                     var activeIterations = Database.Iterations.Query(tx)
                         .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
-                        .ToImmutableArray();
+                        .OrderBy(i => i.IterationKey.IterationId)
+                        .ThenBy(i => i.IterationKey.ActivityName)
+                        .ToArray();
                     var progressTable = new Table();
 
                     progressTable.AddColumn("Activity");
@@ -63,8 +64,8 @@ namespace KustoCopyConsole.Runner
             var completionPercentage = totalPlannedRowCount > 0
                 ? 100 * movedRowCount / totalPlannedRowCount
                 : 0;
-            var planned = metrics[BlockMetric.Planned]+ metrics[BlockMetric.Exporting];
-            var exported = metrics[BlockMetric.Exported]+ metrics[BlockMetric.Queued];
+            var planned = metrics[BlockMetric.Planned] + metrics[BlockMetric.Exporting];
+            var exported = metrics[BlockMetric.Exported] + metrics[BlockMetric.Queued];
             var ingested = metrics[BlockMetric.Ingested];
             var moved = metrics[BlockMetric.ExtentMoved];
 

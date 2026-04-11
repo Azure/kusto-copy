@@ -4,7 +4,6 @@ using KustoCopyConsole.Kusto;
 using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -42,9 +41,9 @@ namespace KustoCopyConsole.Runner
                     .GroupBy(a => a.GetSourceTableIdentity().ClusterUri)
                     .Select(g => Task.Run(() => RunActivitiesAsync(
                         g.Key,
-                        g.Select(a => a.ActivityName).ToImmutableArray(),
+                        g.Select(a => a.ActivityName).ToArray(),
                         ct)))
-                    .ToImmutableList();
+                    .ToArray();
 
                 await Task.WhenAll(tasks);
                 await SleepAsync(ct);
@@ -53,7 +52,7 @@ namespace KustoCopyConsole.Runner
 
         private async Task RunActivitiesAsync(
             Uri sourceClusterUri,
-            IImmutableList<string> activityNames,
+            IEnumerable<string> activityNames,
             CancellationToken ct)
         {
             var blockRecords = Database.Blocks.Query()
@@ -75,7 +74,7 @@ namespace KustoCopyConsole.Runner
         {
             var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var operationIdMap = blockRecords
-                .ToImmutableDictionary(b => b.ExportOperationId);
+                .ToDictionary(b => b.ExportOperationId);
             var statuses = await dbClient.ShowOperationsAsync(
                 KustoPriority.HighestPriority,
                 operationIdMap.Keys,
@@ -88,7 +87,7 @@ namespace KustoCopyConsole.Runner
 
         #region Handle Operations
         private void DetectLostOperationIds(
-            IImmutableDictionary<string, BlockRecord> operationIdMap,
+            IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> status)
         {
             var statusOperationIdBag = status
@@ -116,7 +115,7 @@ namespace KustoCopyConsole.Runner
         }
 
         private void DetectFailures(
-            IImmutableDictionary<string, BlockRecord> operationIdMap,
+            IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> statuses)
         {
             var failedStatuses = statuses
@@ -151,14 +150,14 @@ namespace KustoCopyConsole.Runner
         }
 
         private async Task CompleteOperationsAsync(
-            IImmutableDictionary<string, BlockRecord> operationIdMap,
+            IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<ExportOperationStatus> statuses,
             CancellationToken ct)
         {
             var tasks = statuses
                 .Where(s => s.State == "Completed")
                 .Select(s => ProcessOperationAsync(s, operationIdMap[s.OperationId], ct))
-                .ToImmutableArray();
+                .ToArray();
 
             await Task.WhenAll(tasks);
         }
@@ -183,7 +182,7 @@ namespace KustoCopyConsole.Runner
                     block.BlockKey,
                     d.BlobUri,
                     d.RecordCount))
-                .ToImmutableArray();
+                .ToArray();
 
             if (urls.Length > 0)
             {

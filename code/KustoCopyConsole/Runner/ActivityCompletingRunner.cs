@@ -35,8 +35,8 @@ namespace KustoCopyConsole.Runner
                     Parameterization.GetActivity(iteration.IterationKey.ActivityName);
 
                 if (!Parameterization.IsContinuousRun
-                    || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly
-                    || activityParam.TableOption.ExportMode == ExportMode.NewOnly)
+                    || Parameterization.TableOption.ExportMode == ExportMode.BackfillOnly
+                    || Parameterization.TableOption.ExportMode == ExportMode.NewOnly)
                 {
                     var activity = Database.Activities.Query()
                         .Where(pf => pf.Equal(

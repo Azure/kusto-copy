@@ -32,11 +32,12 @@ namespace KustoCopyConsole.Runner
 
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
+            var activityParam = Parameterization.GetActivity(activityName);
             var iterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Starting, IterationState.Planning]))
-                .ToImmutableArray();
-            var activityParam = Parameterization.GetActivity(activityName);
+                .OrderBy(i => i.IterationKey.IterationId)
+                .ToArray();
             var source = activityParam.GetSourceTableIdentity();
             var destination = activityParam.GetDestinationTableIdentity();
             var queryClient = DbClientFactory.GetDbQueryClient(

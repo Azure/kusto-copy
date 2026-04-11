@@ -165,7 +165,7 @@ namespace KustoCopyConsole.Runner
                 if (!oldActivityNames.Contains(a.ActivityName))
                 {
                     var paramActivity = Parameterization.GetActivity(a.ActivityName);
-                    ;
+                    
                     if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
                     {
                         throw new CopyException(

@@ -27,8 +27,10 @@ namespace KustoCopyConsole.Runner
             var iterationKeys = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
                 .Where(pf => pf.In(i => i.State, [IterationState.Planning, IterationState.Planned]))
+                .OrderBy(i => i.IterationKey.IterationId)
+                .ThenBy(i => i.IterationKey.ActivityName)
                 .Select(i => i.IterationKey)
-                .ToImmutableArray();
+                .ToArray();
 
             foreach (var iterationKey in iterationKeys)
             {
@@ -184,7 +186,7 @@ namespace KustoCopyConsole.Runner
                     destinationTable.DatabaseName);
                 var ingestionBatches = Database.IngestionBatches.Query()
                     .Where(pf => pf.Equal(b => b.BlockKey, oldestQueuedBlock.BlockKey))
-                    .ToImmutableArray();
+                    .ToArray();
 
                 foreach (var batch in ingestionBatches)
                 {

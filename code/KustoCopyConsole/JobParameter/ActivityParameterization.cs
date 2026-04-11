@@ -12,8 +12,6 @@ namespace KustoCopyConsole.JobParameter
 
         public string KqlQuery { get; set; } = string.Empty;
 
-        public TableOption TableOption { get; set; } = new();
-
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))
@@ -26,7 +24,6 @@ namespace KustoCopyConsole.JobParameter
                 throw new CopyException($"{nameof(Source.TableName)} is required", false);
             }
             Destination.Validate();
-            TableOption.Validate();
         }
 
         public TableIdentity GetSourceTableIdentity()
