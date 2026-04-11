@@ -23,7 +23,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            var cacheMap = new Dictionary<Uri, CapacityCache>();
+            var capacityMap = new Dictionary<Uri, CapacityCache>();
 
             while (!AreActivitiesCompleted())
             {
@@ -47,21 +47,21 @@ namespace KustoCopyConsole.Runner
                 //  Ensures cached capacity of source cluster
                 foreach (var grouping in groupings.Values)
                 {
-                    if (!cacheMap.ContainsKey(grouping.SourceClusterUri)
-                        || cacheMap[grouping.SourceClusterUri].CachedTime
+                    if (!capacityMap.ContainsKey(grouping.SourceClusterUri)
+                        || capacityMap[grouping.SourceClusterUri].CachedTime
                         + CAPACITY_REFRESH_PERIOD < DateTime.Now)
                     {
-                        cacheMap[grouping.SourceClusterUri] = new CapacityCache(
+                        capacityMap[grouping.SourceClusterUri] = new CapacityCache(
                             DateTime.Now,
                             await FetchCapacityAsync(grouping.SourceClusterUri, ct));
                     }
                 }
                 //  Retired unused capacity
-                foreach (var sourceClusterUri in cacheMap.Keys)
+                foreach (var sourceClusterUri in capacityMap.Keys)
                 {
                     if (!groupings.ContainsKey(sourceClusterUri))
                     {
-                        cacheMap.Remove(sourceClusterUri);
+                        capacityMap.Remove(sourceClusterUri);
                     }
                 }
 
@@ -69,7 +69,7 @@ namespace KustoCopyConsole.Runner
                     .Values
                     .Select(g => Task.Run(() => RunClusterExportAsync(
                         g.SourceClusterUri,
-                        cacheMap[g.SourceClusterUri].CachedCapacity,
+                        capacityMap[g.SourceClusterUri].CachedCapacity,
                         g.ActivityNames,
                         ct)))
                     .ToArray();

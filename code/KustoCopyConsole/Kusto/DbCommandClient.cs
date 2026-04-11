@@ -22,6 +22,29 @@ namespace KustoCopyConsole.Kusto
 
         public string DatabaseName { get; }
 
+        public async Task<int> ShowClusterNodeCountAsync(
+            KustoPriority priority,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var commandText = @$"
+.show cluster
+| count";
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText);
+                    var result = reader
+                        .ToEnumerable(r => (long)r[0])
+                        .First();
+
+                    return (int)result;
+                },
+                ct);
+        }
+
         public async Task<int> ShowExportCapacityAsync(
             KustoPriority priority,
             CancellationToken ct)
