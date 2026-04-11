@@ -125,7 +125,9 @@ namespace KustoCopyConsole.Runner
 
                 await Task.WhenAll(startExportTasks);
 
-                var newBlocks = startExportTasks.Select(t => t.Result);
+                var newBlocks = startExportTasks
+                    .Select(t => t.Result)
+                    .Select(b => b with { State = DestinationState });
                 var blockIds = blocks.Select(b => b.BlockKey.BlockId);
 
                 using (var tx = Database.CreateTransaction())

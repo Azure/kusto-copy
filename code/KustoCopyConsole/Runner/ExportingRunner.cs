@@ -63,7 +63,6 @@ namespace KustoCopyConsole.Runner
                 ct);
             var newBlockRecord = blockRecord with
             {
-                State = BlockState.Exporting,
                 ExportOperationId = operationId
             };
 
