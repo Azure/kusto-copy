@@ -166,6 +166,7 @@ namespace KustoCopyConsole.JobParameter
             {
                 ValidateStagingUri(uri);
             }
+            TableOption.Validate();
         }
 
         internal TokenCredential CreateCredentials()
