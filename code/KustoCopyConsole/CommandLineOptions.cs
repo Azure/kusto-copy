@@ -1,7 +1,6 @@
 ﻿using CommandLine;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace KustoCopyConsole
@@ -10,6 +9,9 @@ namespace KustoCopyConsole
     {
         [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
         public bool Verbose { get; set; }
+
+        [Option('y', "yaml", Required = false, HelpText = "Set YAML path description file")]
+        public string Yaml { get; set; } = string.Empty;
 
         [Option(
             's',
@@ -28,7 +30,7 @@ namespace KustoCopyConsole
         [Option(
             't',
             "staging-storage",
-            Required = true,
+            Required = false,
             HelpText = "Set the staging storage directories in the form of storage container uris")]
         public IEnumerable<string> StagingStorageDirectories { get; set; } = Array.Empty<string>();
 
@@ -42,18 +44,18 @@ namespace KustoCopyConsole
             "continuous",
             Required = false,
             HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
-        public bool IsContinuousRun { get; set; } = false;
+        public bool? IsContinuousRun { get; set; }
 
         [Option(
             "export",
             Required = false,
             HelpText = "Parallel export count")]
-        public int? ExportCount { get; set; } = null;
+        public int? ExportCount { get; set; }
 
         [Option(
             "keep-tags",
             Required = false,
             HelpText = "Keep drop-by tags in destination (troubleshooting only)")]
-        public bool KeepTags { get; set; } = false;
+        public bool? KeepTags { get; set; }
     }
 }

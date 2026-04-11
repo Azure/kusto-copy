@@ -31,7 +31,8 @@ namespace KustoCopyConsole.Runner
 
             foreach (var iteration in completedIterations)
             {
-                var activityParam = Parameterization.Activities[iteration.IterationKey.ActivityName];
+                var activityParam =
+                    Parameterization.GetActivity(iteration.IterationKey.ActivityName);
 
                 if (!Parameterization.IsContinuousRun
                     || activityParam.TableOption.ExportMode == ExportMode.BackfillOnly

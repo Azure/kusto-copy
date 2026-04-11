@@ -35,7 +35,7 @@ namespace KustoCopyConsole.Runner
             TempTableRecord tempTableRecord,
             CancellationToken ct)
         {
-            var activity = Parameterization.Activities[tempTableRecord.IterationKey.ActivityName];
+            var activity = Parameterization.GetActivity(tempTableRecord.IterationKey.ActivityName);
             var destination = activity.GetDestinationTableIdentity();
             var dbCommandClient = DbClientFactory.GetDbCommandClient(
                 destination.ClusterUri,

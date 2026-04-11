@@ -35,7 +35,7 @@ namespace KustoCopyConsole.Runner
 
             if (blocks.Length > 0)
             {
-                var destinationTable = Parameterization.Activities[activityName]
+                var destinationTable = Parameterization.GetActivity(activityName)
                     .GetDestinationTableIdentity();
                 var iterationKey = blocks[0].BlockKey.IterationKey;
                 var tempTable = TryGetTempTable(iterationKey);
