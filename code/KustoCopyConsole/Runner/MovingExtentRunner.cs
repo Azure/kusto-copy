@@ -6,11 +6,11 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner
 {
-    internal class MoveExtentRunner : RunnerBase
+    internal class MovingExtentRunner : RunnerBase
     {
         private const int MAXIMUM_EXTENT_MOVING = 500;
 
-        public MoveExtentRunner(RunnerParameters parameters)
+        public MovingExtentRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
         {
         }

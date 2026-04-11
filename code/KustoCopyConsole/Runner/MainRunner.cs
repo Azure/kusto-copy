@@ -87,7 +87,7 @@ namespace KustoCopyConsole.Runner
             var awaitExportedRunner = new AwaitExportedRunner(RunnerParameters);
             var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
             var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
-            var moveExtentRunner = new MoveExtentRunner(RunnerParameters);
+            var moveExtentRunner = new MovingExtentRunner(RunnerParameters);
             var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
             var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
             var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
