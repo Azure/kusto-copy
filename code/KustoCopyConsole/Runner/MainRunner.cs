@@ -32,19 +32,21 @@ namespace KustoCopyConsole.Runner
             Console.WriteLine("  Done");
             Console.Write("Initialize tracking...");
 
-            var database = await TrackDatabase.CreateAsync(
+            var databaseTask = TrackDatabase.CreateAsync(
                 new Uri($"{parameterization.StagingStorageDirectories.First()}/tracking"),
                 credentials,
                 cts.Token);
-
-            Console.WriteLine("  Done");
-            Console.Write("Initialize Kusto connections...");
-
-            var dbClientFactory = await DbClientFactory.CreateAsync(
+            var dbClientFactoryTask = DbClientFactory.CreateAsync(
                 parameterization,
                 credentials,
                 traceApplicationName,
                 cts.Token);
+            var database = await databaseTask;
+
+            Console.WriteLine("  Done");
+            Console.Write("Initialize Kusto connections...");
+
+            var dbClientFactory = await dbClientFactoryTask;
 
             Console.WriteLine("  Done");
 

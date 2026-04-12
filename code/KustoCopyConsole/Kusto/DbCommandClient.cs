@@ -46,7 +46,7 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task<IImmutableList<ExportOperationStatus>> ShowOperationsAsync(
+        public async Task<IImmutableList<OperationStatus>> ShowOperationsAsync(
             KustoPriority priority,
             IEnumerable<string> operationIds,
             CancellationToken ct)
@@ -64,7 +64,7 @@ namespace KustoCopyConsole.Kusto
                             DatabaseName,
                             commandText);
                         var result = reader
-                            .ToEnumerable(r => new ExportOperationStatus(
+                            .ToEnumerable(r => new OperationStatus(
                                 ((Guid)r["OperationId"]).ToString(),
                                 (TimeSpan)r["Duration"],
                                 (string)r["State"],
@@ -79,7 +79,7 @@ namespace KustoCopyConsole.Kusto
             }
             else
             {
-                return ImmutableArray<ExportOperationStatus>.Empty;
+                return ImmutableArray<OperationStatus>.Empty;
             }
         }
 

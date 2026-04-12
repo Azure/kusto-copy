@@ -1,6 +1,6 @@
 ﻿namespace KustoCopyConsole.Kusto.Data
 {
-    internal record ExportOperationStatus(
+    internal record OperationStatus(
         string OperationId,
         TimeSpan Duration,
         string State,
