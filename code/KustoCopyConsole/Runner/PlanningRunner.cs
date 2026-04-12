@@ -322,6 +322,7 @@ namespace KustoCopyConsole.Runner
                             p.RowCount,
                             0,
                             string.Empty,
+                            string.Empty,
                             string.Empty))
                         .ToImmutableArray();
 
