@@ -372,7 +372,7 @@ let ['{tableName}'] = ['{tableName}']
                        commandText,
                        properties);
                    var operationId = reader
-                    .ToEnumerable(r => (string)(r[0]))
+                    .ToEnumerable(r => DbNullHelper.To<Guid>(r[0]))
                     .FirstOrDefault();
 
                    if (operationId == null)
@@ -382,7 +382,7 @@ let ['{tableName}'] = ['{tableName}']
                            true);
                    }
 
-                   return operationId;
+                   return operationId.Value.ToString();
                },
                ct);
         }
@@ -429,6 +429,11 @@ let ['{tableName}'] = ['{tableName}']
                    return results.Count();
                },
                ct);
+        }
+
+        public async Task<IEnumerable<object>> ShowMoveDetailsAsync(KustoPriority kustoPriority, string operationId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
     }
 }
