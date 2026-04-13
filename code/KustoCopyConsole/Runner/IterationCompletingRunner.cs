@@ -67,13 +67,13 @@ namespace KustoCopyConsole.Runner
                 {
                     await tx.CompleteAsync();
 
-                    return false;
+                    return true;
                 }
                 else
                 {
                     tx.Complete();
                  
-                    return true;
+                    return false;
                 }
             }
         }
