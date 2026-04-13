@@ -42,7 +42,7 @@ namespace KustoCopyConsole.Runner
         {
             var newBlock = block with
             {
-                State = BlockState.Exported,
+                State = BlockState.ExtentMoved,
                 MoveOperationId = string.Empty
             };
 

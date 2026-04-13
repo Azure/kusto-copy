@@ -59,15 +59,13 @@ namespace KustoCopyConsole.Runner
                 //  Only take the states part of the metrics
                 .Where(p => (int)p.Key < Enum.GetValues<BlockState>().Length)
                 .Sum(p => p.Value);
-            var movedRowCount = metrics[BlockMetric.MovedRowCount];
-            var totalPlannedRowCount = metrics[BlockMetric.TotalPlannedRowCount];
-            var completionPercentage = totalPlannedRowCount > 0
-                ? 100 * movedRowCount / totalPlannedRowCount
-                : 0;
             var planned = metrics[BlockMetric.Planned] + metrics[BlockMetric.Exporting];
             var exported = metrics[BlockMetric.Exported] + metrics[BlockMetric.Queued];
             var ingested = metrics[BlockMetric.Ingested] + metrics[BlockMetric.ExtentMoving];
             var moved = metrics[BlockMetric.ExtentMoved];
+            var completionPercentage = totalBlockCount > 0
+                ? 100 * moved / totalBlockCount
+                : 0;
 
             progressTable.AddRow(
                 iteration.IterationKey.ActivityName,
