@@ -24,7 +24,6 @@ namespace KustoCopyConsole.Runner
                 using (var tx = Database.CreateTransaction())
                 {
                     var activeIterations = Database.Iterations.Query(tx)
-                        .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
                         .OrderBy(i => i.IterationKey.IterationId)
                         .ThenBy(i => i.IterationKey.ActivityName)
                         .ToArray();
