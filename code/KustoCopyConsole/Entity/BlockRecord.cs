@@ -17,6 +17,7 @@ namespace KustoCopyConsole.Entity
         long PlannedRowCount,
         long ExportedRowCount,
         string ExportOperationId,
+        string MoveOperationId,
         string BlockTag) : RecordBase
     {
         public override void Validate()

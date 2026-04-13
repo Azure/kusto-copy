@@ -22,6 +22,29 @@ namespace KustoCopyConsole.Kusto
 
         public string DatabaseName { get; }
 
+        public async Task<int> ShowClusterNodeCountAsync(
+            KustoPriority priority,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var commandText = @$"
+.show cluster
+| count";
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText);
+                    var result = reader
+                        .ToEnumerable(r => (long)r[0])
+                        .First();
+
+                    return (int)result;
+                },
+                ct);
+        }
+
         public async Task<int> ShowExportCapacityAsync(
             KustoPriority priority,
             CancellationToken ct)
@@ -326,7 +349,7 @@ let ['{tableName}'] = ['{tableName}']
                ct);
         }
 
-        public async Task<int> MoveExtentsAsync(
+        public async Task<string> MoveExtentsAsync(
             KustoPriority priority,
             string tempTableName,
             string tableName,
@@ -339,7 +362,7 @@ let ['{tableName}'] = ['{tableName}']
                {
                    var extentIdTextList = string.Join(", ", extentIds);
                    var commandText = @$"
-.move extents from table ['{tempTableName}'] to table ['{tableName}']
+.move async extents from table ['{tempTableName}'] to table ['{tableName}']
     with (setNewIngestionTime=true)
     ({extentIdTextList})
 ";
@@ -348,25 +371,18 @@ let ['{tableName}'] = ['{tableName}']
                        DatabaseName,
                        commandText,
                        properties);
-                   var results = reader
-                    .ToEnumerable(r => new
-                    {
-                        OriginalExtentId = (string)(r[0]),
-                        ResultExtentId = (string)(r[1]),
-                        Details = r[2].ToString()
-                    })
-                    .ToImmutableArray();
-                   var singleDetail = results
-                   .Where(r => !string.IsNullOrWhiteSpace(r.Details))
-                   .Select(r => r.Details)
-                   .FirstOrDefault();
+                   var operationId = reader
+                    .ToEnumerable(r => DbNullHelper.To<Guid>(r[0]))
+                    .FirstOrDefault();
 
-                   if (singleDetail != null)
+                   if (operationId == null)
                    {
-                       throw new CopyException($"Move extent failure:  '{singleDetail}'", true);
+                       throw new CopyException(
+                           "Async-Move extents command did not return an operation id",
+                           true);
                    }
 
-                   return results.Count();
+                   return operationId.Value.ToString();
                },
                ct);
         }
@@ -413,6 +429,11 @@ let ['{tableName}'] = ['{tableName}']
                    return results.Count();
                },
                ct);
+        }
+
+        public async Task<IEnumerable<object>> ShowMoveDetailsAsync(KustoPriority kustoPriority, string operationId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
     }
 }

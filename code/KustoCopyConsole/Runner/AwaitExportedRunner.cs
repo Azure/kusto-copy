@@ -18,8 +18,6 @@ namespace KustoCopyConsole.Runner
 
         protected override BlockState InitialState => BlockState.Exporting;
 
-        protected override BlockState DestinationState => BlockState.Exported;
-
         protected override BlockState ResetState => BlockState.Planned;
 
         protected override Uri GetClusterUri(ActivityParameterization activity)
@@ -30,17 +28,18 @@ namespace KustoCopyConsole.Runner
             return block with { ExportOperationId = string.Empty };
         }
 
+        protected override string GetOperationId(BlockRecord block)
+        {
+            return block.ExportOperationId;
+        }
+
         protected override async Task ProcessOperationAsync(
             OperationStatus status,
             BlockRecord block,
+            DbCommandClient dbClient,
+            ActivityParameterization activityParam,
             CancellationToken ct)
         {
-            var activityParam =
-                Parameterization.GetActivity(block.BlockKey.IterationKey.ActivityName);
-            var sourceTable = activityParam.GetSourceTableIdentity();
-            var dbClient = DbClientFactory.GetDbCommandClient(
-                sourceTable.ClusterUri,
-                sourceTable.DatabaseName);
             var details = await dbClient.ShowExportDetailsAsync(
                 new KustoPriority(block.BlockKey),
                 status.OperationId,

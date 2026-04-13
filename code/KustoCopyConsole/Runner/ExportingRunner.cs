@@ -15,16 +15,16 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override Uri GetClusterUri(ActivityParameterization activity)
-        {
-            return activity.GetSourceTableIdentity().ClusterUri;
-        }
-
         protected override BlockState InitialState => BlockState.Planned;
 
         protected override BlockState DestinationState => BlockState.Exporting;
 
         protected override int? MaxCapacity => Parameterization.ExportCount;
+
+        protected override Uri GetClusterUri(ActivityParameterization activity)
+        {
+            return activity.GetSourceTableIdentity().ClusterUri;
+        }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
         {
