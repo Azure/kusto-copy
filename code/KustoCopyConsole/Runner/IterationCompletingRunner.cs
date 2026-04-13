@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System;
@@ -31,12 +32,7 @@ namespace KustoCopyConsole.Runner
 
             foreach (var iteration in candidateIterations)
             {
-                var pendingBlockCount = Database.QueryAggregatedBlockMetrics(
-                    iteration.IterationKey)
-                    .Where(p => p.Key < BlockMetric.ExtentMoved)
-                    .Sum(p => p.Value);
-
-                if (pendingBlockCount == 0)
+                if (await IsIterationCompleted(iteration.IterationKey))
                 {
                     var directoryDeleteTask = StagingBlobUriProvider.DeleteStagingRootDirectoryAsync(
                         iteration.IterationKey,
@@ -55,6 +51,29 @@ namespace KustoCopyConsole.Runner
                         ct);
                     await directoryDeleteTask;
                     CommitCompleteIteration(iteration);
+                }
+            }
+        }
+
+        private async Task<bool> IsIterationCompleted(IterationKey iterationKey)
+        {
+            using (var tx = Database.CreateTransaction())
+            {
+                var pendingBlockCount = Database.QueryAggregatedBlockMetrics(iterationKey, tx)
+                    .Where(p => p.Key < BlockMetric.ExtentMoved)
+                    .Sum(p => p.Value);
+
+                if (pendingBlockCount == 0)
+                {
+                    await tx.CompleteAsync();
+
+                    return false;
+                }
+                else
+                {
+                    tx.Complete();
+                 
+                    return true;
                 }
             }
         }
