@@ -50,12 +50,6 @@ namespace KustoCopyConsole
             "export",
             Required = false,
             HelpText = "Parallel export count")]
-        public int? ExportCount { get; set; }
-
-        [Option(
-            "keep-tags",
-            Required = false,
-            HelpText = "Keep drop-by tags in destination (troubleshooting only)")]
-        public bool? KeepTags { get; set; }
+        public int ExportCount { get; set; } = 20;
     }
 }

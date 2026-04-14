@@ -4,6 +4,10 @@
 
 View [Setup guide](setup.md)
 
+## What are the parameters for the CLI?
+
+View [Parameters](parameters.md)
+
 ## How to read the progress of Kusto Copy?
 
 View [Reading progress](progress.md) 

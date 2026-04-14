@@ -65,27 +65,11 @@ Here is an example:
 kc -s https://mycluster.eastus.kusto.windows.net/mydb/mytable -d https://yourcluster.eastus.kusto.windows.net/yourdb/ -t https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 ```
 
-The parameters are the following:
+See [Parameters](parameters.md) for details about the CLI's parameters.
 
-Parameter|Mandatory|Description|Example
--|-|-|-
-Source (-s)|x|Source database|https://mycluster.eastus.kusto.windows.net/mydb/mytable
-Destination (-d)|x|Destination database or table|https://yourcluster.eastus.kusto.windows.net/yourdb or https://yourcluster.eastus.kusto.windows.net/yourdb/mytable
-Staging Storage (-t)|x|One or many ADLS gen 2 containers (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
-Query (-d)||Optional query|"\| where Level == 'error'"
-Managed Identiy Client ID (--clientId)||If using User Managed Identity|Client ID guid
-Export Count (--export)||Maximum parallel export (default is maximum # of slots)|20
-Keep Tags (--keep-tags)||Keep tags in destination table (default is false).  This is meant for troubleshooting only and we recommend you [drop the extents](https://learn.microsoft.com/en-us/kusto/management/drop-extent-tags) once your troubleshooting is done.|true
+##  Progress
 
-A couple of comments:
-
-* The source always point to table using the notation \<cluster URI\>/\<database name\>/<\table name\>
-* The destination can either be:
-  * A table using the notation \<cluster URI\>/\<database name\>/<\table name\>
-  * A database using the notation \<cluster URI\>/\<database name\>
-* When the destination only specifies a database, the table name is infered from the source's table name
-* The staging storage points to a container:  not only the storage account URL, but the container's URL
-* A query is optional and allow you to transform the source table (e.g. filtering, projecting only some columns, etc.)
+See [Reading progress](progress.md) for details on how to interpret the copy progression.
 
 ## Validating the copy
 

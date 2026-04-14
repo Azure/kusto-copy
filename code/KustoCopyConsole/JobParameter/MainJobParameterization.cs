@@ -19,7 +19,7 @@ namespace KustoCopyConsole.JobParameter
 
         public bool IsContinuousRun { get; set; } = false;
 
-        public int? ExportCount { get; set; } = null;
+        public int ExportCount { get; set; }
 
         public bool KeepTags { get; private set; }
 
@@ -122,14 +122,7 @@ namespace KustoCopyConsole.JobParameter
             {
                 parameterization.IsContinuousRun = options.IsContinuousRun.Value;
             }
-            if (options.ExportCount != null)
-            {
-                parameterization.ExportCount = options.ExportCount;
-            }
-            if (options.KeepTags != null)
-            {
-                parameterization.KeepTags = options.KeepTags.Value;
-            }
+            parameterization.ExportCount = options.ExportCount;
 
             parameterization.Validate();
 
