@@ -11,3 +11,7 @@ View [Parameters](parameters.md)
 ## How to read the progress of Kusto Copy?
 
 View [Reading progress](progress.md) 
+
+## How to troubleshoot performance?
+
+View [Bottlenecks in progress](progress.md#bottlenecks) 
