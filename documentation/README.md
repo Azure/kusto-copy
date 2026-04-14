@@ -8,6 +8,10 @@ View [Setup guide](setup.md)
 
 View [Parameters](parameters.md)
 
+## YAML
+
+See [YAML file schema](yaml.md) for details about the schema of YAML file.
+
 ## How to read the progress of Kusto Copy?
 
 View [Reading progress](progress.md) 
