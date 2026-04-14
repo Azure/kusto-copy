@@ -28,7 +28,7 @@ managedIdentityClientId: "string"
 
 Name|Type|Required|Default|Description
 -|-|-|-|-
-activities|Node|Yes|N/A|See [activities section](#activities)
+activities|Node|Yes|N/A|One or many activities can be defined.  See [activities section](#activities)
 stagingStorageDirectories|`uris` list|Yes|N/A|At least one folder must be specified.  See [ADLS gen 2 containers](parameters.md#adls-gen-2-containers) for details.
 exportCount|`Integer`|No|20|See [Parallel Export](parameters.md#parallel-export)
 managedIdentityClientId|`string`|No|N/A|See [Client ID](parameters.md#client-id)
