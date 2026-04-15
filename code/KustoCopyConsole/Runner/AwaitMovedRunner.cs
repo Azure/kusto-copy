@@ -1,4 +1,5 @@
 ﻿using KustoCopyConsole.Entity;
+using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -6,6 +7,7 @@ using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -34,20 +36,40 @@ namespace KustoCopyConsole.Runner
         }
 
         protected override async Task ProcessOperationAsync(
-            OperationStatus status,
-            BlockRecord block,
-            DbCommandClient dbClient,
+            IEnumerable<BlockRecord> blocks,
             ActivityParameterization activityParam,
             CancellationToken ct)
         {
-            var newBlock = block with
+            var iterationKey = blocks.First().BlockKey.IterationKey;
+            var tableId = activityParam.GetDestinationTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                tableId.ClusterUri,
+                tableId.DatabaseName);
+            var newBlocks = blocks
+                .Select(b => b with
+                {
+                    State = BlockState.ExtentMoved,
+                    MoveOperationId = string.Empty
+                });
+            
+            //  Remove tags on destination tables
+            await dbClient.CleanExtentTagsAsync(
+                new KustoPriority(iterationKey),
+                activityParam.GetDestinationTableIdentity().TableName,
+                blocks.Select(b => b.BlockTag),
+                ct);
+            using (var tx = Database.CreateTransaction())
             {
-                State = BlockState.ExtentMoved,
-                MoveOperationId = string.Empty
-            };
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                    .Where(pf => pf.In(
+                        b => b.BlockKey.BlockId,
+                        blocks.Select(b => b.BlockKey.BlockId)))
+                    .Delete();
+                Database.Blocks.AppendRecords(newBlocks, tx);
 
-            Database.Blocks.UpdateRecord(block, newBlock);
-            await Task.CompletedTask;
+                tx.Complete();
+            }
         }
     }
 }

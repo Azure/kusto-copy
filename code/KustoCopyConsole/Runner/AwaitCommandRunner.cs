@@ -40,9 +40,7 @@ namespace KustoCopyConsole.Runner
         protected abstract string GetOperationId(BlockRecord block);
 
         protected abstract Task ProcessOperationAsync(
-            OperationStatus status,
-            BlockRecord block,
-            DbCommandClient dbClient,
+            IEnumerable<BlockRecord> blocks,
             ActivityParameterization activityParam,
             CancellationToken ct);
 
@@ -73,15 +71,15 @@ namespace KustoCopyConsole.Runner
             string[] activityNames,
             CancellationToken ct)
         {
-            var blockRecords = Database.Blocks.Query()
+            var blocks = Database.Blocks.Query()
                 .Where(pf => pf.In(b => b.BlockKey.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.Equal(b => b.State, InitialState))
                 .Take(MAX_OPERATIONS)
                 .ToArray();
 
-            if (blockRecords.Length > 0)
+            if (blocks.Length > 0)
             {
-                await UpdateOperationsAsync(clusterUri, blockRecords, ct);
+                await UpdateOperationsAsync(clusterUri, blocks, ct);
             }
         }
 
@@ -90,8 +88,6 @@ namespace KustoCopyConsole.Runner
             BlockRecord[] blocks,
             CancellationToken ct)
         {
-            var activityParam =
-                Parameterization.GetActivity(blocks.First().BlockKey.IterationKey.ActivityName);
             var dbClient = DbClientFactory.GetDbCommandClient(clusterUri, string.Empty);
             var operationIdMap = blocks
                 .ToDictionary(b => GetOperationId(b));
@@ -102,7 +98,7 @@ namespace KustoCopyConsole.Runner
 
             DetectLostOperationIds(operationIdMap, statuses);
             DetectFailures(operationIdMap, statuses);
-            await CompleteOperationsAsync(operationIdMap, statuses, dbClient, activityParam, ct);
+            await CompleteOperationsAsync(operationIdMap, statuses, ct);
         }
 
         #region Handle Operations
@@ -171,21 +167,21 @@ namespace KustoCopyConsole.Runner
         private async Task CompleteOperationsAsync(
             IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<OperationStatus> statuses,
-            DbCommandClient dbClient,
-            ActivityParameterization activityParam,
             CancellationToken ct)
         {
-            var tasks = statuses
+            var blocks = statuses
                 .Where(s => s.State == "Completed")
-                .Select(s => ProcessOperationAsync(
-                    s,
-                    operationIdMap[s.OperationId],
-                    dbClient,
-                    activityParam,
+                .Select(s => operationIdMap[s.OperationId]);
+            var blocksByIterationKey = blocks
+                .GroupBy(b => b.BlockKey.IterationKey);
+            var processTasks = blocksByIterationKey
+                .Select(g => ProcessOperationAsync(
+                    g,
+                    Parameterization.GetActivity(g.Key.ActivityName),
                     ct))
                 .ToArray();
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(processTasks);
         }
         #endregion
     }

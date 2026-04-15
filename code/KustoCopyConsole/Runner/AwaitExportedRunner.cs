@@ -34,50 +34,60 @@ namespace KustoCopyConsole.Runner
         }
 
         protected override async Task ProcessOperationAsync(
-            OperationStatus status,
-            BlockRecord block,
-            DbCommandClient dbClient,
+            IEnumerable<BlockRecord> blocks,
             ActivityParameterization activityParam,
             CancellationToken ct)
         {
-            var details = await dbClient.ShowExportDetailsAsync(
-                new KustoPriority(block.BlockKey),
-                status.OperationId,
-                ct);
-            var urls = details
-                .Select(d => new BlobUrlRecord(
-                    block.BlockKey,
-                    d.BlobUri,
-                    d.RecordCount))
+            var iterationKey = blocks.First().BlockKey.IterationKey;
+            var tableId = activityParam.GetDestinationTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                tableId.ClusterUri,
+                tableId.DatabaseName);
+            var taskBundles = blocks
+                .Select(b => new
+                {
+                    Block = b,
+                    DetailTask = dbClient.ShowExportDetailsAsync(
+                        new KustoPriority(b.BlockKey),
+                        b.ExportOperationId,
+                        ct)
+                })
                 .ToArray();
 
-            if (urls.Length > 0)
-            {
-                var newBlock = block with
+            await Task.WhenAll(taskBundles.Select(b => b.DetailTask));
+
+            var newBlocks = taskBundles
+                .Select(tb => tb.DetailTask.Result.Count > 0
+                ? tb.Block with
                 {
                     State = BlockState.Exported,
                     ExportOperationId = string.Empty,
-                    ExportedRowCount = details.Sum(d => d.RecordCount)
-                };
-
-                using (var tx = Database.CreateTransaction())
-                {
-                    Database.Blocks.UpdateRecord(block, newBlock, tx);
-                    Database.BlobUrls.AppendRecords(urls, tx);
-
-                    tx.Complete();
+                    ExportedRowCount = tb.DetailTask.Result.Sum(d => d.RecordCount)
                 }
-            }
-            else
+                : tb.Block with
+                {
+                    ExportOperationId = string.Empty,
+                    State = BlockState.ExtentMoved,
+                    ExportedRowCount = 0
+                });
+            var newUrls = taskBundles
+                .SelectMany(tb => tb.DetailTask.Result.Select(d => new BlobUrlRecord(
+                    tb.Block.BlockKey,
+                    d.BlobUri,
+                    d.RecordCount)));
+
+            using (var tx = Database.CreateTransaction())
             {
-                Database.Blocks.UpdateRecord(
-                    block,
-                    block with
-                    {
-                        ExportOperationId = string.Empty,
-                        State = BlockState.ExtentMoved,
-                        ExportedRowCount = 0
-                    });
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                    .Where(pf => pf.In(
+                        b => b.BlockKey.BlockId,
+                        blocks.Select(b => b.BlockKey.BlockId)))
+                    .Delete();
+                Database.Blocks.AppendRecords(newBlocks, tx);
+                Database.BlobUrls.AppendRecords(newUrls, tx);
+
+                tx.Complete();
             }
         }
     }
