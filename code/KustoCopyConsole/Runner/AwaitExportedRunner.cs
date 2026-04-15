@@ -39,7 +39,7 @@ namespace KustoCopyConsole.Runner
             CancellationToken ct)
         {
             var iterationKey = blocks.First().BlockKey.IterationKey;
-            var tableId = activityParam.GetDestinationTableIdentity();
+            var tableId = activityParam.GetSourceTableIdentity();
             var dbClient = DbClientFactory.GetDbCommandClient(
                 tableId.ClusterUri,
                 tableId.DatabaseName);
