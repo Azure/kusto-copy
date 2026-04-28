@@ -31,8 +31,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Spectre.Console" Version="0.55.0" />
-		<PackageReference Include="track-db" Version="1.13.1.105" />
+		<PackageReference Include="Spectre.Console" Version="0.55.2" />
+		<PackageReference Include="track-db" Version="1.14.0.106" />
 		<PackageReference Include="Azure.Storage.Files.DataLake" Version="12.25.0" />
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="14.1.1" />
