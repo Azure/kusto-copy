@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using KustoCopyConsole.JobParameter;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -41,15 +42,21 @@ namespace KustoCopyConsole
         public string Query { get; set; } = string.Empty;
 
         [Option(
-            "continuous",
-            Required = false,
-            HelpText = "Continuous run:  if set, runs continuously, otherwise, stop after one iteration")]
-        public bool? IsContinuousRun { get; set; }
-
-        [Option(
             "export",
             Required = false,
             HelpText = "Parallel export count")]
-        public int ExportCount { get; set; } = 20;
+        public int? ExportCount { get; set; }
+
+        [Option(
+            "copy-mode",
+            Required = false,
+            HelpText = "Copy mode:  BackfillOnly, NewOnly or BackfillAndNew")]
+        public CopyMode? CopyMode { get; set; }
+
+        [Option(
+            "iteration-period",
+            Required = false,
+            HelpText = "Iteration period:  time between iterations")]
+        public TimeSpan? IterationPeriod { get; set; }
     }
 }

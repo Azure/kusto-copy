@@ -13,7 +13,9 @@ namespace KustoCopyConsole.Entity
         IterationKey IterationKey,
         string? CursorStart,
         string CursorEnd,
-        int NextBlockId)
+        int NextBlockId,
+        //  Start time of the iteration itself
+        DateTime StartTime)
         : RecordBase
     {
         public override void Validate()

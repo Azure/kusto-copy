@@ -9,7 +9,7 @@ namespace KustoCopyConsole.Runner
     internal class ActivityCompletingRunner : RunnerBase
     {
         public ActivityCompletingRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, TimeSpan.FromSeconds(10))
         {
         }
 
@@ -27,16 +27,15 @@ namespace KustoCopyConsole.Runner
         {
             var completedIterations = Database.Iterations.Query()
                 .Where(pf => pf.Equal(i => i.State, IterationState.Completed))
-                .ToImmutableArray();
+                .ToArray();
 
             foreach (var iteration in completedIterations)
             {
                 var activityParam =
                     Parameterization.GetActivity(iteration.IterationKey.ActivityName);
 
-                if (!Parameterization.IsContinuousRun
-                    || Parameterization.TableOption.ExportMode == ExportMode.BackfillOnly
-                    || Parameterization.TableOption.ExportMode == ExportMode.NewOnly)
+                if (Parameterization.IterationPeriod == null
+                    || Parameterization.CopyMode == CopyMode.BackfillOnly)
                 {
                     var activity = Database.Activities.Query()
                         .Where(pf => pf.Equal(
