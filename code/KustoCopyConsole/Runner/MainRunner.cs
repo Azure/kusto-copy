@@ -76,7 +76,7 @@ namespace KustoCopyConsole.Runner
             ReactivateActivities();
 
             var progressRunner = new ProgressRunner(RunnerParameters);
-            var iterationStartingRunner = new IterationStartingRunner(RunnerParameters);
+            var iterationManagementRunner = new IterationManagementRunner(RunnerParameters);
             var planningRunner = new PlanningRunner(RunnerParameters);
             var tempTableRunner = new TempTableCreatingRunner(RunnerParameters);
             var exportingRunner = new ExportingRunner(RunnerParameters);
@@ -86,13 +86,11 @@ namespace KustoCopyConsole.Runner
             var movingExtentRunner = new MovingExtentRunner(RunnerParameters);
             var awaitMovedExtentRunner = new AwaitMovedRunner(RunnerParameters);
             var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
-            var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
-            var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
             var runnerTasks = new[]
             {
                 Task.Run(() => progressRunner.RunAsync(ct)),
-                Task.Run(() => iterationStartingRunner.RunAsync(ct)),
+                Task.Run(() => iterationManagementRunner.RunAsync(ct)),
                 Task.Run(() => planningRunner.RunAsync(ct)),
                 Task.Run(() => tempTableRunner.RunAsync(ct)),
                 Task.Run(() => exportingRunner.RunAsync(ct)),
@@ -102,9 +100,7 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => movingExtentRunner.RunAsync(ct)),
                 Task.Run(() => awaitMovedExtentRunner.RunAsync(ct)),
                 Task.Run(() => blockCompletingRunner.RunAsync(ct)),
-                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)),
-                Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                Task.Run(() => activityCompletingRunner.RunAsync(ct))
+                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct))
             };
             var monitorTask = Task.Run(async () =>
             {   // Monitor for first failure and cancel

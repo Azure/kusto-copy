@@ -1,7 +1,6 @@
 ﻿using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
