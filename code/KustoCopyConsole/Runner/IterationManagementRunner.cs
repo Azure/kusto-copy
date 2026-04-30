@@ -12,7 +12,7 @@ namespace KustoCopyConsole.Runner
     internal class IterationManagementRunner : RunnerBase
     {
         public IterationManagementRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(30))
+           : base(parameters, TimeSpan.FromSeconds(20))
         {
         }
 
