@@ -43,7 +43,13 @@ namespace KustoCopyConsole.Entity
                 TypedTableSchema<ActivityRecord>.FromConstructor(ACTIVITY_TABLE)
                 .AddPrimaryKeyProperty(a => a.ActivityName),
                 TypedTableSchema<IterationRecord>.FromConstructor(ITERATION_TABLE)
-                .AddPrimaryKeyProperty(i => i.IterationKey),
+                .AddPrimaryKeyProperty(i => i.IterationKey)
+                .AddTrigger((db, tx) =>
+                {
+                    var typedDb = (TrackDatabase)db;
+
+                    IterationToBlockMetric(typedDb, tx);
+                }),
                 TypedTableSchema<BlockRecord>.FromConstructor(BLOCK_TABLE)
                 .AddPrimaryKeyProperty(b => b.BlockKey)
                 .AddTrigger((db, tx) =>
@@ -153,6 +159,7 @@ namespace KustoCopyConsole.Entity
             return sumValue;
         }
 
+        #region Triggers
         private static void BlockToBlockMetric(TrackDatabase db, TransactionContext tx)
         {
             var newBlocks = db.Blocks.Query(tx)
@@ -206,6 +213,20 @@ namespace KustoCopyConsole.Entity
 
             db.BlockMetrics.AppendRecords(newTotalPlannedRowCountMetrics, tx);
         }
+
+        private static void IterationToBlockMetric(TrackDatabase db, TransactionContext tx)
+        {
+            var deletedIterations = db.Iterations.TombstonedWithinTransaction(tx)
+                .ToArray();
+
+            foreach (var iteration in deletedIterations)
+            {
+                db.BlockMetrics.Query(tx)
+                    .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                    .Delete();
+            }
+        }
+        #endregion
 
         private static BlockMetric ToBlockMetric(BlockState state)
         {   //  Assume the state and metrics are in the same order and states appear first

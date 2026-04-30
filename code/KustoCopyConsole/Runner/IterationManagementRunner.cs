@@ -231,7 +231,8 @@ namespace KustoCopyConsole.Runner
             IterationRecord[] iterations,
             TransactionContext tx)
         {
-            if (iterations.All(i => i.State == IterationState.Completed)
+            if (iterations.Length > 0
+                && iterations.All(i => i.State == IterationState.Completed)
                 && (Parameterization.IterationPeriod == null
                 || Parameterization.CopyMode == CopyMode.BackfillOnly))
             {
