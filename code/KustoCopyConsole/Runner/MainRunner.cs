@@ -75,6 +75,7 @@ namespace KustoCopyConsole.Runner
         public async Task RunAsync(CancellationToken ct)
         {
             SyncActivities();
+            ReactivateActivities();
 
             var progressRunner = new ProgressRunner(RunnerParameters);
             var iterationStartingRunner = new IterationStartingRunner(RunnerParameters);
@@ -146,7 +147,6 @@ namespace KustoCopyConsole.Runner
             await monitorTask;
         }
 
-        #region Init Iterations
         private void SyncActivities()
         {
             using (var tx = Database.CreateTransaction())
@@ -210,6 +210,34 @@ namespace KustoCopyConsole.Runner
                 tx.Complete();
             }
         }
-        #endregion
+
+        private void ReactivateActivities()
+        {
+            if (Parameterization.CopyMode != CopyMode.BackfillOnly)
+            {
+                using (var tx = Database.CreateTransaction())
+                {
+                    var hasAnyIncompleteActivities = Database.Activities.Query(tx)
+                        .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                        .Any();
+
+                    if (!hasAnyIncompleteActivities)
+                    {
+                        var activityNames = Parameterization.Activities
+                            .Select(a => a.ActivityName);
+                        var currentActivitiesQuery = Database.Activities.Query(tx)
+                            .Where(pf => pf.In(a => a.ActivityName, activityNames));
+                        var currentActivities = currentActivitiesQuery.ToArray();
+                        var newActivities = currentActivities
+                            .Select(a => a with { State = ActivityState.Active });
+
+                        currentActivitiesQuery.Delete();
+                        Database.Activities.AppendRecords(newActivities, tx);
+                    }
+
+                    tx.Complete();
+                }
+            }
+        }
     }
 }
