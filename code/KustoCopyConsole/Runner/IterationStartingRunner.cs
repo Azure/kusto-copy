@@ -3,7 +3,6 @@ using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using System;
-using System.Collections.Immutable;
 using System.Linq;
 using TrackDb.Lib;
 

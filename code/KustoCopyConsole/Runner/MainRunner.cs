@@ -1,10 +1,8 @@
 ﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Diagnostics;
-using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -226,6 +224,7 @@ namespace KustoCopyConsole.Runner
                         var activityNames = Parameterization.Activities
                             .Select(a => a.ActivityName);
                         var currentActivitiesQuery = Database.Activities.Query(tx)
+                            .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
                             .Where(pf => pf.In(a => a.ActivityName, activityNames));
                         var currentActivities = currentActivitiesQuery.ToArray();
                         var newActivities = currentActivities
