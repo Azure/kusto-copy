@@ -2,7 +2,7 @@
 
 The parameters of the CLI are the following:
 
-> **Note**: You need either CLI parameters OR a YAML file. A minimal command requires at least source (-s), destination (-d), and staging storage (-t).
+> **Note**: You need either CLI parameters OR a YAML file. A minimal command requires at least source (-s), destination (-d), and staging storage (-t) which can be specified in the command line or a YAML file.
 
 ## Quick Reference
 
