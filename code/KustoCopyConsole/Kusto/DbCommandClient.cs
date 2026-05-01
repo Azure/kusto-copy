@@ -110,7 +110,8 @@ namespace KustoCopyConsole.Kusto
             KustoPriority priority,
             IEnumerable<Uri> storageRootUris,
             string tableName,
-            string? kqlQuery,
+            string kqlQuery,
+            string kqlAggregationQuery,
             string? cursorStart,
             string cursorEnd,
             string ingestionTimeStart,
@@ -142,6 +143,7 @@ let ['{tableName}'] = ['{tableName}']
     | where ingestion_time() <= todatetime('{ingestionTimeEnd}');
 ['{tableName}']
 {kqlQuery}
+{kqlAggregationQuery}
 ";
                     var reader = await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
