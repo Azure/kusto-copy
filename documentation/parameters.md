@@ -10,6 +10,7 @@ Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers)
 Query (-d)|Optional [query](#query)|"\| where Level == 'error'"
 Managed Identiy Client ID (--clientId)|[Client ID](#client-id)|GUID
 Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
+Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
 Export Count (--export)|Maximum [parallel export](#parallel-export) (default is 20)|10
 Yaml (-y)|[Path of YAML file](#yaml-file)|my-activities.yaml
 
@@ -57,6 +58,12 @@ Mode|Description
 BackfillOnly|The default:  copy historical data and will not copy data after the point where the copy started.
 BackfillAndNew|Copy historical data and will iteratively copy new data.
 NewOnly|Copy only new data.
+
+##  Iteration Period
+
+This parameter is relevant only for [Copy Mode](#copy-mode) `BackfillAndNew` & `NewOnly` (not `BackfillOnly`).
+
+When you don't specify an iteration period, Kusto Copy will copy the data for an iteration and exit once the iteration is completed (for each activity).  Specifying an iteration period has Kusto Copy run indefinitely and tries to start a new copy recurrently.
 
 ##  Parallel export
 
