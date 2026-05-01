@@ -12,6 +12,8 @@ namespace KustoCopyConsole.JobParameter
 
         public string KqlQuery { get; set; } = string.Empty;
 
+        public string KqlAggregationQuery { get; set; } = string.Empty;
+
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))

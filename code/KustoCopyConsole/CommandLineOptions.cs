@@ -38,8 +38,18 @@ namespace KustoCopyConsole
         [Option("clientId", Required = false, HelpText = "Managed Identity client ID")]
         public string ManagedIdentityClientId { get; set; } = string.Empty;
 
-        [Option('q', "query", Required = false, HelpText = "Set query, e.g. nyc_taxi.")]
+        [Option(
+            'q',
+            "query",
+            Required = false,
+            HelpText = "Set query, e.g. | where Timestamp>ago(30d)")]
         public string Query { get; set; } = string.Empty;
+
+        [Option(
+            "aggregation-query",
+            Required = false,
+            HelpText = "Set aggregation query, e.g. | summarize sum(Temperature) by bin(Timestamp, WidgetId)")]
+        public string AggregationQuery { get; set; } = string.Empty;
 
         [Option(
             "export",
