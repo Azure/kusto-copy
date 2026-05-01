@@ -2,17 +2,44 @@
 
 The parameters of the CLI are the following:
 
+> **Note**: You need either CLI parameters OR a YAML file. A minimal command requires at least source (-s), destination (-d), and staging storage (-t).
+
+## Quick Reference
+
+**[Connection](#connection)** • **[Storage](#storage)** • **[Data Control](#data-control)** • **[Authentication](#authentication)** • **[Performance](#performance)** • **[Configuration](#configuration)**
+
+### Connection
 Parameter|Description|Example
 -|-|-
 Source (-s)|Source [table](#database--table-uri)|https://mycluster.eastus.kusto.windows.net/mydb/mytable
-Destination (-d)|Destination [database or table](#database--table-uri)|https://yourcluster.eastus.kusto.windows.net/yourdb or https://yourcluster.eastus.kusto.windows.net/yourdb/mytable
+Destination (-d)|Destination [database or table](#database--table-uri)|https://yourcluster.eastus.kusto.windows.net/yourdb
+
+### Storage  
+Parameter|Description|Example
+-|-|-
 Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers) (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
-Query (-d)|Optional [query](#query)|"\| where Level == 'error'"
-Managed Identiy Client ID (--clientId)|[Client ID](#client-id)|GUID
+
+### Data Control
+Parameter|Description|Example
+-|-|-
+Query (-q)|Optional [query](#query)|"\| where Level == 'error'"
 Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
 Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
+
+### Authentication
+Parameter|Description|Example
+-|-|-
+Managed Identity Client ID (--clientId)|[Client ID](#client-id)|GUID
+
+### Performance
+Parameter|Description|Example
+-|-|-
 Export Count (--export)|Maximum [parallel export](#parallel-export) (default is 20)|10
-Yaml (-y)|[Path of YAML file](#yaml-file)|my-activities.yaml
+
+### Configuration
+Parameter|Description|Example
+-|-|-
+YAML (-y)|[Path of YAML file](#yaml-file)|my-activities.yaml
 
 ##  Database & Table URI
 
@@ -59,11 +86,15 @@ BackfillOnly|The default:  copy historical data and will not copy data after the
 BackfillAndNew|Copy historical data and will iteratively copy new data.
 NewOnly|Copy only new data.
 
+**See also**: [Iteration Period](#iteration-period) - controls polling frequency for BackfillAndNew and NewOnly modes.
+
 ##  Iteration Period
 
 This parameter is relevant only for [Copy Mode](#copy-mode) `BackfillAndNew` & `NewOnly` (not `BackfillOnly`).
 
 When you don't specify an iteration period, Kusto Copy will copy the data for an iteration and exit once the iteration is completed (for each activity).  Specifying an iteration period has Kusto Copy run indefinitely and tries to start a new copy recurrently.
+
+**See also**: [Copy Mode](#copy-mode) - determines when iteration period is used.
 
 ##  Parallel export
 
