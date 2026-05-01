@@ -23,12 +23,12 @@
 
 | Use Case | Why You'll Love It |
 |----------|-------------------|
+| **🎯 Selective Data Copy** | Transform and filter data during migration |
 | **🏢 Cluster Migration** | Move entire databases across regions with zero downtime |
+| **🔄 Cross-Region Replication** | Occasional data synchronization for backup scenarios |
+| **⚡ Delta Synchronization** | Copy only what's changed since last run |
 | **� Materialized View Backfill** | Scalable historical data processing |
 | **🔧 Update Policy Backfill** | Efficient batch processing for policy changes |
-| **🎯 Selective Data Copy** | Transform and filter data during migration |
-| **⚡ Delta Synchronization** | Copy only what's changed since last run |
-| **🔄 Cross-Region Replication** | Occasional data synchronization for backup scenarios |
 
 ## 🚀 Quick Start
 
