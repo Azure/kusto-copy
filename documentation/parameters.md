@@ -9,6 +9,7 @@ Destination (-d)|Destination [database or table](#database--table-uri)|https://y
 Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers) (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 Query (-d)|Optional [query](#query)|"\| where Level == 'error'"
 Managed Identiy Client ID (--clientId)|[Client ID](#client-id)|GUID
+Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
 Export Count (--export)|Maximum [parallel export](#parallel-export) (default is 20)|10
 Yaml (-y)|[Path of YAML file](#yaml-file)|my-activities.yaml
 
@@ -46,6 +47,16 @@ By default it uses the [default Azure Authentication](https://learn.microsoft.co
 For long running copies (i.e. more than 10 minutes), we recommend using an [Azure Managed Identity](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview) to authenticate Kusto Copy.
 
 If you are running Kusto Copy on an Azure VM, you could, for instance, use the VM system identity.
+
+##  Copy Mode
+
+The --copy-mode parameter controls the copy behavior and can take the following values:
+
+Mode|Description
+-|-
+BackfillOnly|The default:  copy historical data and will not copy data after the point where the copy started.
+BackfillAndNew|Copy historical data and will iteratively copy new data.
+NewOnly|Copy only new data.
 
 ##  Parallel export
 
