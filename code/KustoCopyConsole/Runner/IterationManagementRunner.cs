@@ -107,7 +107,7 @@ namespace KustoCopyConsole.Runner
                     return true;
                 }
                 else if (Parameterization.IterationPeriod != null
-                    && iterations.Last().StartTime + Parameterization.IterationPeriod >= DateTime.Now
+                    && iterations.Last().StartTime + Parameterization.IterationPeriod <= DateTime.Now
                     && iterations.Count(i => i.State != IterationState.Completed) < 2)
                 {   //  Iteration period is due and there is "space" for a new iteration
                     return true;
