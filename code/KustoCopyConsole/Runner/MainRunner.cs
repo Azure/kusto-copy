@@ -1,11 +1,8 @@
 ﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using System.Collections.Immutable;
 using System.Diagnostics;
-using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner
 {
@@ -75,14 +72,11 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            using (var tx = Database.CreateTransaction())
-            {
-                SyncActivities(tx);
-                EnsureIterations(tx);
+            SyncActivities();
+            ReactivateActivities();
 
-                tx.Complete();
-            }
             var progressRunner = new ProgressRunner(RunnerParameters);
+            var iterationManagementRunner = new IterationManagementRunner(RunnerParameters);
             var planningRunner = new PlanningRunner(RunnerParameters);
             var tempTableRunner = new TempTableCreatingRunner(RunnerParameters);
             var exportingRunner = new ExportingRunner(RunnerParameters);
@@ -92,12 +86,11 @@ namespace KustoCopyConsole.Runner
             var movingExtentRunner = new MovingExtentRunner(RunnerParameters);
             var awaitMovedExtentRunner = new AwaitMovedRunner(RunnerParameters);
             var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
-            var iterationCompletingRunner = new IterationCompletingRunner(RunnerParameters);
-            var activityCompletingRunner = new ActivityCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
             var runnerTasks = new[]
             {
                 Task.Run(() => progressRunner.RunAsync(ct)),
+                Task.Run(() => iterationManagementRunner.RunAsync(ct)),
                 Task.Run(() => planningRunner.RunAsync(ct)),
                 Task.Run(() => tempTableRunner.RunAsync(ct)),
                 Task.Run(() => exportingRunner.RunAsync(ct)),
@@ -107,9 +100,7 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => movingExtentRunner.RunAsync(ct)),
                 Task.Run(() => awaitMovedExtentRunner.RunAsync(ct)),
                 Task.Run(() => blockCompletingRunner.RunAsync(ct)),
-                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct)),
-                Task.Run(() => iterationCompletingRunner.RunAsync(ct)),
-                Task.Run(() => activityCompletingRunner.RunAsync(ct))
+                Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct))
             };
             var monitorTask = Task.Run(async () =>
             {   // Monitor for first failure and cancel
@@ -150,94 +141,96 @@ namespace KustoCopyConsole.Runner
             await monitorTask;
         }
 
-        private void SyncActivities(TransactionContext tx)
+        private void SyncActivities()
         {
-            var allActivities = Database.Activities.Query(tx)
-                .ToImmutableArray();
-            //  Activities in the config but not in the database
-            var newActivityNames = Parameterization.Activities
-                .Select(a => a.ActivityName)
-                .Except(allActivities.Select(a => a.ActivityName));
-            //  Disappeared activites
-            var oldActivityNames = allActivities
-                .Select(a => a.ActivityName)
-                .Except(Parameterization.Activities.Select(a => a.ActivityName))
-                .ToHashSet();
+            using (var tx = Database.CreateTransaction())
+            {   //  Synchronize activities between configuration and database
+                var dbActivities = Database.Activities.Query(tx)
+                    .ToArray();
+                //  Activities in the config but not in the database
+                var newActivityNames = Parameterization.Activities
+                    .Select(a => a.ActivityName)
+                    .Except(dbActivities.Select(a => a.ActivityName));
+                //  Disappeared activites
+                var oldActivityNames = dbActivities
+                    .Select(a => a.ActivityName)
+                    .Except(Parameterization.Activities.Select(a => a.ActivityName))
+                    .ToHashSet();
 
-            foreach (var a in allActivities)
-            {
-                if (!oldActivityNames.Contains(a.ActivityName))
+                foreach (var a in dbActivities)
                 {
-                    var paramActivity = Parameterization.GetActivity(a.ActivityName);
-                    
-                    if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
+                    if (!oldActivityNames.Contains(a.ActivityName))
                     {
-                        throw new CopyException(
-                            $"Activity '{a.ActivityName}' has mistmached source table ; " +
-                            $"configuration is {paramActivity.GetSourceTableIdentity()} while" +
-                            $"logs is {a.SourceTable}",
-                            false);
+                        var paramActivity = Parameterization.GetActivity(a.ActivityName);
+
+                        if (paramActivity.GetSourceTableIdentity() != a.SourceTable)
+                        {
+                            throw new CopyException(
+                                $"Activity '{a.ActivityName}' has mistmached source table ; " +
+                                $"configuration is {paramActivity.GetSourceTableIdentity()} while" +
+                                $"logs is {a.SourceTable}",
+                                false);
+                        }
+                        else if (paramActivity.GetDestinationTableIdentity() != a.DestinationTable)
+                        {
+                            throw new CopyException(
+                                $"Activity '{a.ActivityName}' has mistmached destination table ; " +
+                                $"configuration is {paramActivity.GetDestinationTableIdentity()} while" +
+                                $"logs is {a.DestinationTable}",
+                                false);
+                        }
                     }
-                    else if (paramActivity.GetDestinationTableIdentity() != a.DestinationTable)
+                    else
                     {
                         throw new CopyException(
-                            $"Activity '{a.ActivityName}' has mistmached destination table ; " +
-                            $"configuration is {paramActivity.GetDestinationTableIdentity()} while" +
-                            $"logs is {a.DestinationTable}",
+                            $"Activity '{a.ActivityName}' is present in logs but not in " +
+                            $"configuration",
                             false);
                     }
                 }
-                else
+                foreach (var name in newActivityNames)
                 {
-                    throw new CopyException(
-                        $"Activity '{a.ActivityName}' is present in logs but not in " +
-                        $"configuration",
-                        false);
-                }
-            }
-            foreach (var name in newActivityNames)
-            {
-                var paramActivity = Parameterization.GetActivity(name);
-                var activity = new ActivityRecord(
-                    ActivityState.Active,
-                    paramActivity.ActivityName,
-                    paramActivity.GetSourceTableIdentity(),
-                    paramActivity.GetDestinationTableIdentity());
+                    var paramActivity = Parameterization.GetActivity(name);
+                    var activity = new ActivityRecord(
+                        ActivityState.Active,
+                        paramActivity.ActivityName,
+                        paramActivity.GetSourceTableIdentity(),
+                        paramActivity.GetDestinationTableIdentity());
 
-                Database.Activities.AppendRecord(activity, tx);
-                Console.WriteLine($"New activity:  '{name}'");
+                    Database.Activities.AppendRecord(activity, tx);
+                    Console.WriteLine($"New activity:  '{name}'");
+                }
+
+                tx.Complete();
             }
         }
 
-        private void EnsureIterations(TransactionContext tx)
+        private void ReactivateActivities()
         {
-            foreach (var name in Parameterization.Activities.Select(a => a.ActivityName))
+            if (Parameterization.CopyMode != CopyMode.BackfillOnly)
             {
-                var lastIteration = Database.Iterations.Query(tx)
-                    .Where(pf => pf.Equal(t => t.IterationKey.ActivityName, name))
-                    .OrderByDescending(t => t.IterationKey.IterationId)
-                    .Take(1)
-                    .FirstOrDefault();
+                using (var tx = Database.CreateTransaction())
+                {
+                    var hasAnyIncompleteActivities = Database.Activities.Query(tx)
+                        .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                        .Any();
 
-                if (lastIteration != null)
-                {   //  An iteration already exist, nothing to do
-                }
-                else
-                {   //  Create an iteration
-                    var newIterationId = lastIteration != null
-                        ? lastIteration.IterationKey.IterationId + 1
-                        : 1;
-                    var cursorStart = lastIteration != null
-                        ? lastIteration.CursorEnd
-                        : string.Empty;
-                    var newIterationRecord = new IterationRecord(
-                        IterationState.Starting,
-                        new IterationKey(name, newIterationId),
-                        cursorStart,
-                        string.Empty,
-                        0);
+                    if (!hasAnyIncompleteActivities)
+                    {
+                        var activityNames = Parameterization.Activities
+                            .Select(a => a.ActivityName);
+                        var currentActivitiesQuery = Database.Activities.Query(tx)
+                            .Where(pf => pf.Equal(a => a.State, ActivityState.Completed))
+                            .Where(pf => pf.In(a => a.ActivityName, activityNames));
+                        var currentActivities = currentActivitiesQuery.ToArray();
+                        var newActivities = currentActivities
+                            .Select(a => a with { State = ActivityState.Active });
 
-                    Database.Iterations.AppendRecord(newIterationRecord, tx);
+                        currentActivitiesQuery.Delete();
+                        Database.Activities.AppendRecords(newActivities, tx);
+                    }
+
+                    tx.Complete();
                 }
             }
         }

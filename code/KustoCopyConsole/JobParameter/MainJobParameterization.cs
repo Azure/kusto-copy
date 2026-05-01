@@ -15,13 +15,11 @@ namespace KustoCopyConsole.JobParameter
     {
         public List<ActivityParameterization> Activities { get; set; } = new();
 
-        public TableOption TableOption { get; set; } = new TableOption();
+        public int ExportCount { get; set; } = 20;
 
-        public bool IsContinuousRun { get; set; } = false;
+        public CopyMode CopyMode { get; set; } = CopyMode.BackfillOnly;
 
-        public int ExportCount { get; set; }
-
-        public bool KeepTags { get; private set; }
+        public TimeSpan? IterationPeriod { get; set; }
 
         public List<string> StagingStorageDirectories { get; set; } = new();
 
@@ -118,11 +116,18 @@ namespace KustoCopyConsole.JobParameter
             {
                 parameterization.ManagedIdentityClientId = options.ManagedIdentityClientId;
             }
-            if (options.IsContinuousRun != null)
+            if (options.ExportCount != null)
             {
-                parameterization.IsContinuousRun = options.IsContinuousRun.Value;
+                parameterization.ExportCount = options.ExportCount.Value;
             }
-            parameterization.ExportCount = options.ExportCount;
+            if (options.CopyMode != null)
+            {
+                parameterization.CopyMode = options.CopyMode.Value;
+            }
+            if (options.IterationPeriod != null)
+            {
+                parameterization.IterationPeriod = options.IterationPeriod.Value;
+            }
 
             parameterization.Validate();
 
@@ -159,7 +164,6 @@ namespace KustoCopyConsole.JobParameter
             {
                 ValidateStagingUri(uri);
             }
-            TableOption.Validate();
         }
 
         internal TokenCredential CreateCredentials()

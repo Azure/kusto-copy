@@ -23,13 +23,16 @@ namespace KustoCopyConsole.Runner
             {
                 using (var tx = Database.CreateTransaction())
                 {
+                    var activityNames = Parameterization.Activities.Select(a => a.ActivityName);
                     var activeIterations = Database.Iterations.Query(tx)
+                        .Where(pf => pf.In(i => i.IterationKey.ActivityName, activityNames))
                         .OrderBy(i => i.IterationKey.IterationId)
                         .ThenBy(i => i.IterationKey.ActivityName)
                         .ToArray();
                     var progressTable = new Table();
 
                     progressTable.AddColumn("Activity");
+                    progressTable.AddColumn("Iteration ID");
                     progressTable.AddColumn("Iteration State");
                     progressTable.AddColumn("Total");
                     progressTable.AddColumn("%");
@@ -37,6 +40,7 @@ namespace KustoCopyConsole.Runner
                     progressTable.AddColumn("Exported");
                     progressTable.AddColumn("Ingested");
                     progressTable.AddColumn("Moved");
+
                     foreach (var iteration in activeIterations)
                     {
                         var metrics = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
@@ -68,6 +72,7 @@ namespace KustoCopyConsole.Runner
 
             progressTable.AddRow(
                 iteration.IterationKey.ActivityName,
+                iteration.IterationKey.IterationId.ToString(),
                 iteration.State.ToString(),
                 $"{totalBlockCount:N0}",
                 $"% {completionPercentage}",

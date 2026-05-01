@@ -31,14 +31,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Spectre.Console" Version="0.55.0" />
-		<PackageReference Include="track-db" Version="1.13.1.105" />
+		<PackageReference Include="Spectre.Console" Version="0.55.2" />
+		<PackageReference Include="track-db" Version="1.15.0.107" />
 		<PackageReference Include="Azure.Storage.Files.DataLake" Version="12.25.0" />
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="14.1.1" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Ingest.V2" Version="0.0.5" />
 		<PackageReference Include="Polly" Version="8.6.6" />
-		<PackageReference Include="YamlDotNet" Version="17.0.1" />
+		<PackageReference Include="YamlDotNet" Version="17.1.0" />
 	</ItemGroup>
 
 	<ItemGroup>
