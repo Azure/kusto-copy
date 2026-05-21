@@ -164,7 +164,14 @@ namespace KustoCopyConsole.Runner
 
         private async Task CleanTempTableAsync(IterationRecord iteration, CancellationToken ct)
         {
-            var tempTable = GetTempTable(iteration.IterationKey);
+            var tempTable = TryGetTempTable(iteration.IterationKey);
+
+            if (tempTable == null)
+            {
+                //  Empty iterations have no temp table to clean up.
+                return;
+            }
+
             var destinationTable = Parameterization
                 .GetActivity(iteration.IterationKey.ActivityName)
                 .GetDestinationTableIdentity();
