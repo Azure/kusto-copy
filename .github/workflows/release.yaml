@@ -101,6 +101,9 @@ jobs:
     needs:
     - build
     runs-on: ubuntu-latest
+    # Following gives gh the permission to create a release
+    permissions:
+      contents: write
     steps:
     # We do not need the source code but we need git for tags & release
     - uses: actions/checkout@v2
