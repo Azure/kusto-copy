@@ -105,25 +105,14 @@ namespace KustoCopyConsole.Runner
 
         private IterationRecord TransitionToPlanning(IterationRecord iteration, string cursor)
         {
-            using (var tx = Database.CreateTransaction())
+            var newIterationRecord = iteration with
             {
-                var newIterationRecord = iteration with
-                {
-                    State = IterationState.Planning,
-                    CursorEnd = cursor
-                };
+                State = IterationState.Planning,
+                CursorEnd = cursor
+            };
 
-                Database.Iterations.UpdateRecord(iteration, newIterationRecord, tx);
-                Database.TempTables.AppendRecord(
-                    new TempTableRecord(
-                        TempTableState.Required,
-                        iteration.IterationKey,
-                        string.Empty),
-                    tx);
-                iteration = newIterationRecord;
-
-                tx.Complete();
-            }
+            Database.Iterations.UpdateRecord(iteration, newIterationRecord);
+            iteration = newIterationRecord;
 
             return iteration;
         }

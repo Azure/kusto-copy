@@ -2,9 +2,7 @@
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using System;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace KustoCopyConsole.Runner
@@ -69,25 +67,40 @@ namespace KustoCopyConsole.Runner
                     ExportOperationId = string.Empty,
                     State = BlockState.ExtentMoved,
                     ExportedRowCount = 0
-                });
+                })
+                .ToArray();
             var newUrls = taskBundles
                 .SelectMany(tb => tb.DetailTask.Result.Select(d => new BlobUrlRecord(
                     tb.Block.BlockKey,
                     d.BlobUri,
                     d.RecordCount)));
 
-            using (var tx = Database.CreateTransaction())
+            if (newBlocks.Length > 0)
             {
-                Database.Blocks.Query(tx)
-                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                    .Where(pf => pf.In(
-                        b => b.BlockKey.BlockId,
-                        blocks.Select(b => b.BlockKey.BlockId)))
-                    .Delete();
-                Database.Blocks.AppendRecords(newBlocks, tx);
-                Database.BlobUrls.AppendRecords(newUrls, tx);
+                using (var tx = Database.CreateTransaction())
+                {
+                    Database.Blocks.Query(tx)
+                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                        .Where(pf => pf.In(
+                            b => b.BlockKey.BlockId,
+                            blocks.Select(b => b.BlockKey.BlockId)))
+                        .Delete();
+                    Database.Blocks.AppendRecords(newBlocks, tx);
+                    Database.BlobUrls.AppendRecords(newUrls, tx);
+                    //  Create temp table requirement if no temp table exists
+                    //  Temp table is required JIT:  no block, no temp table
+                    if (TryGetTempTable(iterationKey) == null)
+                    {
+                        Database.TempTables.AppendRecord(
+                            new TempTableRecord(
+                                TempTableState.Required,
+                                iterationKey,
+                                string.Empty),
+                            tx);
+                    }
 
-                tx.Complete();
+                    tx.Complete();
+                }
             }
         }
     }
