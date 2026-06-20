@@ -129,8 +129,7 @@ namespace KustoCopyConsole.Runner
                 var refreshPeriod = READ_TIME_OUT;
                 var tolerance = TimeSpan.FromSeconds(30);
                 var key = await _containerClient.GetParentBlobServiceClient().GetUserDelegationKeyAsync(
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow.Add(refreshPeriod));
+                    new BlobGetUserDelegationKeyOptions(DateTimeOffset.UtcNow.Add(refreshPeriod)));
 
                 return (refreshPeriod.Subtract(tolerance), key.Value);
             }
