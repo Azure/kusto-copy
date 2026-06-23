@@ -101,6 +101,9 @@ jobs:
     needs:
     - build
     runs-on: ubuntu-latest
+    # Following gives gh the permission to create a release
+    permissions:
+      contents: write
     steps:
     # We do not need the source code but we need git for tags & release
     - uses: actions/checkout@v2
@@ -147,12 +150,11 @@ jobs:
     # Validate final assets
     - name: Final assets content
       run:  ls -l final-assets
-    # See https://cli.github.com/manual/gh_auth
-    - name: Authentication gh CLI
-      run:  |
-        echo "${{ secrets.RELEASE_TOKEN }}" | gh auth login --with-token
     # See https://cli.github.com/manual/gh_release
     - name: Create full version release
+      env:
+    # See https://cli.github.com/manual/gh_auth
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run:  |
         # Retrieve content of full-version from artefact
         fullVersion=$(cat linux-assets/full-version.txt)

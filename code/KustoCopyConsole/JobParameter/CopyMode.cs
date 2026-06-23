@@ -3,7 +3,7 @@
     public enum CopyMode
     {
         BackfillOnly,
-        NewOnly,
-        BackfillAndNew
+        BackfillAndNew,
+        NewOnly
     }
 }

@@ -164,18 +164,22 @@ namespace KustoCopyConsole.Runner
 
         private async Task CleanTempTableAsync(IterationRecord iteration, CancellationToken ct)
         {
-            var tempTable = GetTempTable(iteration.IterationKey);
-            var destinationTable = Parameterization
-                .GetActivity(iteration.IterationKey.ActivityName)
-                .GetDestinationTableIdentity();
-            var dbClient = DbClientFactory.GetDbCommandClient(
-                destinationTable.ClusterUri,
-                destinationTable.DatabaseName);
+            var tempTable = TryGetTempTable(iteration.IterationKey);
 
-            await dbClient.DropTableIfExistsAsync(
-                new KustoPriority(iteration.IterationKey),
-                tempTable.TempTableName,
-                ct);
+            if (tempTable != null)
+            {
+                var destinationTable = Parameterization
+                    .GetActivity(iteration.IterationKey.ActivityName)
+                    .GetDestinationTableIdentity();
+                var dbClient = DbClientFactory.GetDbCommandClient(
+                    destinationTable.ClusterUri,
+                    destinationTable.DatabaseName);
+
+                await dbClient.DropTableIfExistsAsync(
+                    new KustoPriority(iteration.IterationKey),
+                    tempTable.TempTableName,
+                    ct);
+            }
         }
 
         private async Task<bool> IsIterationCompleted(IterationKey iterationKey)
