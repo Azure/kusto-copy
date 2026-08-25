@@ -97,8 +97,7 @@ namespace KustoCopyConsole.Kusto
             CancellationToken ct)
         {
             var commandText = @"
-.show capacity
-| where Resource == 'Queries'
+.show capacity queries
 | project Total";
             var reader = await provider.ExecuteControlCommandAsync(string.Empty, commandText);
             var capacity = reader.ToDataSet().Tables[0].Rows
