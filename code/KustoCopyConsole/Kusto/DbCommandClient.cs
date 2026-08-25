@@ -133,7 +133,9 @@ with (
     namePrefix=""export"",
     persistDetails=true,
     parquetDatetimePrecision=""microsecond"",
-    distribution=""per_node""
+    distribution=""per_node"",
+    parquetRowGroupSize=5,
+    sizeLimit=10000000
 ) <| 
 let ['{tableName}'] = ['{tableName}']
     {cursorStartFilter}
