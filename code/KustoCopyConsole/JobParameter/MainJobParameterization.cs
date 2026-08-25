@@ -173,7 +173,7 @@ namespace KustoCopyConsole.JobParameter
                 CredentialProcessTimeout = TimeSpan.FromSeconds(15)
             };
 
-            if (string.IsNullOrWhiteSpace(ManagedIdentityClientId))
+            if (!string.IsNullOrWhiteSpace(ManagedIdentityClientId))
             {
                 options.ManagedIdentityClientId = ManagedIdentityClientId;
             }
