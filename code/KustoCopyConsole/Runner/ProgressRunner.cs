@@ -19,7 +19,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (!AreActivitiesCompleted())
             {
                 using (var tx = Database.CreateTransaction())
                 {

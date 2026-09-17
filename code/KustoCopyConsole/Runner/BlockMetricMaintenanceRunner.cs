@@ -15,7 +15,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (!AreActivitiesCompleted())
             {
                 MaintainBlockMetrics();
 

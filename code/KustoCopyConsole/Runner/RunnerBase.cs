@@ -35,25 +35,16 @@ namespace KustoCopyConsole.Runner
 
         protected bool AreActivitiesCompleted()
         {
-            var isCompleted = Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
+            var areAllCompleted = Database.Activities.Query()
+                .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
                 .Count() == 0;
 
-            return isCompleted;
-        }
-
-        protected bool AllActivitiesCompleted()
-        {
-            var allCompleted = !Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
-                .Any();
-
-            if (allCompleted)
+            if (areAllCompleted)
             {
                 _allActivityCompletedSource.TrySetResult();
             }
 
-            return allCompleted;
+            return areAllCompleted;
         }
 
         protected async Task SleepAsync(CancellationToken ct)

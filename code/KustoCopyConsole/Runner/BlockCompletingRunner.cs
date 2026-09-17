@@ -15,7 +15,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (!AreActivitiesCompleted())
             {   //  All activity / iteration
                 var movedBlockKeys = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.State, BlockState.ExtentMoved))

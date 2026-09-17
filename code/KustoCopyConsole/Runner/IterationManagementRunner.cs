@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Runner
         {
             var isProcessStarting = true;
 
-            while (!AllActivitiesCompleted())
+            while (!AreActivitiesCompleted())
             {
                 await ManageIterationsAsync(isProcessStarting, ct);
                 isProcessStarting = false;
