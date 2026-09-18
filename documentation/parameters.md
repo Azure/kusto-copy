@@ -99,6 +99,8 @@ All|The default: export data to staging storage and ingest it into the destinati
 ExportOnly|Export data to staging storage without ingesting it into the destination.
 IngestionOnly|Ingest previously exported data from staging storage without exporting it again.
 
+This parameter is meant to support a multi-tenant migration where the export portion would be done with a Managed Identity (MI) from the source tenant whereas the ingestion would be done with a MI from the destination tenant (Entra ID Managed Identity does not support multiple tenants).
+
 ##  Iteration Period
 
 This parameter is relevant only for [Copy Mode](#copy-mode) `BackfillAndNew` & `NewOnly` (not `BackfillOnly`).
