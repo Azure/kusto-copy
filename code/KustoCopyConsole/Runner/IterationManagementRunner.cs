@@ -20,7 +20,7 @@ namespace KustoCopyConsole.Runner
         {
             var isProcessStarting = true;
 
-            while (!AreActivitiesCompleted())
+            while (ShouldRunnersContinue())
             {
                 await ManageIterationsAsync(isProcessStarting, ct);
                 isProcessStarting = false;
@@ -91,7 +91,8 @@ namespace KustoCopyConsole.Runner
                 Database.Iterations.AppendRecord(newIterationRecord, tx);
             }
         }
-        bool ShouldCreateIteration(
+
+        private bool ShouldCreateIteration(
             IterationRecord[] iterations,
             bool isProcessStarting,
             bool hasActiveIteration)

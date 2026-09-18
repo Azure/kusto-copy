@@ -46,7 +46,7 @@ namespace KustoCopyConsole.Runner
 
         public async Task RunAsync(CancellationToken ct)
         {
-            while (!AreActivitiesCompleted())
+            while (ShouldRunnersContinue())
             {
                 var activityNames = Database.Activities.Query()
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))

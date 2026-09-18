@@ -35,7 +35,7 @@ namespace KustoCopyConsole.Runner
         {
             var cacheMap = new Dictionary<Uri, CapacityCache>();
 
-            while (!AreActivitiesCompleted())
+            while (ShouldRunnersContinue())
             {
                 var activityNames = Database.Activities.Query()
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))

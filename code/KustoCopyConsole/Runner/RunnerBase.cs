@@ -33,18 +33,19 @@ namespace KustoCopyConsole.Runner
 
         protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
 
-        protected bool AreActivitiesCompleted()
+        protected bool ShouldRunnersContinue()
         {
             var areAllCompleted = Database.Activities.Query()
                 .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
                 .Count() == 0;
+            var isActive = !(areAllCompleted && Parameterization.IterationPeriod == null);
 
-            if (areAllCompleted)
+            if (!isActive)
             {
                 _allActivityCompletedSource.TrySetResult();
             }
 
-            return areAllCompleted;
+            return isActive;
         }
 
         protected async Task SleepAsync(CancellationToken ct)
@@ -53,7 +54,7 @@ namespace KustoCopyConsole.Runner
                 _allActivityCompletedSource.Task,
                 Task.Delay(_wakePeriod, ct));
 
-            if(ct.IsCancellationRequested)
+            if (ct.IsCancellationRequested)
             {
                 Trace.TraceInformation("");
                 Trace.TraceInformation($"General failure:  {GetType().Name}");
