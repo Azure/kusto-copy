@@ -4,7 +4,7 @@ using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class TempTableCreatingRunner : RunnerBase
     {

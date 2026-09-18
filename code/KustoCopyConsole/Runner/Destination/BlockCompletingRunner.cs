@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class BlockCompletingRunner : RunnerBase
     {

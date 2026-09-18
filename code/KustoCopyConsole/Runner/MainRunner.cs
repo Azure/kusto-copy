@@ -2,6 +2,8 @@
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
+using KustoCopyConsole.Runner.Destination;
+using KustoCopyConsole.Runner.Source;
 using System.Diagnostics;
 
 namespace KustoCopyConsole.Runner

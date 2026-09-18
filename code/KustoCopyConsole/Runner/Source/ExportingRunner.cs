@@ -6,7 +6,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Source
 {
     internal class ExportingRunner : StartCommandRunnerBase
     {

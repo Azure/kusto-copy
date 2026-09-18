@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal abstract class AwaitCommandRunner : RunnerBase
+    internal abstract class AwaitCommandRunnerBase : RunnerBase
     {
         private const int MAX_OPERATIONS = 200;
         private static readonly IImmutableSet<string> FAILED_STATUS =
@@ -24,7 +24,7 @@ namespace KustoCopyConsole.Runner
                 "Skipped"
                 ]);
 
-        public AwaitCommandRunner(RunnerParameters parameters, TimeSpan wakePeriod)
+        public AwaitCommandRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
            : base(parameters, wakePeriod)
         {
         }

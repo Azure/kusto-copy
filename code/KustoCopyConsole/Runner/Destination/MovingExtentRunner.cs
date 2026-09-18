@@ -4,7 +4,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class MovingExtentRunner : StartCommandRunnerBase
     {

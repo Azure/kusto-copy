@@ -3,7 +3,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {

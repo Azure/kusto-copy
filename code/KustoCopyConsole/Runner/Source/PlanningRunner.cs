@@ -9,7 +9,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using TrackDb.Lib;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Source
 {
     internal class PlanningRunner : ActivityRunnerBase
     {
