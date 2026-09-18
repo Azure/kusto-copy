@@ -15,6 +15,14 @@ namespace KustoCopyConsole.Runner.Destination
         {
         }
 
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
+        }
+
         protected override BlockState InitialState => BlockState.ExtentMoving;
 
         protected override BlockState ResetState => BlockState.Ingested;

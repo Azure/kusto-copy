@@ -72,7 +72,7 @@ namespace KustoCopyConsole.Runner
             await ((IAsyncDisposable)DbClientFactory).DisposeAsync();
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public async override Task RunAsync(CancellationToken ct)
         {
             SyncActivities();
             ReactivateActivities();

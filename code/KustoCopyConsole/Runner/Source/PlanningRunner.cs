@@ -30,6 +30,14 @@ namespace KustoCopyConsole.Runner.Source
         {
         }
 
+        public override async Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldExportRun)
+            {
+                await base.RunAsync(ct);
+            }
+        }
+
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var activityParam = Parameterization.GetActivity(activityName);

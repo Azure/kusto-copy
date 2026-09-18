@@ -14,6 +14,14 @@ namespace KustoCopyConsole.Runner.Source
         {
         }
 
+        public override async Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldExportRun)
+            {
+                await base.RunAsync(ct);
+            }
+        }
+
         protected override BlockState InitialState => BlockState.Exporting;
 
         protected override BlockState ResetState => BlockState.Planned;

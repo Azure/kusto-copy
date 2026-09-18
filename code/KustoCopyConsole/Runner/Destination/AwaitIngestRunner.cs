@@ -17,6 +17,14 @@ namespace KustoCopyConsole.Runner.Destination
         {
         }
 
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
+        }
+
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =

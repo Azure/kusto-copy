@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Runner
             _wakePeriod = wakePeriod;
         }
 
+        public abstract Task RunAsync(CancellationToken ct);
+
         protected RunnerParameters RunnerParameters { get; }
 
         protected MainJobParameterization Parameterization => RunnerParameters.Parameterization;
@@ -32,6 +34,10 @@ namespace KustoCopyConsole.Runner
         protected DbClientFactory DbClientFactory => RunnerParameters.DbClientFactory;
 
         protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
+
+        protected bool ShouldExportRun => Parameterization.CopyFlow != CopyFlow.IngestionOnly;
+
+        protected bool ShouldIngestionRun => Parameterization.CopyFlow != CopyFlow.ExportOnly;
 
         protected bool ShouldRunnersContinue()
         {

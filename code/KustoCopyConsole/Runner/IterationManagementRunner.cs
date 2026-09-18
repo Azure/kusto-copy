@@ -16,7 +16,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public async override Task RunAsync(CancellationToken ct)
         {
             var isProcessStarting = true;
 

@@ -29,22 +29,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected abstract BlockState InitialState { get; }
-
-        protected abstract BlockState ResetState { get; }
-
-        protected abstract Uri GetClusterUri(ActivityParameterization activity);
-
-        protected abstract BlockRecord ResetBlock(BlockRecord block);
-
-        protected abstract string GetOperationId(BlockRecord block);
-
-        protected abstract Task ProcessOperationAsync(
-            IEnumerable<BlockRecord> blocks,
-            ActivityParameterization activityParam,
-            CancellationToken ct);
-
-        public async Task RunAsync(CancellationToken ct)
+        public override async Task RunAsync(CancellationToken ct)
         {
             while (ShouldRunnersContinue())
             {
@@ -65,6 +50,21 @@ namespace KustoCopyConsole.Runner
                 await SleepAsync(ct);
             }
         }
+
+        protected abstract BlockState InitialState { get; }
+
+        protected abstract BlockState ResetState { get; }
+
+        protected abstract Uri GetClusterUri(ActivityParameterization activity);
+
+        protected abstract BlockRecord ResetBlock(BlockRecord block);
+
+        protected abstract string GetOperationId(BlockRecord block);
+
+        protected abstract Task ProcessOperationAsync(
+            IEnumerable<BlockRecord> blocks,
+            ActivityParameterization activityParam,
+            CancellationToken ct);
 
         private async Task RunClusterAsync(
             Uri clusterUri,

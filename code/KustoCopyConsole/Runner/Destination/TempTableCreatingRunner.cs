@@ -13,9 +13,9 @@ namespace KustoCopyConsole.Runner.Destination
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public async override Task RunAsync(CancellationToken ct)
         {
-            while (ShouldRunnersContinue())
+            while (ShouldIngestionRun && ShouldRunnersContinue())
             {
                 var tempTables = Database.TempTables.Query()
                     .Where(pf => pf.In(
