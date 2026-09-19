@@ -63,38 +63,43 @@ namespace KustoCopyConsole.Runner
                 }
                 else
                 {
-                    var areIterationPlanning = Database.Iterations.Query(tx)
-                        .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
-                        .Count() != 0;
+                    var activeActivityNames = Database.Activities.Query(tx)
+                        .Where(pf => pf.Equal(i => i.State, ActivityState.Active))
+                        .Select(a => a.ActivityName)
+                        .ToArray();
 
-                    if (areIterationPlanning)
+                    foreach (var activityName in activeActivityNames)
                     {
-                        return true;
-                    }
-                    else
-                    {
-                        var plannedIterationKeys = Database.Iterations.Query(tx)
-                            .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
-                            .Select(i => i.IterationKey);
+                        var iterations = Database.Iterations.Query(tx)
+                            .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                            .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed));
 
-                        foreach (var iterationKey in plannedIterationKeys)
+                        foreach (var iteration in iterations)
                         {
-                            var metricMap = Database.QueryAggregatedBlockMetrics(iterationKey, tx);
-
-                            foreach (var p in metricMap)
-                            {
-                                var metric = p.Key;
-                                var cardinality = p.Value;
-
-                                if (metric < BlockMetric.Exported && cardinality > 0)
+                            if (iteration.State < IterationState.Planned)
+                            {   //  This iteration isn't done exporting
+                                return true;
+                            }
+                            else
+                            {   //  Let's check if all blocks are exported
+                                var metricMap = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
+                          
+                                foreach (var p in metricMap)
                                 {
-                                    return true;
+                                    var metric = p.Key;
+                                    var cardinality = p.Value;
+
+                                    if (metric < BlockMetric.Exported && cardinality > 0)
+                                    {   //  One block is "below" exported
+                                        return true;
+                                    }
                                 }
                             }
                         }
-
-                        return false;
                     }
+
+                    //  All iterations of all active activities are done exporting
+                    return false;
                 }
             }
         }
