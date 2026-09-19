@@ -54,6 +54,16 @@ Copy query results instead of full tables using the `-q` parameter.
 
 👉 **[Query Parameter Guide](parameters.md#-q-query)**
 
+### 🔍 Multi-Tenant Copy
+
+**Copying data between clusters in different tenants?**
+
+The default `DefaultAzureCredential` authentication flow can use your signed-in Azure CLI identity. A managed identity (MI), however, can authenticate only in its own Microsoft Entra tenant.
+
+To copy with managed identities, run the export with an MI from the source cluster's tenant, then run the ingestion with a different MI from the destination cluster's tenant. Use the `--copy-flow` parameter to run the `ExportOnly` and `IngestOnly` stages separately.
+
+👉 **[Copy Flow parameter](parameters.md#copy-flow)**
+
 ---
 
 ## 🆘 Troubleshooting & Performance

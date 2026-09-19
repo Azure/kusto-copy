@@ -9,7 +9,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using TrackDb.Lib;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Source
 {
     internal class PlanningRunner : ActivityRunnerBase
     {
@@ -28,6 +28,14 @@ namespace KustoCopyConsole.Runner
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
         {
+        }
+
+        public override async Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldExportRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)

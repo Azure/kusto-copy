@@ -50,8 +50,14 @@ namespace KustoCopyConsole
         [Option(
             "copy-mode",
             Required = false,
-            HelpText = "Copy mode:  BackfillOnly, NewOnly or BackfillAndNew")]
+            HelpText = "Copy mode:  BackfillOnly (default), NewOnly or BackfillAndNew")]
         public CopyMode? CopyMode { get; set; }
+
+        [Option(
+            "copy-flow",
+            Required = false,
+            HelpText = "Copy flow:  All (default), ExportOnly or IngestionOnly")]
+        public CopyFlow? CopyFlow { get; set; }
 
         [Option(
             "iteration-period",

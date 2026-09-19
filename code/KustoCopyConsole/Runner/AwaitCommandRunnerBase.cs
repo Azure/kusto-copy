@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner
 {
-    internal abstract class AwaitCommandRunner : RunnerBase
+    internal abstract class AwaitCommandRunnerBase : RunnerBase
     {
         private const int MAX_OPERATIONS = 200;
         private static readonly IImmutableSet<string> FAILED_STATUS =
@@ -24,29 +24,14 @@ namespace KustoCopyConsole.Runner
                 "Skipped"
                 ]);
 
-        public AwaitCommandRunner(RunnerParameters parameters, TimeSpan wakePeriod)
+        public AwaitCommandRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
            : base(parameters, wakePeriod)
         {
         }
 
-        protected abstract BlockState InitialState { get; }
-
-        protected abstract BlockState ResetState { get; }
-
-        protected abstract Uri GetClusterUri(ActivityParameterization activity);
-
-        protected abstract BlockRecord ResetBlock(BlockRecord block);
-
-        protected abstract string GetOperationId(BlockRecord block);
-
-        protected abstract Task ProcessOperationAsync(
-            IEnumerable<BlockRecord> blocks,
-            ActivityParameterization activityParam,
-            CancellationToken ct);
-
-        public async Task RunAsync(CancellationToken ct)
+        public override async Task RunAsync(CancellationToken ct)
         {
-            while (!AreActivitiesCompleted())
+            while (ShouldRunnersContinue())
             {
                 var activityNames = Database.Activities.Query()
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
@@ -65,6 +50,21 @@ namespace KustoCopyConsole.Runner
                 await SleepAsync(ct);
             }
         }
+
+        protected abstract BlockState InitialState { get; }
+
+        protected abstract BlockState ResetState { get; }
+
+        protected abstract Uri GetClusterUri(ActivityParameterization activity);
+
+        protected abstract BlockRecord ResetBlock(BlockRecord block);
+
+        protected abstract string GetOperationId(BlockRecord block);
+
+        protected abstract Task ProcessOperationAsync(
+            IEnumerable<BlockRecord> blocks,
+            ActivityParameterization activityParam,
+            CancellationToken ct);
 
         private async Task RunClusterAsync(
             Uri clusterUri,
