@@ -35,23 +35,68 @@ namespace KustoCopyConsole.Runner
 
         protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
 
-        protected bool ShouldExportRun => Parameterization.CopyFlow != CopyFlow.IngestionOnly;
+        protected bool ShouldExportRun => Parameterization.CopyFlow != CopyFlow.IngestOnly;
 
         protected bool ShouldIngestionRun => Parameterization.CopyFlow != CopyFlow.ExportOnly;
 
         protected bool ShouldRunnersContinue()
         {
-            var areAllCompleted = Database.Activities.Query()
-                .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
-                .Count() == 0;
-            var isActive = !(areAllCompleted && Parameterization.IterationPeriod == null);
-
-            if (!isActive)
+            using (var tx = Database.CreateTransaction())
             {
-                _allActivityCompletedSource.TrySetResult();
-            }
+                if (Parameterization.IterationPeriod != null)
+                {
+                    return true;
+                }
+                else if (Parameterization.CopyFlow != CopyFlow.ExportOnly)
+                {
+                    var areAllCompleted = Database.Activities.Query(tx)
+                        .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                        .Count() == 0;
+                    var isActive = !(areAllCompleted && Parameterization.IterationPeriod == null);
 
-            return isActive;
+                    if (!isActive)
+                    {
+                        _allActivityCompletedSource.TrySetResult();
+                    }
+
+                    return isActive;
+                }
+                else
+                {
+                    var areIterationPlanning = Database.Iterations.Query(tx)
+                        .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
+                        .Count() != 0;
+
+                    if (areIterationPlanning)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        var plannedIterationKeys = Database.Iterations.Query(tx)
+                            .Where(pf => pf.Equal(i => i.State, IterationState.Planning))
+                            .Select(i => i.IterationKey);
+
+                        foreach (var iterationKey in plannedIterationKeys)
+                        {
+                            var metricMap = Database.QueryAggregatedBlockMetrics(iterationKey, tx);
+
+                            foreach (var p in metricMap)
+                            {
+                                var metric = p.Key;
+                                var cardinality = p.Value;
+
+                                if (metric < BlockMetric.Exported && cardinality > 0)
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    }
+                }
+            }
         }
 
         protected async Task SleepAsync(CancellationToken ct)

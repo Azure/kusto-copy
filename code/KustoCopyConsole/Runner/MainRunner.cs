@@ -138,9 +138,28 @@ namespace KustoCopyConsole.Runner
                 }
             });
 
-            // Wait for all runners to complete (will be fast after cancellation)
+            //  Wait for all runners to complete (will be fast after cancellation)
             await Task.WhenAll(runnerTasks);
             await monitorTask;
+            EndMessage();
+        }
+
+        private void EndMessage()
+        {
+            var areAllCompleted = Database.Activities.Query()
+                .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                .Count() == 0;
+
+            Trace.WriteLine("");
+            if (areAllCompleted)
+            {
+                Trace.WriteLine("Copy completed");
+            }
+            else if (Parameterization.CopyFlow == CopyFlow.ExportOnly)
+            {
+                Trace.WriteLine("Export completed");
+            }
+            Trace.WriteLine("");
         }
 
         private void SyncActivities()

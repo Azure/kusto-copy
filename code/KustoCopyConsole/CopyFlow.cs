@@ -4,6 +4,6 @@
     {
         All,
         ExportOnly,
-        IngestionOnly
+        IngestOnly
     }
 }

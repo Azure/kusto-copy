@@ -97,7 +97,7 @@ Flow|Description
 -|-
 All|The default: export data to staging storage and ingest it into the destination.
 ExportOnly|Export data to staging storage without ingesting it into the destination.
-IngestionOnly|Ingest previously exported data from staging storage without exporting it again.
+IngestOnly|Ingest previously exported data from staging storage (no export).
 
 This parameter is meant to support a multi-tenant migration where the export portion would be done with a Managed Identity (MI) from the source tenant whereas the ingestion would be done with a MI from the destination tenant (Entra ID Managed Identity does not support multiple tenants).
 
