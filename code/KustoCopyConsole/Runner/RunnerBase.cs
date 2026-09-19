@@ -72,8 +72,13 @@ namespace KustoCopyConsole.Runner
                     {
                         var iterations = Database.Iterations.Query(tx)
                             .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
-                            .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed));
+                            .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
+                            .ToArray();
 
+                        if(iterations.Length == 0)
+                        {   //  This activity has no iterations:  iteration hasn't started yet
+                            return true;
+                        }   
                         foreach (var iteration in iterations)
                         {
                             if (iteration.State < IterationState.Planned)
