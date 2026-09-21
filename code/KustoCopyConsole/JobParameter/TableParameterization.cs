@@ -10,6 +10,8 @@ namespace KustoCopyConsole.JobParameter
         
         public string TableName { get; set; } = string.Empty;
 
+        public string EntityGroup { get; set; } = string.Empty;
+
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(ClusterUri))
