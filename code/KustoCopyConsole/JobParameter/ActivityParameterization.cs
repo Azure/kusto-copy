@@ -6,9 +6,9 @@ namespace KustoCopyConsole.JobParameter
     {
         public string ActivityName { get; set; } = string.Empty;
 
-        public TableParameterization Source { get; set; } = new();
+        public SourceTableParameterization Source { get; set; } = new();
 
-        public TableParameterization Destination { get; set; } = new();
+        public DestinationTableParameterization Destination { get; set; } = new();
 
         public string KqlQuery { get; set; } = string.Empty;
 
@@ -19,23 +19,12 @@ namespace KustoCopyConsole.JobParameter
                 throw new CopyException($"{nameof(ActivityName)} is required", false);
             }
             Source.Validate();
-            if (string.IsNullOrWhiteSpace(Source.TableName))
-            {
-                throw new CopyException($"{nameof(Source.TableName)} is required", false);
-            }
             Destination.Validate();
         }
 
         public TableIdentity GetSourceTableIdentity()
         {
-            var sourceTableIdentity = Source.GetTableIdentity();
-
-            return !string.IsNullOrWhiteSpace(Destination.TableName)
-                ? sourceTableIdentity
-                : new TableIdentity(
-                    NormalizedUri.NormalizeUri(sourceTableIdentity.ClusterUri.ToString()),
-                    sourceTableIdentity.DatabaseName,
-                    Source.GetTableIdentity().TableName);
+            return Source.GetTableIdentity();
         }
 
         public TableIdentity GetDestinationTableIdentity()
@@ -45,7 +34,7 @@ namespace KustoCopyConsole.JobParameter
             return !string.IsNullOrWhiteSpace(Destination.TableName)
                 ? destinationTableIdentity
                 : new TableIdentity(
-                    NormalizedUri.NormalizeUri(destinationTableIdentity.ClusterUri.ToString()),
+                    destinationTableIdentity.ClusterUri,
                     destinationTableIdentity.DatabaseName,
                     Source.GetTableIdentity().TableName);
         }

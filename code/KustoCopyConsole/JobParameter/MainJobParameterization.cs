@@ -91,13 +91,13 @@ namespace KustoCopyConsole.JobParameter
                 var activity = new ActivityParameterization
                 {
                     ActivityName = "default",
-                    Source = new TableParameterization
+                    Source = new SourceTableParameterization
                     {
                         ClusterUri = sourceBuilder.ToString(),
                         DatabaseName = sourceDb,
                         TableName = sourceTable
                     },
-                    Destination = new TableParameterization
+                    Destination = new DestinationTableParameterization
                     {
                         ClusterUri = destinationBuilder.ToString(),
                         DatabaseName = destinationDb,
@@ -191,6 +191,7 @@ namespace KustoCopyConsole.JobParameter
         {
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
                 .Build();
             var yaml = serializer.Serialize(this);
 
