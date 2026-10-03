@@ -12,5 +12,10 @@ namespace KustoCopyConsole.JobParameter
                 throw new CopyException($"{nameof(TableName)} is required", false);
             }
         }
+
+        public SourceTableParameterization Clone()
+        {
+            return (SourceTableParameterization)MemberwiseClone();
+        }
     }
 }

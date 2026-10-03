@@ -38,5 +38,10 @@ namespace KustoCopyConsole.JobParameter
                     destinationTableIdentity.DatabaseName,
                     Source.GetTableIdentity().TableName);
         }
+
+        public ActivityParameterization Clone()
+        {
+            return (ActivityParameterization)MemberwiseClone();
+        }
     }
 }

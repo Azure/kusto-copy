@@ -12,5 +12,10 @@ namespace KustoCopyConsole
         {
             return new Uri(uriText.Trim(' ', '/').ToLower());
         }
+
+        public static Uri NormalizeUri(Uri uri)
+        {
+            return NormalizeUri(uri.OriginalString);
+        }
     }
 }

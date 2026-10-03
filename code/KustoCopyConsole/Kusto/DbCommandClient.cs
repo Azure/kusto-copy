@@ -433,9 +433,36 @@ let ['{tableName}'] = ['{tableName}']
                ct);
         }
 
-        public async Task<IEnumerable<object>> ShowMoveDetailsAsync(KustoPriority kustoPriority, string operationId, CancellationToken ct)
+        public async Task<IImmutableList<EntityReference>> ShowEntityReferencesAsync(
+            KustoPriority priority,
+            string entityGroupName,
+            CancellationToken ct)
         {
-            throw new NotImplementedException();
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var commandText = @$".show entity_group ['{entityGroupName}']
+| extend Entities=todynamic(Entities)
+| mv-expand Entities to typeof(string)
+| parse Entities with ""cluster('""ClusterUri""').database('""Database""')""
+| parse ClusterUri with ""https://"" InnerClusterUri
+| extend ClusterUri = iif(isempty(InnerClusterUri), ClusterUri, InnerClusterUri)
+| project ClusterUri=strcat(""https://"", ClusterUri), Database
+";
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText);
+                    var result = reader
+                        .ToEnumerable(r => new EntityReference(
+                            new Uri((string)r["ClusterUri"]),
+                            (string)r["Database"])
+                        )
+                        .ToImmutableArray();
+
+                    return result;
+                },
+                ct);
         }
     }
 }

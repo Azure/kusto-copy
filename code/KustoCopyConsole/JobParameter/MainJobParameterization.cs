@@ -141,6 +141,11 @@ namespace KustoCopyConsole.JobParameter
         }
         #endregion
 
+        public MainJobParameterization Clone()
+        {
+            return (MainJobParameterization)MemberwiseClone();
+        }
+
         public ActivityParameterization GetActivity(string activityName)
         {
             foreach (var activityParameterization in Activities)
@@ -176,7 +181,8 @@ namespace KustoCopyConsole.JobParameter
         {
             var options = new DefaultAzureCredentialOptions
             {
-                CredentialProcessTimeout = TimeSpan.FromSeconds(15)
+                CredentialProcessTimeout = TimeSpan.FromSeconds(15),
+                ExcludeVisualStudioCredential = true
             };
 
             if (!string.IsNullOrWhiteSpace(ManagedIdentityClientId))

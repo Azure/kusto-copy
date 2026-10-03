@@ -1,4 +1,7 @@
-﻿using KustoCopyConsole.Entity;
+﻿using Azure.Core;
+using Kusto.Data.Common;
+using KustoCopyConsole.Concurrency;
+using KustoCopyConsole.Entity;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
@@ -20,8 +23,15 @@ namespace KustoCopyConsole.Runner
             CancellationTokenSource cts)
         {
             var credentials = parameterization.CreateCredentials();
+            var expandedParameterization = parameterization.CopyFlow != CopyFlow.ExportOnly
+                ? await ExpandActivitiesAsync(
+                    parameterization,
+                    credentials,
+                    traceApplicationName,
+                    cts.Token)
+                : parameterization;
             var stagingBlobUriProvider = new AzureBlobUriProvider(
-                parameterization.StagingStorageDirectories.Select(s => new Uri(s)),
+                expandedParameterization.StagingStorageDirectories.Select(s => new Uri(s)),
                 credentials);
 
             Console.Write("Authentication test...");
@@ -32,11 +42,11 @@ namespace KustoCopyConsole.Runner
             Console.Write("Initialize tracking...");
 
             var databaseTask = TrackDatabase.CreateAsync(
-                new Uri($"{parameterization.StagingStorageDirectories.First()}/tracking"),
+                new Uri($"{expandedParameterization.StagingStorageDirectories.First()}/tracking"),
                 credentials,
                 cts.Token);
             var dbClientFactoryTask = DbClientFactory.CreateAsync(
-                parameterization,
+                expandedParameterization,
                 credentials,
                 traceApplicationName,
                 cts.Token);
@@ -50,13 +60,78 @@ namespace KustoCopyConsole.Runner
             Console.WriteLine("  Done");
 
             var parameters = new RunnerParameters(
-                parameterization,
+                expandedParameterization,
                 credentials,
                 database,
                 dbClientFactory,
                 stagingBlobUriProvider);
 
             return new MainRunner(parameters, cts);
+        }
+
+        private static async Task<MainJobParameterization> ExpandActivitiesAsync(
+            MainJobParameterization parameterization,
+            TokenCredential credentials,
+            string traceApplicationName,
+            CancellationToken ct)
+        {
+            async Task<IEnumerable<ActivityParameterization>> ExpandActivityAsync(
+                ActivityParameterization activity,
+                DbCommandClient dbCommandClient,
+                CancellationToken ct)
+            {
+                if (string.IsNullOrWhiteSpace(activity.Source.EntityGroup))
+                {
+                    return [activity];
+                }
+                else
+                {
+                    var entityReferences = await dbCommandClient.ShowEntityReferencesAsync(
+                        KustoPriority.HighestPriority,
+                        activity.Source.EntityGroup,
+                        ct);
+                    var activityList = new List<ActivityParameterization>();
+
+                    foreach (var er in entityReferences)
+                    {
+                        var subActivity = activity.Clone();
+                        var clusterName = er.ClusterUri.Host.Split('.')[0];
+
+                        subActivity.ActivityName = $"{activity.ActivityName}-{clusterName}-{er.Database}";
+                        subActivity.Source = subActivity.Source.Clone();
+                        subActivity.Source.EntityGroup = null;
+                        subActivity.Source.ClusterUri = er.ClusterUri.ToString();
+                        subActivity.Source.DatabaseName = er.Database;
+
+                        activityList.Add(subActivity);
+                    }
+
+                    return activityList;
+                }
+            }
+
+            var providerFactory =
+                new ProviderFactory(parameterization, credentials, traceApplicationName);
+            var activityTasks = parameterization.Activities
+                .Select(a => ExpandActivityAsync(
+                    a,
+                    new DbCommandClient(
+                        providerFactory.GetCommandProvider(new Uri(a.Source.ClusterUri)),
+                        new PriorityExecutionQueue<KustoPriority>(1),
+                        a.Source.DatabaseName),
+                    ct))
+                .ToArray();
+
+            await Task.WhenAll(activityTasks);
+
+            var newActivities = activityTasks
+                .SelectMany(t => t.Result)
+                .ToList();
+            var newParameterization = parameterization.Clone();
+
+            newParameterization.Activities = newActivities;
+
+            return newParameterization;
         }
 
         private MainRunner(RunnerParameters parameters, CancellationTokenSource cts)
@@ -74,8 +149,11 @@ namespace KustoCopyConsole.Runner
 
         public async override Task RunAsync(CancellationToken ct)
         {
-            SyncActivities();
-            ReactivateActivities();
+            if (Parameterization.CopyFlow != CopyFlow.ExportOnly)
+            {
+                SyncActivities();
+                ReactivateActivities();
+            }
 
             var progressRunner = new ProgressRunner(RunnerParameters);
             var iterationManagementRunner = new IterationManagementRunner(RunnerParameters);

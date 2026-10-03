@@ -10,8 +10,6 @@ namespace KustoCopyConsole.Kusto
 {
     internal class ProviderFactory : IDisposable
     {
-        private const string APPLICATION_NAME = "KustoCopy";
-
         private readonly ImmutableDictionary<Uri, ICslQueryProvider> _queryProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _commandProviderMap;
         private readonly ImmutableDictionary<Uri, ICslAdminProvider> _dmCommandProviderMap;
@@ -69,7 +67,7 @@ namespace KustoCopyConsole.Kusto
                 e => e.Uri,
                 e => QueuedIngestClientBuilder.Create(e.Uri)
                 .WithAuthentication(credentials)
-                .WithClientDetails($"{APPLICATION_NAME}:{appVersion}")
+                .WithClientDetails(traceApplicationName)
                 .Build());
         }
 
@@ -101,27 +99,27 @@ namespace KustoCopyConsole.Kusto
 
         public ICslQueryProvider GetQueryProvider(Uri clusterUri)
         {
-            return _queryProviderMap[clusterUri];
+            return _queryProviderMap[NormalizedUri.NormalizeUri(clusterUri)];
         }
 
         public ICslAdminProvider GetCommandProvider(Uri clusterUri)
         {
-            return _commandProviderMap[clusterUri];
+            return _commandProviderMap[NormalizedUri.NormalizeUri(clusterUri)];
         }
 
         public ICslAdminProvider GetDmCommandProvider(Uri clusterUri)
         {
-            return _dmCommandProviderMap[clusterUri];
+            return _dmCommandProviderMap[NormalizedUri.NormalizeUri(clusterUri)];
         }
 
         public IMultiIngest GetIngestProvider(Uri clusterUri)
         {
-            return _ingestProviderMap[clusterUri];
+            return _ingestProviderMap[NormalizedUri.NormalizeUri(clusterUri)];
         }
 
         private static Uri GetIngestUri(Uri uri)
         {
-            var builder = new UriBuilder(uri);
+            var builder = new UriBuilder(NormalizedUri.NormalizeUri(uri));
 
             builder.Host = $"ingest-{uri.Host}";
 
