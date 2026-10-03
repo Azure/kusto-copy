@@ -6,13 +6,21 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Source
 {
     internal class ExportingRunner : StartCommandRunnerBase
     {
         public ExportingRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(10))
         {
+        }
+
+        public override async Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldExportRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override BlockState InitialState => BlockState.Planned;

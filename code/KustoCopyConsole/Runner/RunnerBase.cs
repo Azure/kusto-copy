@@ -23,6 +23,8 @@ namespace KustoCopyConsole.Runner
             _wakePeriod = wakePeriod;
         }
 
+        public abstract Task RunAsync(CancellationToken ct);
+
         protected RunnerParameters RunnerParameters { get; }
 
         protected MainJobParameterization Parameterization => RunnerParameters.Parameterization;
@@ -33,27 +35,78 @@ namespace KustoCopyConsole.Runner
 
         protected AzureBlobUriProvider StagingBlobUriProvider => RunnerParameters.StagingBlobUriProvider;
 
-        protected bool AreActivitiesCompleted()
+        protected bool ShouldExportRun => Parameterization.CopyFlow != CopyFlow.IngestOnly;
+
+        protected bool ShouldIngestionRun => Parameterization.CopyFlow != CopyFlow.ExportOnly;
+
+        protected bool ShouldRunnersContinue()
         {
-            var isCompleted = Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
-                .Count() == 0;
-
-            return isCompleted;
-        }
-
-        protected bool AllActivitiesCompleted()
-        {
-            var allCompleted = !Database.Activities.Query()
-                .Where(pf => pf.Equal(a => a.State, ActivityState.Active))
-                .Any();
-
-            if (allCompleted)
+            using (var tx = Database.CreateTransaction())
             {
-                _allActivityCompletedSource.TrySetResult();
-            }
+                if (Parameterization.IterationPeriod != null)
+                {
+                    return true;
+                }
+                else if (Parameterization.CopyFlow != CopyFlow.ExportOnly)
+                {
+                    var areAllCompleted = Database.Activities.Query(tx)
+                        .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
+                        .Count() == 0;
+                    var isActive = !(areAllCompleted && Parameterization.IterationPeriod == null);
 
-            return allCompleted;
+                    if (!isActive)
+                    {
+                        _allActivityCompletedSource.TrySetResult();
+                    }
+
+                    return isActive;
+                }
+                else
+                {
+                    var activeActivityNames = Database.Activities.Query(tx)
+                        .Where(pf => pf.Equal(i => i.State, ActivityState.Active))
+                        .Select(a => a.ActivityName)
+                        .ToArray();
+
+                    foreach (var activityName in activeActivityNames)
+                    {
+                        var iterations = Database.Iterations.Query(tx)
+                            .Where(pf => pf.Equal(i => i.IterationKey.ActivityName, activityName))
+                            .Where(pf => pf.NotEqual(i => i.State, IterationState.Completed))
+                            .ToArray();
+
+                        if(iterations.Length == 0)
+                        {   //  This activity has no iterations:  iteration hasn't started yet
+                            return true;
+                        }   
+                        foreach (var iteration in iterations)
+                        {
+                            if (iteration.State < IterationState.Planned)
+                            {   //  This iteration isn't done exporting
+                                return true;
+                            }
+                            else
+                            {   //  Let's check if all blocks are exported
+                                var metricMap = Database.QueryAggregatedBlockMetrics(iteration.IterationKey, tx);
+                          
+                                foreach (var p in metricMap)
+                                {
+                                    var metric = p.Key;
+                                    var cardinality = p.Value;
+
+                                    if (metric < BlockMetric.Exported && cardinality > 0)
+                                    {   //  One block is "below" exported
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    //  All iterations of all active activities are done exporting
+                    return false;
+                }
+            }
         }
 
         protected async Task SleepAsync(CancellationToken ct)
@@ -62,7 +115,7 @@ namespace KustoCopyConsole.Runner
                 _allActivityCompletedSource.Task,
                 Task.Delay(_wakePeriod, ct));
 
-            if(ct.IsCancellationRequested)
+            if (ct.IsCancellationRequested)
             {
                 Trace.TraceInformation("");
                 Trace.TraceInformation($"General failure:  {GetType().Name}");

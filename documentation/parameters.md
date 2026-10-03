@@ -6,7 +6,7 @@ The parameters of the CLI are the following:
 
 ## Quick Reference
 
-**[Connection](#connection)** • **[Storage](#storage)** • **[Data Control](#data-control)** • **[Authentication](#authentication)** • **[Performance](#performance)** • **[Configuration](#configuration)**
+**[Connection](#connection)** • **[Storage](#storage)** • **[Copy Behavior](#copy-behavior)** • **[Authentication](#authentication)** • **[Performance](#performance)** • **[Configuration](#configuration)**
 
 ### Connection
 Parameter|Description|Example
@@ -19,11 +19,12 @@ Parameter|Description|Example
 -|-|-
 Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers) (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 
-### Data Control
+### Copy Behavior
 Parameter|Description|Example
 -|-|-
 Query (-q)|Optional [query](#query)|"\| where Level == 'error'"
 Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
+Copy Flow (--copy-flow)|[Copy flow](#copy-flow) stages|ExportOnly
 Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
 
 ### Authentication
@@ -87,6 +88,18 @@ BackfillAndNew|Copy historical data and will iteratively copy new data.
 NewOnly|Copy only new data.
 
 **See also**: [Iteration Period](#iteration-period) - controls polling frequency for BackfillAndNew and NewOnly modes.
+
+##  Copy Flow
+
+The --copy-flow parameter controls which stages of the copy are run and can take the following values:
+
+Flow|Description
+-|-
+All|The default: export data to staging storage and ingest it into the destination.
+ExportOnly|Export data to staging storage without ingesting it into the destination.
+IngestOnly|Ingest previously exported data from staging storage (no export).
+
+This parameter is meant to support a multi-tenant migration where the export portion would be done with a Managed Identity (MI) from the source tenant whereas the ingestion would be done with a MI from the destination tenant (Entra ID Managed Identity does not support multiple tenants).
 
 ##  Iteration Period
 

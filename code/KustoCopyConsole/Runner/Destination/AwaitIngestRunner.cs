@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class AwaitIngestRunner : ActivityRunnerBase
     {
@@ -15,6 +15,14 @@ namespace KustoCopyConsole.Runner
         public AwaitIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
         {
+        }
+
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)

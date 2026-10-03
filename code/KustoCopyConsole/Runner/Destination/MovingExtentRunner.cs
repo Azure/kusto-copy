@@ -4,7 +4,7 @@ using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class MovingExtentRunner : StartCommandRunnerBase
     {
@@ -13,6 +13,14 @@ namespace KustoCopyConsole.Runner
         public MovingExtentRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(15))
         {
+        }
+
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override BlockState InitialState => BlockState.Ingested;

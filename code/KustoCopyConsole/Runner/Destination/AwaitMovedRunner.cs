@@ -1,21 +1,26 @@
 ﻿using KustoCopyConsole.Entity;
-using KustoCopyConsole.Entity.Keys;
 using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
 using KustoCopyConsole.Kusto;
-using KustoCopyConsole.Kusto.Data;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using TrackDb.Lib;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
-    internal class AwaitMovedRunner : AwaitCommandRunner
+    internal class AwaitMovedRunner : AwaitCommandRunnerBase
     {
         public AwaitMovedRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(10))
         {
+        }
+
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override BlockState InitialState => BlockState.ExtentMoving;

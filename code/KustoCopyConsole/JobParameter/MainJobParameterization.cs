@@ -19,6 +19,8 @@ namespace KustoCopyConsole.JobParameter
 
         public CopyMode CopyMode { get; set; } = CopyMode.BackfillOnly;
 
+        public CopyFlow CopyFlow { get; set; } = CopyFlow.All;
+
         public TimeSpan? IterationPeriod { get; set; }
 
         public List<string> StagingStorageDirectories { get; set; } = new();
@@ -123,6 +125,10 @@ namespace KustoCopyConsole.JobParameter
             if (options.CopyMode != null)
             {
                 parameterization.CopyMode = options.CopyMode.Value;
+            }
+            if (options.CopyFlow != null)
+            {
+                parameterization.CopyFlow = options.CopyFlow.Value;
             }
             if (options.IterationPeriod != null)
             {

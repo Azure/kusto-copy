@@ -21,21 +21,11 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected abstract BlockState InitialState { get; }
-
-        protected abstract BlockState DestinationState { get; }
-
-        protected abstract int? MaxCapacity { get; }
-
-        protected abstract Uri GetClusterUri(ActivityParameterization activity);
-
-        protected abstract Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct);
-
-        public async Task RunAsync(CancellationToken ct)
+        public override async Task RunAsync(CancellationToken ct)
         {
             var cacheMap = new Dictionary<Uri, CapacityCache>();
 
-            while (!AreActivitiesCompleted())
+            while (ShouldRunnersContinue())
             {
                 var activityNames = Database.Activities.Query()
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
@@ -90,6 +80,16 @@ namespace KustoCopyConsole.Runner
                 await SleepAsync(ct);
             }
         }
+
+        protected abstract BlockState InitialState { get; }
+
+        protected abstract BlockState DestinationState { get; }
+
+        protected abstract int? MaxCapacity { get; }
+
+        protected abstract Uri GetClusterUri(ActivityParameterization activity);
+
+        protected abstract Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct);
 
         private async Task RunClusterAsync(
             Uri clusterUri,

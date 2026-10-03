@@ -4,7 +4,7 @@ using KustoCopyConsole.Kusto;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class TempTableCreatingRunner : RunnerBase
     {
@@ -13,9 +13,9 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public async override Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (ShouldIngestionRun && ShouldRunnersContinue())
             {
                 var tempTables = Database.TempTables.Query()
                     .Where(pf => pf.In(

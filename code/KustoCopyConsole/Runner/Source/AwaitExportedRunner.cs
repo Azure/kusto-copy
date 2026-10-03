@@ -5,13 +5,21 @@ using KustoCopyConsole.Kusto;
 using System;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Source
 {
-    internal class AwaitExportedRunner : AwaitCommandRunner
+    internal class AwaitExportedRunner : AwaitCommandRunnerBase
     {
         public AwaitExportedRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(10))
         {
+        }
+
+        public override async Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldExportRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override BlockState InitialState => BlockState.Exporting;

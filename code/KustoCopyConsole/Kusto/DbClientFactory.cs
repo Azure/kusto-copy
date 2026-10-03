@@ -26,12 +26,16 @@ namespace KustoCopyConsole.Kusto
             string traceApplicationName,
             CancellationToken ct)
         {
+            var isExportOnly = parameterization.CopyFlow == CopyFlow.ExportOnly;
+            var isIngestOnly = parameterization.CopyFlow == CopyFlow.IngestOnly;
             var providerFactory =
                 new ProviderFactory(parameterization, credentials, traceApplicationName);
             var sourceClusterUris = parameterization.Activities
+                .Where(a => !isIngestOnly)
                 .Select(a => a.GetSourceTableIdentity().ClusterUri)
                 .Distinct();
             var destinationClusterUris = parameterization.Activities
+                .Where(a => !isExportOnly)
                 .Select(a => a.GetDestinationTableIdentity().ClusterUri)
                 .Distinct();
             var allClusterUris = sourceClusterUris

@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class BlockCompletingRunner : RunnerBase
     {
@@ -13,9 +13,9 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        public async Task RunAsync(CancellationToken ct)
+        public override async Task RunAsync(CancellationToken ct)
         {
-            while (!AllActivitiesCompleted())
+            while (ShouldIngestionRun && ShouldRunnersContinue())
             {   //  All activity / iteration
                 var movedBlockKeys = Database.Blocks.Query()
                     .Where(pf => pf.Equal(b => b.State, BlockState.ExtentMoved))

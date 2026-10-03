@@ -3,7 +3,7 @@ using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.Kusto;
 using System.Linq;
 
-namespace KustoCopyConsole.Runner
+namespace KustoCopyConsole.Runner.Destination
 {
     internal class QueueIngestRunner : ActivityRunnerBase
     {
@@ -12,6 +12,14 @@ namespace KustoCopyConsole.Runner
         public QueueIngestRunner(RunnerParameters parameters)
            : base(parameters, TimeSpan.FromSeconds(5))
         {
+        }
+
+        public async override Task RunAsync(CancellationToken ct)
+        {
+            if (ShouldIngestionRun)
+            {
+                await base.RunAsync(ct);
+            }
         }
 
         protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
