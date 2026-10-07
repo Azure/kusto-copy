@@ -197,7 +197,36 @@ namespace KustoCopyConsole.Entity
                     g.Key.BlockMetric,
                     g.Sum(bm => bm.Value)));
 
-            db.BlockMetrics.AppendRecords(newMetrics, tx);
+            var newMetricsArray = newMetrics.ToArray();
+
+            db.BlockMetrics.AppendRecords(newMetricsArray, tx);
+
+#if DEBUG
+            //  TEMPORARY-DEBUG-CHECK:  remove this block once negative metrics are diagnosed
+            foreach (var key in newMetricsArray
+                .Select(m => (m.IterationKey, m.BlockMetric))
+                .Distinct())
+            {
+                var total = db.QueryAggregatedBlockMetric(key.IterationKey, key.BlockMetric, tx);
+
+                if (total < 0)
+                {
+                    var deleted = string.Join(
+                        ", ",
+                        db.Blocks.TombstonedWithinTransaction(tx)
+                        .Select(b => $"{b.BlockKey}:{b.State}"));
+                    var created = string.Join(
+                        ", ",
+                        db.Blocks.Query(tx)
+                        .WithinTransactionOnly()
+                        .Select(b => $"{b.BlockKey}:{b.State}"));
+
+                    throw new InvalidOperationException(
+                        $"Negative metric {key.BlockMetric} ({total}) for {key.IterationKey}.  "
+                        + $"Deleted in tx:  [{deleted}].  New in tx:  [{created}]");
+                }
+            }
+#endif
         }
 
         private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
