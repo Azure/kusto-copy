@@ -95,7 +95,7 @@ namespace KustoCopyConsole.Runner
                     foreach (var er in entityReferences)
                     {
                         var subActivity = activity.Clone();
-                        var clusterName = er.ClusterUri.Host.Split('.')[0];
+                        var clusterName = er.ClusterUri.Host.Split('.')[0].ToUpper();
 
                         subActivity.ActivityName = $"{activity.ActivityName}-{clusterName}-{er.Database}";
                         subActivity.Source = subActivity.Source.Clone();
