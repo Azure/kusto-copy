@@ -197,36 +197,7 @@ namespace KustoCopyConsole.Entity
                     g.Key.BlockMetric,
                     g.Sum(bm => bm.Value)));
 
-            var newMetricsArray = newMetrics.ToArray();
-
-            db.BlockMetrics.AppendRecords(newMetricsArray, tx);
-
-#if DEBUG
-            //  TEMPORARY-DEBUG-CHECK:  remove this block once negative metrics are diagnosed
-            foreach (var key in newMetricsArray
-                .Select(m => (m.IterationKey, m.BlockMetric))
-                .Distinct())
-            {
-                var total = db.QueryAggregatedBlockMetric(key.IterationKey, key.BlockMetric, tx);
-
-                if (total < 0)
-                {
-                    var deleted = string.Join(
-                        ", ",
-                        db.Blocks.TombstonedWithinTransaction(tx)
-                        .Select(b => $"{b.BlockKey}:{b.State}"));
-                    var created = string.Join(
-                        ", ",
-                        db.Blocks.Query(tx)
-                        .WithinTransactionOnly()
-                        .Select(b => $"{b.BlockKey}:{b.State}"));
-
-                    throw new InvalidOperationException(
-                        $"Negative metric {key.BlockMetric} ({total}) for {key.IterationKey}.  "
-                        + $"Deleted in tx:  [{deleted}].  New in tx:  [{created}]");
-                }
-            }
-#endif
+            db.BlockMetrics.AppendRecords(newMetrics, tx);
         }
 
         private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
@@ -245,7 +216,13 @@ namespace KustoCopyConsole.Entity
 
         private static void IterationToBlockMetric(TrackDatabase db, TransactionContext tx)
         {
+            //  An update is a tombstone + new record:  only truly deleted iterations count
+            var recreatedKeys = db.Iterations.Query(tx)
+                .WithinTransactionOnly()
+                .Select(i => i.IterationKey)
+                .ToImmutableHashSet();
             var deletedIterations = db.Iterations.TombstonedWithinTransaction(tx)
+                .Where(i => !recreatedKeys.Contains(i.IterationKey))
                 .ToArray();
 
             foreach (var iteration in deletedIterations)
