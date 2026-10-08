@@ -107,6 +107,51 @@ BaseData
                 ct);
         }
 
+        public async Task<IEnumerable<string>> GetExtentIdsAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var cursorStartFilter = cursorStart == null
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var query = @$"
+let MinIngestionTime = datetime({minIngestionTime});
+let MaxIngestionTime = datetime({maxIngestionTime});
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    | where ingestion_time()>=MinIngestionTime
+    | where ingestion_time()<=MaxIngestionTime
+    {kqlQuery}
+    ;
+//  Let's list extents from the time window
+BaseData
+| summarize by extent_id()
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var results = reader
+                        .ToEnumerable(r => ((Guid)r[0]).ToString())
+                        .ToImmutableArray();
+
+                    return results;
+                },
+                ct);
+        }
+
         public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksAsync(
             KustoPriority priority,
             string tableName,
@@ -115,6 +160,7 @@ BaseData
             string cursorEnd,
             string minIngestionTime,
             string maxIngestionTime,
+            IEnumerable<ExtentCreationTime> extentCreationTimes,
             TimeSpan partitionResolution,
             long maxRowCountPerBlock,
             CancellationToken ct)
@@ -123,11 +169,21 @@ BaseData
                 priority,
                 async () =>
                 {
-                    var dbUri = $"{_queryUri.ToString().TrimEnd('/')}/{_databaseName}";
+                    var extentCreationTimesJsonList = string.Join(
+                        ",\n",
+                        extentCreationTimes
+                        .Select(ect => $"{{ \"extentId\" : \"{ect.ExtentId}\", \"creationTime\" : \"{ect.CreationTime}\" }}"));
                     var cursorStartFilter = cursorStart == null
                     ? string.Empty
                     : $@"| where cursor_after(""{cursorStart}"")";
                     var query = @$"
+let ExtentIdCreationTime = print ExtentIdCreationTime=dynamic([
+    {extentCreationTimesJsonList}
+])
+    | mv-expand ExtentIdCreationTime
+    | project
+        ExtentId=toguid(ExtentIdCreationTime.extentId),
+        CreatedOn=todatetime(ExtentIdCreationTime.creationTime);
 let MinIngestionTime = datetime({minIngestionTime});
 let MaxIngestionTime = datetime({maxIngestionTime});
 let PartitionResolution = timespan({partitionResolution});
@@ -139,15 +195,6 @@ let BaseData = ['{tableName}']
     | where ingestion_time()<=MaxIngestionTime
     {kqlQuery}
     ;
-//  Let's list extents from the time window
-let ExtentIdsText = strcat_array(toscalar(BaseData | summarize make_set(extent_id())), ',');
-let ShowCommand = toscalar(strcat(
-    "".show table ['{tableName}'] extents ("",
-    //  Fake a non-existing extent ID if no extent ID are available
-    iif(isempty(ExtentIdsText), tostring(new_guid()), ExtentIdsText),
-    "")""));
-let ExtentIdCreationTime = evaluate execute_show_command(""{dbUri}"", ShowCommand)
-    | project ExtentId, CreatedOn=MaxCreatedOn;
 //  Get the data by extent
 let DataByExtent = BaseData
     | summarize RowCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
