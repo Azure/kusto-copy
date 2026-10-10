@@ -152,6 +152,51 @@ BaseData
                 ct);
         }
 
+        public async Task<long> GetExtentCountAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var cursorStartFilter = cursorStart == null
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var query = @$"
+let MinIngestionTime = datetime({minIngestionTime});
+let MaxIngestionTime = datetime({maxIngestionTime});
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    | where ingestion_time()>=MinIngestionTime
+    | where ingestion_time()<=MaxIngestionTime
+    {kqlQuery}
+    ;
+//  Let's list extents from the time window
+BaseData
+| summarize count_distinct(extent_id())
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var results = reader
+                        .ToEnumerable(r => (long)r[0])
+                        .First();
+
+                    return results;
+                },
+                ct);
+        }
+
         public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksAsync(
             KustoPriority priority,
             string tableName,

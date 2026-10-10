@@ -21,6 +21,7 @@ namespace KustoCopyConsole.Runner.Source
             long RecordCount);
         #endregion
 
+        private const int MAX_EXTENT_COUNT = 10000;
         private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 1000;
         private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 600;
         private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
@@ -79,6 +80,11 @@ namespace KustoCopyConsole.Runner.Source
             }
             if (iteration.State == IterationState.Planning && ShouldPlan(iteration.IterationKey))
             {
+                await MigrateDataAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
+                    ct);
                 await PartitionDataAsync(
                     queryClient,
                     commandClient,
@@ -120,6 +126,51 @@ namespace KustoCopyConsole.Runner.Source
             return activeBlockCount < MAX_ACTIVE_BLOCKS_PER_ITERATION;
         }
         #endregion
+
+        private async Task MigrateDataAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            CancellationToken ct)
+        {
+            var partitions = Database.PlanningPartitions.Query()
+                .Where(pf => pf.Equal(pp => pp.IterationKey, iteration.IterationKey))
+                .ToArray();
+            var newPartitions = new List<PlanningPartitionRecord2>(partitions.Length);
+
+            foreach (var partition in partitions)
+            {   //  Add extent count to the v2 of PlanningPartitionRecord
+                var extentCount = await queryClient.GetExtentCountAsync(
+                    new KustoPriority(iteration.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
+                    partition.MinIngestionTime,
+                    partition.MaxIngestionTime,
+                    ct);
+                var newPartition = new PlanningPartitionRecord2(
+                    partition.IterationKey,
+                    partition.Level,
+                    partition.PartitionId,
+                    partition.RowCount,
+                    extentCount,
+                    partition.MinIngestionTime,
+                    partition.MaxIngestionTime);
+
+                newPartitions.Add(newPartition);
+            }
+
+            using (var tx = Database.CreateTransaction())
+            {
+                Database.PlanningPartitions.Query(tx)
+                    .Where(pf => pf.Equal(pp => pp.IterationKey, iteration.IterationKey))
+                    .Delete();
+                Database.PlanningPartitions2.AppendRecords(newPartitions, tx);
+
+                tx.Complete();
+            }
+        }
 
         private IterationRecord TransitionToPlanning(IterationRecord iteration, string cursor)
         {
@@ -171,17 +222,12 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord? lastPartition,
             CancellationToken ct)
         {
-            if (lastPartition == null
-                || (lastPartition.Level <= 1 && lastPartition.RowCount > MAX_ROW_COUNT_PER_PARTITION))
-            {
-                return await PartitionRowsAsync(
-                    queryClient,
-                    activityParam,
-                    iterationKey,
-                    lastPartition,
-                    ct);
-            }
-            else
+            var iteration = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                .First();
+
+            if (lastPartition != null
+                && (lastPartition.Level > 1 || lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION))
             {
                 return await LoadBlocksAsync(
                     queryClient,
@@ -190,20 +236,26 @@ namespace KustoCopyConsole.Runner.Source
                     lastPartition,
                     ct);
             }
+            else
+            {
+                return await PartitionRowsAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
+                    lastPartition,
+                    ct);
+            }
         }
 
         private async Task<bool> PartitionRowsAsync(
             DbQueryClient queryClient,
             ActivityParameterization activityParam,
-            IterationKey iterationKey,
+            IterationRecord iteration,
             PlanningPartitionRecord? parentPartition,
             CancellationToken ct)
         {
-            var iteration = Database.Iterations.Query()
-                .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
-                .First();
             var rowPartitions = await queryClient.PartitionRowsAsync(
-                new KustoPriority(iterationKey),
+                new KustoPriority(iteration.IterationKey),
                 activityParam.GetSourceTableIdentity().TableName,
                 activityParam.KqlQuery,
                 iteration.CursorStart,
@@ -238,7 +290,7 @@ namespace KustoCopyConsole.Runner.Source
             }
             else
             {
-                ClearPlanning(iterationKey);
+                ClearPlanning(iteration.IterationKey);
 
                 return false;
             }
