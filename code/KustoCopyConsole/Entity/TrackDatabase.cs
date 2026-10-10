@@ -70,12 +70,6 @@ namespace KustoCopyConsole.Entity
                 .OptOutIndex(p => p.MinIngestionTime)
                 .OptOutIndex(p => p.MaxIngestionTime)
                 .OptOutIndex(p => p.RowCount)
-                .AddTrigger((db, tx) =>
-                {
-                    var typedDb = (TrackDatabase)db;
-
-                    PlanningPartitionToBlockMetric(typedDb, tx);
-                })
                 ,
                 TypedTableSchema<PlanningPartitionRecord2>.FromConstructor(PLANNING_PARTITION_TABLE2)
                 .OptOutIndex(p => p.MinIngestionTime)
@@ -218,7 +212,7 @@ namespace KustoCopyConsole.Entity
 
         private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
         {
-            var newPlanningPartitions = db.PlanningPartitions.Query(tx)
+            var newPlanningPartitions = db.PlanningPartitions2.Query(tx)
                 .WithinTransactionOnly();
             var newTotalPlannedRowCountMetrics = newPlanningPartitions
                 .Where(pf => pf.Equal(p => p.PartitionId, 0))

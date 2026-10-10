@@ -9,6 +9,7 @@ namespace KustoCopyConsole.Kusto.Data
 {
     internal record RowPartition(
         long RowCount,
+        long ExtentCount,
         string MinIngestionTime,
         string MaxIngestionTime);
 }

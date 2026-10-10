@@ -140,7 +140,7 @@ namespace KustoCopyConsole.Runner
                     Database.TempTables.Query(tx)
                         .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                         .Delete();
-                    Database.PlanningPartitions.Query(tx)
+                    Database.PlanningPartitions2.Query(tx)
                         .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
                         .Delete();
                     Database.Iterations.UpdateRecord(

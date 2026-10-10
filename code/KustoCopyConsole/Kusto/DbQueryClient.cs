@@ -58,6 +58,8 @@ namespace KustoCopyConsole.Kusto
             string? minIngestionTime,
             string? maxIngestionTime,
             TimeSpan partitionResolution,
+            long MaxRowCount,
+            long MaxExtentCount,
             CancellationToken ct)
         {
             return await RequestRunAsync(
@@ -75,6 +77,8 @@ namespace KustoCopyConsole.Kusto
                     : $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
                     var query = @$"
 let PartitionResolution=timespan({partitionResolution});
+let MaxRowCount = {MaxRowCount};
+let MaxExtentCount = {MaxExtentCount};
 let BaseData = ['{tableName}']
     {cursorStartFilter}
     | where cursor_before_or_at(""{cursorEnd}"")
@@ -83,12 +87,43 @@ let BaseData = ['{tableName}']
     {kqlQuery}
     ;
 BaseData
-| summarize RowCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+| summarize RowCount=count(), ExtentCount=count_distinct(extent_id()),
+    MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
     by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by MinIngestionTime asc
+| scan declare (
+    PartitionId:long = 0,
+    RunningRowCount:long = 0,
+    RunningExtentCount:long = 0
+) with (
+    step s: true =>
+        PartitionId = s.PartitionId + tolong(
+            s.RunningRowCount + RowCount >= MaxRowCount
+            or s.RunningExtentCount + ExtentCount >= MaxExtentCount
+        ),
+        RunningRowCount = iff(
+            s.RunningRowCount + RowCount >= MaxRowCount
+            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
+            RowCount,
+            s.RunningRowCount + RowCount
+        ),
+        RunningExtentCount = iff(
+            s.RunningRowCount + RowCount >= MaxRowCount
+            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
+            ExtentCount,
+            s.RunningExtentCount + ExtentCount
+        );
+)
+| summarize
+    RowCount = sum(RowCount),
+    ExtentCount = sum(ExtentCount),
+    MinIngestionTime = min(MinIngestionTime),
+    MaxIngestionTime = max(MaxIngestionTime)
+    by PartitionId
+| project-away PartitionId
 | order by MinIngestionTime asc
 | extend MinIngestionTime=tostring(MinIngestionTime)
 | extend MaxIngestionTime=tostring(MaxIngestionTime)
-| project-away PartitionBin
 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -98,6 +133,7 @@ BaseData
                     var rowPartitions = reader
                         .ToEnumerable(r => new RowPartition(
                             (long)r["RowCount"],
+                            (long)r["ExtentCount"],
                             (string)r["MinIngestionTime"],
                             (string)r["MaxIngestionTime"]))
                         .ToImmutableArray();

@@ -193,11 +193,11 @@ namespace KustoCopyConsole.Runner.Source
             IterationKey iterationKey,
             CancellationToken ct)
         {
-            PlanningPartitionRecord? lastPartition = null;
+            PlanningPartitionRecord2? lastPartition = null;
 
             do
             {
-                lastPartition = Database.PlanningPartitions.Query()
+                lastPartition = Database.PlanningPartitions2.Query()
                     .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
                     .OrderByDescending(pp => pp.Level)
                     .ThenBy(pp => pp.PartitionId)
@@ -219,7 +219,7 @@ namespace KustoCopyConsole.Runner.Source
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
             IterationKey iterationKey,
-            PlanningPartitionRecord? lastPartition,
+            PlanningPartitionRecord2? lastPartition,
             CancellationToken ct)
         {
             var iteration = Database.Iterations.Query()
@@ -227,7 +227,8 @@ namespace KustoCopyConsole.Runner.Source
                 .First();
 
             if (lastPartition != null
-                && (lastPartition.Level > 1 || lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION))
+                && (lastPartition.Level > 1 || lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION)
+                && lastPartition.ExtentCount <= MAX_EXTENT_COUNT)
             {
                 return await LoadBlocksAsync(
                     queryClient,
@@ -251,7 +252,7 @@ namespace KustoCopyConsole.Runner.Source
             DbQueryClient queryClient,
             ActivityParameterization activityParam,
             IterationRecord iteration,
-            PlanningPartitionRecord? parentPartition,
+            PlanningPartitionRecord2? parentPartition,
             CancellationToken ct)
         {
             var rowPartitions = await queryClient.PartitionRowsAsync(
@@ -263,24 +264,26 @@ namespace KustoCopyConsole.Runner.Source
                 parentPartition?.MinIngestionTime,
                 parentPartition?.MaxIngestionTime,
                 GetPartitionResolution(parentPartition?.Level),
+                MAX_ROW_COUNT_PER_PARTITION,
+                MAX_EXTENT_COUNT,
                 ct);
 
             if (rowPartitions.Count() > 0)
             {
-                var mergedRowPartitions = Merge(rowPartitions);
-                var planningPartitions = mergedRowPartitions
+                var planningPartitions = rowPartitions
                     .Index()
-                    .Select(rp => new PlanningPartitionRecord(
+                    .Select(rp => new PlanningPartitionRecord2(
                         iteration.IterationKey,
                         (parentPartition?.Level ?? 0) + 1,
                         GetPartitionId(parentPartition?.Level, parentPartition?.PartitionId, rp.Index),
                         rp.Item.RowCount,
+                        rp.Item.ExtentCount,
                         rp.Item.MinIngestionTime,
                         rp.Item.MaxIngestionTime));
 
                 using (var tx = Database.CreateTransaction())
                 {
-                    Database.PlanningPartitions.AppendRecords(planningPartitions, tx);
+                    Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
                     DeletePartition(parentPartition, tx);
 
                     tx.Complete();
@@ -297,49 +300,17 @@ namespace KustoCopyConsole.Runner.Source
         }
 
         private void DeletePartition(
-            PlanningPartitionRecord? partition,
+            PlanningPartitionRecord2? partition,
             TransactionContext tx)
         {
             if (partition != null)
             {
-                Database.PlanningPartitions.Query(tx)
+                Database.PlanningPartitions2.Query(tx)
                     .Where(pf => pf.Equal(pp => pp.IterationKey, partition.IterationKey))
                     .Where(pf => pf.Equal(pp => pp.Level, partition.Level))
                     .Where(pf => pf.Equal(pp => pp.PartitionId, partition.PartitionId))
                     .Delete();
             }
-        }
-
-        private IEnumerable<RowPartition> Merge(IEnumerable<RowPartition> rowPartitions)
-        {
-            var mergedRowPartitions = new List<RowPartition>(rowPartitions.Count());
-            var bufferPartition = (RowPartition?)null;
-
-            foreach (var partition in rowPartitions)
-            {
-                if (bufferPartition == null)
-                {
-                    bufferPartition = partition;
-                }
-                else if (bufferPartition.RowCount + partition.RowCount < MAX_ROW_COUNT_PER_PARTITION)
-                {   //  Merge
-                    bufferPartition = new RowPartition(
-                        bufferPartition.RowCount + partition.RowCount,
-                        bufferPartition.MinIngestionTime,
-                        partition.MaxIngestionTime);
-                }
-                else
-                {
-                    mergedRowPartitions.Add(bufferPartition);
-                    bufferPartition = partition;
-                }
-            }
-            if (bufferPartition != null)
-            {
-                mergedRowPartitions.Add(bufferPartition);
-            }
-
-            return mergedRowPartitions;
         }
 
         private TimeSpan GetPartitionResolution(int? level)
@@ -367,7 +338,7 @@ namespace KustoCopyConsole.Runner.Source
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
-            PlanningPartitionRecord parentPartition,
+            PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
             var protoBlocks = await LoadProtoBlocksAsync(
@@ -420,7 +391,7 @@ namespace KustoCopyConsole.Runner.Source
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
-            PlanningPartitionRecord parentPartition,
+            PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
             var iteration = Database.Iterations.Query()
@@ -472,7 +443,7 @@ namespace KustoCopyConsole.Runner.Source
 
         private bool ClearPlanning(IterationKey iterationKey, TransactionContext? tx = null)
         {
-            var planning = Database.PlanningPartitions.Query(tx)
+            var planning = Database.PlanningPartitions2.Query(tx)
                 .Take(1)
                 .FirstOrDefault();
 
