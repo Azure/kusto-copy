@@ -76,12 +76,6 @@ namespace KustoCopyConsole.Entity
                 .OptOutIndex(p => p.MaxIngestionTime)
                 .OptOutIndex(p => p.RowCount)
                 .OptOutIndex(p => p.ExtentCount)
-                .AddTrigger((db, tx) =>
-                {
-                    var typedDb = (TrackDatabase)db;
-
-                    PlanningPartitionToBlockMetric(typedDb, tx);
-                })
                 ,
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
@@ -208,20 +202,6 @@ namespace KustoCopyConsole.Entity
                     g.Sum(bm => bm.Value)));
 
             db.BlockMetrics.AppendRecords(newMetrics, tx);
-        }
-
-        private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
-        {
-            var newPlanningPartitions = db.PlanningPartitions2.Query(tx)
-                .WithinTransactionOnly();
-            var newTotalPlannedRowCountMetrics = newPlanningPartitions
-                .Where(pf => pf.Equal(p => p.PartitionId, 0))
-                .Select(p => new BlockMetricRecord(
-                    p.IterationKey,
-                    BlockMetric.TotalPlannedRowCount,
-                    p.RowCount));
-
-            db.BlockMetrics.AppendRecords(newTotalPlannedRowCountMetrics, tx);
         }
 
         private static void IterationToBlockMetric(TrackDatabase db, TransactionContext tx)

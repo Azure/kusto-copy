@@ -9,6 +9,7 @@
         Ingested,
         ExtentMoving,
         ExtentMoved,
+        //  Legacy
         TotalPlannedRowCount,
         MovedRowCount
     }
