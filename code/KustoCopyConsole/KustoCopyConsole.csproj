@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<Version>1.9.0</Version>
+		<Version>1.10.0</Version>
 		<OutputType>Exe</OutputType>
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -33,7 +33,7 @@
 	<ItemGroup>
 		<PackageReference Include="Spectre.Console" Version="0.57.2" />
 		<PackageReference Include="track-db" Version="1.15.2.109" />
-		<PackageReference Include="Azure.Storage.Files.DataLake" Version="12.28.0" />
+		<PackageReference Include="Azure.Storage.Files.DataLake" Version="12.27.1" />
 		<PackageReference Include="CommandLineParser" Version="2.9.1" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Data" Version="14.2.4" />
 		<PackageReference Include="Microsoft.Azure.Kusto.Ingest.V2" Version="0.0.11" />
