@@ -12,7 +12,7 @@ using TrackDb.Lib;
 
 namespace KustoCopyConsole.Runner.Source
 {
-    internal class PlanningRunner : ActivityRunnerBase
+    internal class PlanningRunner : ClusterRunnerBase
     {
         #region Inner Types
         private record ExtentBatch(
@@ -28,7 +28,7 @@ namespace KustoCopyConsole.Runner.Source
         private const long MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
 
         public PlanningRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(15))
+           : base(parameters, true, TimeSpan.FromSeconds(15))
         {
         }
 
@@ -40,7 +40,19 @@ namespace KustoCopyConsole.Runner.Source
             }
         }
 
-        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task RunClusterAsync(
+            Uri clusterUri,
+            IEnumerable<string> activityNames,
+            CancellationToken ct)
+        {
+            foreach (var activityName in activityNames)
+            {
+                ct.ThrowIfCancellationRequested();
+                await RunActivityAsync(activityName, ct);
+            }
+        }
+
+        protected async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var activityParam = Parameterization.GetActivity(activityName);
             var iterations = Database.Iterations.Query()
