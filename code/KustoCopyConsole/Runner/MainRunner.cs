@@ -118,6 +118,7 @@ namespace KustoCopyConsole.Runner
                     new DbCommandClient(
                         providerFactory.GetCommandProvider(new Uri(a.Source.ClusterUri)),
                         new PriorityExecutionQueue<KustoPriority>(1),
+                        new Uri(a.Source.ClusterUri),
                         a.Source.DatabaseName),
                     ct))
                 .ToArray();
