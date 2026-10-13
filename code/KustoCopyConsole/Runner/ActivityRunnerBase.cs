@@ -6,7 +6,7 @@ namespace KustoCopyConsole.Runner
 {
     internal abstract class ActivityRunnerBase : RunnerBase
     {
-        public ActivityRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
+        protected ActivityRunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
             : base(parameters, wakePeriod)
         {
         }
