@@ -19,6 +19,7 @@ namespace KustoCopyConsole.Entity
         private const string BLOCK_TABLE = "Block";
         private const string BLOCK_METRIC_TABLE = "BlockMetric";
         private const string PLANNING_PARTITION_TABLE = "PlanningPartition";
+        private const string PLANNING_PARTITION_TABLE2 = "PlanningPartition2";
         private const string TEMP_TABLE_TABLE = "TempTable";
         private const string BLOB_URL_TABLE = "BlobUrl";
         private const string INGESTION_BATCH_TABLE = "IngestionBatch";
@@ -69,12 +70,12 @@ namespace KustoCopyConsole.Entity
                 .OptOutIndex(p => p.MinIngestionTime)
                 .OptOutIndex(p => p.MaxIngestionTime)
                 .OptOutIndex(p => p.RowCount)
-                .AddTrigger((db, tx) =>
-                {
-                    var typedDb = (TrackDatabase)db;
-
-                    PlanningPartitionToBlockMetric(typedDb, tx);
-                })
+                ,
+                TypedTableSchema<PlanningPartitionRecord2>.FromConstructor(PLANNING_PARTITION_TABLE2)
+                .OptOutIndex(p => p.MinIngestionTime)
+                .OptOutIndex(p => p.MaxIngestionTime)
+                .OptOutIndex(p => p.RowCount)
+                .OptOutIndex(p => p.ExtentCount)
                 ,
                 TypedTableSchema<TempTableRecord>.FromConstructor(TEMP_TABLE_TABLE)
                 .AddPrimaryKeyProperty(t => t.IterationKey),
@@ -114,6 +115,9 @@ namespace KustoCopyConsole.Entity
 
         public TypedTable<PlanningPartitionRecord> PlanningPartitions =>
             Database.GetTypedTable<PlanningPartitionRecord>(PLANNING_PARTITION_TABLE);
+
+        public TypedTable<PlanningPartitionRecord2> PlanningPartitions2 =>
+            Database.GetTypedTable<PlanningPartitionRecord2>(PLANNING_PARTITION_TABLE2);
 
         public TypedTable<TempTableRecord> TempTables =>
             Database.GetTypedTable<TempTableRecord>(TEMP_TABLE_TABLE);
@@ -198,20 +202,6 @@ namespace KustoCopyConsole.Entity
                     g.Sum(bm => bm.Value)));
 
             db.BlockMetrics.AppendRecords(newMetrics, tx);
-        }
-
-        private static void PlanningPartitionToBlockMetric(TrackDatabase db, TransactionContext tx)
-        {
-            var newPlanningPartitions = db.PlanningPartitions.Query(tx)
-                .WithinTransactionOnly();
-            var newTotalPlannedRowCountMetrics = newPlanningPartitions
-                .Where(pf => pf.Equal(p => p.PartitionId, 0))
-                .Select(p => new BlockMetricRecord(
-                    p.IterationKey,
-                    BlockMetric.TotalPlannedRowCount,
-                    p.RowCount));
-
-            db.BlockMetrics.AppendRecords(newTotalPlannedRowCountMetrics, tx);
         }
 
         private static void IterationToBlockMetric(TrackDatabase db, TransactionContext tx)

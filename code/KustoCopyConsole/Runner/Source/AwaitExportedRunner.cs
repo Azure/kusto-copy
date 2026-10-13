@@ -87,6 +87,10 @@ namespace KustoCopyConsole.Runner.Source
             {
                 using (var tx = Database.CreateTransaction())
                 {
+                    var hasTempTable = Database.TempTables.Query(tx)
+                        .Where(pf => pf.Equal(t => t.IterationKey, iterationKey))
+                        .Any();
+
                     Database.Blocks.Query(tx)
                         .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
                         .Where(pf => pf.In(
@@ -95,9 +99,9 @@ namespace KustoCopyConsole.Runner.Source
                         .Delete();
                     Database.Blocks.AppendRecords(newBlocks, tx);
                     Database.BlobUrls.AppendRecords(newUrls, tx);
-                    //  Create temp table requirement if no temp table exists
-                    //  Temp table is required JIT:  no block, no temp table
-                    if (TryGetTempTable(iterationKey) == null)
+                    //  Create a temp table requirement only once per iteration.
+                    //  Temp table is required JIT:  no block, no temp table.
+                    if (!hasTempTable)
                     {
                         Database.TempTables.AppendRecord(
                             new TempTableRecord(
