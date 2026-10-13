@@ -9,14 +9,17 @@ namespace KustoCopyConsole.Kusto
     internal class DbCommandClient : KustoClientBase
     {
         private readonly ICslAdminProvider _provider;
+        private readonly Uri _queryUri;
 
         public DbCommandClient(
             ICslAdminProvider provider,
             PriorityExecutionQueue<KustoPriority> commandQueue,
+            Uri queryUri,
             string databaseName)
             : base(commandQueue)
         {
             _provider = provider;
+            _queryUri = queryUri;
             DatabaseName = databaseName;
         }
 
