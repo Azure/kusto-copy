@@ -37,16 +37,15 @@ namespace KustoCopyConsole.Runner
                     .Where(pf => pf.NotEqual(a => a.State, ActivityState.Completed))
                     .Select(a => a.ActivityName)
                     .ToHashSet();
-                var tasks = Parameterization.Activities
+                var activityGroups = Parameterization.Activities
                     .Where(a => activityNames.Contains(a.ActivityName))
-                    .GroupBy(a => GetClusterUri(a))
-                    .Select(g => Task.Run(() => RunClusterAsync(
-                        g.Key,
-                        g.Select(a => a.ActivityName).ToArray(),
-                        ct)))
-                    .ToArray();
+                    .GroupBy(a => GetClusterUri(a), a => a.ActivityName);
 
-                await Task.WhenAll(tasks);
+                foreach (var activityGroup in activityGroups)
+                {
+                    await RunClusterAsync(activityGroup.Key, activityGroup.ToArray(), ct);
+                }
+
                 await SleepAsync(ct);
             }
         }
