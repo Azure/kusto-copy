@@ -6,7 +6,6 @@ This article will guide you through the setup to use Kusto Copy to copy a table 
 
 *   A source Kusto cluster (either Azure Data Explorer or Fabric Eventhouse)
     * Default workload group should be strongly consistent
-    * `execute_show_command` plugin should **not** be [disabled](https://learn.microsoft.com/en-us/kusto/management/disable-plugin)
 *   A destination Kusto cluster (either Azure Data Explorer or Fabric Eventhouse)
 *   An ADLS gen 2 storage account
     * Soft Delete shouldn't be enabled
