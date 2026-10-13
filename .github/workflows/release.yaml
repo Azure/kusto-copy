@@ -89,7 +89,7 @@ jobs:
       run:  echo ${{ steps.patch-version.outputs.full-version }} >> $ASSETS_NAME/full-version.txt
     # Push archive + version to a sharable artefact
     # See https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ env.ASSETS_NAME }}
         path: ${{ env.ASSETS_NAME }}
@@ -109,17 +109,17 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     # Retrieve assets
     - name: Download Linux Assets
-      uses: actions/download-artifact@master
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         name: linux-assets
         path: linux-assets
     - name: Download Mac Assets
-      uses: actions/download-artifact@master
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         name: mac-assets
         path: mac-assets
     - name: Download Windows Assets
-      uses: actions/download-artifact@master
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         name: windows-assets
         path: windows-assets

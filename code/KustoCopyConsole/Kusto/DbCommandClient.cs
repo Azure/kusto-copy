@@ -389,6 +389,37 @@ let ['{tableName}'] = ['{tableName}']
                ct);
         }
 
+        public async Task<IEnumerable<ExtentCreationTime>> GetExtentCreationTimeAsync(
+            KustoPriority priority,
+            string tableName,
+            IEnumerable<string> extentIds,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+               priority,
+               async () =>
+               {
+                   var extentIdTextList = string.Join(", ", extentIds.Select(e => $"'{e}'"));
+                   var commandText = @$"
+.show table ['{tableName}'] extents ({extentIdTextList})
+| project ExtentId, CreatedOn=MaxCreatedOn
+";
+                   var reader = await _provider.ExecuteControlCommandAsync(
+                       DatabaseName,
+                       commandText,
+                       new());
+                   var results = reader
+                    .ToEnumerable(r => new ExtentCreationTime(
+                        ((Guid)(r["ExtentId"])).ToString(),
+                        (DateTime)r["CreatedOn"]
+                    ))
+                    .ToImmutableArray();
+
+                   return results;
+               },
+               ct);
+        }
+
         public async Task<int> CleanExtentTagsAsync(
             KustoPriority priority,
             string tableName,
