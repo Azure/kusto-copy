@@ -119,26 +119,13 @@ namespace KustoCopyConsole.Runner
             {
                 var iterationKey = blocks.First().BlockKey.IterationKey;
                 var activityParam = Parameterization.GetActivity(iterationKey.ActivityName);
-                var startExportTasks = blocks
-                    .Select(b => Task.Run(() => StartBlockAsync(b, activityParam, ct)))
-                    .ToImmutableArray();
 
-                await Task.WhenAll(startExportTasks);
-
-                var newBlocks = startExportTasks
-                    .Select(t => t.Result)
-                    .Select(b => b with { State = DestinationState });
-                var blockIds = blocks.Select(b => b.BlockKey.BlockId);
-
-                using (var tx = Database.CreateTransaction())
+                foreach (var b in blocks)
                 {
-                    Database.Blocks.Query(tx)
-                        .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
-                        .Where(pf => pf.In(b => b.BlockKey.BlockId, blockIds))
-                        .Delete();
-                    Database.Blocks.AppendRecords(newBlocks, tx);
+                    var newBlock = await StartBlockAsync(b, activityParam, ct);
 
-                    tx.Complete();
+                    newBlock = newBlock with { State = DestinationState };
+                    Database.Blocks.UpdateRecord(b, newBlock);
                 }
 
                 return true;
