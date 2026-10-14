@@ -444,6 +444,7 @@ namespace KustoCopyConsole.Runner.Source
         private bool ClearPlanning(IterationKey iterationKey, TransactionContext? tx = null)
         {
             var planning = Database.PlanningPartitions2.Query(tx)
+                .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
                 .Take(1)
                 .FirstOrDefault();
 
