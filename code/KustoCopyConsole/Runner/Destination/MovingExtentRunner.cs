@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Runner.Destination
         private const int MAXIMUM_EXTENT_MOVING = 500;
 
         public MovingExtentRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(15))
+           : base(parameters, false, TimeSpan.FromSeconds(15))
         {
         }
 
@@ -28,11 +28,6 @@ namespace KustoCopyConsole.Runner.Destination
         protected override BlockState DestinationState => BlockState.ExtentMoving;
 
         protected override int? MaxCapacity => null;
-
-        protected override Uri GetClusterUri(ActivityParameterization activity)
-        {
-            return activity.GetDestinationTableIdentity().ClusterUri;
-        }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
         {

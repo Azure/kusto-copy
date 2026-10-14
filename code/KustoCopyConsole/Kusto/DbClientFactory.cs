@@ -150,7 +150,7 @@ namespace KustoCopyConsole.Kusto
                 var commandQueue = _allClusterCommandQueueMap[clusterUri];
                 var provider = _providerFactory.GetCommandProvider(clusterUri);
 
-                return new DbCommandClient(provider, commandQueue, database);
+                return new DbCommandClient(provider, commandQueue, clusterUri, database);
             }
             catch (KeyNotFoundException ex)
             {

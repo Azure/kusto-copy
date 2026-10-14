@@ -9,14 +9,17 @@ namespace KustoCopyConsole.Kusto
     internal class DbCommandClient : KustoClientBase
     {
         private readonly ICslAdminProvider _provider;
+        private readonly Uri _queryUri;
 
         public DbCommandClient(
             ICslAdminProvider provider,
             PriorityExecutionQueue<KustoPriority> commandQueue,
+            Uri queryUri,
             string databaseName)
             : base(commandQueue)
         {
             _provider = provider;
+            _queryUri = queryUri;
             DatabaseName = databaseName;
         }
 
@@ -302,11 +305,10 @@ let ['{tableName}'] = ['{tableName}']
 //  We keep only the ingested tags
 | where ExpectedRowCount<=RowCount
 ";
-                   var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
-                       properties);
+                       new());
                    var result = reader
                         .ToEnumerable(r => new TagRowCount(
                             (string)r["Tags"],
@@ -462,6 +464,38 @@ let ['{tableName}'] = ['{tableName}']
                    return results.Count();
                },
                ct);
+        }
+
+        public async Task<IImmutableList<EntityReference>> ShowEntityReferencesAsync(
+            KustoPriority priority,
+            string entityGroupName,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var commandText = @$".show entity_group ['{entityGroupName}']
+| extend Entities=todynamic(Entities)
+| mv-expand Entities to typeof(string)
+| parse Entities with ""cluster('""ClusterUri""').database('""Database""')""
+| parse ClusterUri with ""https://"" InnerClusterUri
+| extend ClusterUri = iif(isempty(InnerClusterUri), ClusterUri, InnerClusterUri)
+| project ClusterUri=strcat(""https://"", ClusterUri), Database
+";
+                    var reader = await _provider.ExecuteControlCommandAsync(
+                        DatabaseName,
+                        commandText);
+                    var result = reader
+                        .ToEnumerable(r => new EntityReference(
+                            new Uri((string)r["ClusterUri"]),
+                            (string)r["Database"])
+                        )
+                        .ToImmutableArray();
+
+                    return result;
+                },
+                ct);
         }
     }
 }

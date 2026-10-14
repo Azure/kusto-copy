@@ -91,13 +91,13 @@ namespace KustoCopyConsole.JobParameter
                 var activity = new ActivityParameterization
                 {
                     ActivityName = "default",
-                    Source = new TableParameterization
+                    Source = new SourceTableParameterization
                     {
                         ClusterUri = sourceBuilder.ToString(),
                         DatabaseName = sourceDb,
                         TableName = sourceTable
                     },
-                    Destination = new TableParameterization
+                    Destination = new DestinationTableParameterization
                     {
                         ClusterUri = destinationBuilder.ToString(),
                         DatabaseName = destinationDb,
@@ -141,6 +141,11 @@ namespace KustoCopyConsole.JobParameter
         }
         #endregion
 
+        public MainJobParameterization Clone()
+        {
+            return (MainJobParameterization)MemberwiseClone();
+        }
+
         public ActivityParameterization GetActivity(string activityName)
         {
             foreach (var activityParameterization in Activities)
@@ -176,7 +181,8 @@ namespace KustoCopyConsole.JobParameter
         {
             var options = new DefaultAzureCredentialOptions
             {
-                CredentialProcessTimeout = TimeSpan.FromSeconds(15)
+                CredentialProcessTimeout = TimeSpan.FromSeconds(30),
+                ExcludeVisualStudioCredential = true
             };
 
             if (!string.IsNullOrWhiteSpace(ManagedIdentityClientId))
@@ -191,6 +197,7 @@ namespace KustoCopyConsole.JobParameter
         {
             var serializer = new SerializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
                 .Build();
             var yaml = serializer.Serialize(this);
 

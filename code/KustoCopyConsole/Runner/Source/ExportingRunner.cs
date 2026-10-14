@@ -11,7 +11,7 @@ namespace KustoCopyConsole.Runner.Source
     internal class ExportingRunner : StartCommandRunnerBase
     {
         public ExportingRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(10))
+           : base(parameters, true, TimeSpan.FromSeconds(10))
         {
         }
 
@@ -28,11 +28,6 @@ namespace KustoCopyConsole.Runner.Source
         protected override BlockState DestinationState => BlockState.Exporting;
 
         protected override int? MaxCapacity => Parameterization.ExportCount;
-
-        protected override Uri GetClusterUri(ActivityParameterization activity)
-        {
-            return activity.GetSourceTableIdentity().ClusterUri;
-        }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
         {
