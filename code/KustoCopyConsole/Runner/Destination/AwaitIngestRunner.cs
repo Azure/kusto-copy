@@ -8,12 +8,12 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner.Destination
 {
-    internal class AwaitIngestRunner : ActivityRunnerBase
+    internal class AwaitIngestRunner : ClusterRunnerBase
     {
         private const int MAX_BLOCK_INGESTED_COUNT = 500;
 
         public AwaitIngestRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(15))
+           : base(parameters, false, TimeSpan.FromSeconds(15))
         {
         }
 
@@ -25,7 +25,18 @@ namespace KustoCopyConsole.Runner.Destination
             }
         }
 
-        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task RunClusterAsync(
+            Uri clusterUri,
+            IEnumerable<string> activityNames,
+            CancellationToken ct)
+        {
+            foreach (var activityName in activityNames)
+            {
+                await RunActivityAsync(activityName, ct);
+            }
+        }
+
+        private async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             var destinationTable =
                 Parameterization.GetActivity(activityName).GetDestinationTableIdentity();

@@ -5,12 +5,12 @@ using System.Linq;
 
 namespace KustoCopyConsole.Runner.Destination
 {
-    internal class QueueIngestRunner : ActivityRunnerBase
+    internal class QueueIngestRunner : ClusterRunnerBase
     {
         private const int BATCH_BLOCKS = 10;
 
         public QueueIngestRunner(RunnerParameters parameters)
-           : base(parameters, TimeSpan.FromSeconds(5))
+           : base(parameters, false, TimeSpan.FromSeconds(5))
         {
         }
 
@@ -22,7 +22,18 @@ namespace KustoCopyConsole.Runner.Destination
             }
         }
 
-        protected override async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected override async Task RunClusterAsync(
+            Uri clusterUri,
+            IEnumerable<string> activityNames,
+            CancellationToken ct)
+        {
+            foreach (var activityName in activityNames)
+            {
+                await RunActivityAsync(activityName, ct);
+            }
+        }
+
+        private async Task RunActivityAsync(string activityName, CancellationToken ct)
         {
             while (await RunBatchAsync(activityName, ct))
             {
@@ -30,7 +41,7 @@ namespace KustoCopyConsole.Runner.Destination
             }
         }
 
-        protected async Task<bool> RunBatchAsync(string activityName, CancellationToken ct)
+        private async Task<bool> RunBatchAsync(string activityName, CancellationToken ct)
         {
             var blocks = Database.Blocks.Query()
                 .Where(pf => pf.Equal(b => b.BlockKey.IterationKey.ActivityName, activityName))
