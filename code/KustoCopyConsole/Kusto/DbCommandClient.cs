@@ -305,11 +305,10 @@ let ['{tableName}'] = ['{tableName}']
 //  We keep only the ingested tags
 | where ExpectedRowCount<=RowCount
 ";
-                   var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
-                       properties);
+                       new());
                    var result = reader
                         .ToEnumerable(r => new TagRowCount(
                             (string)r["Tags"],
