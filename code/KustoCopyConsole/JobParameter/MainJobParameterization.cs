@@ -181,7 +181,7 @@ namespace KustoCopyConsole.JobParameter
         {
             var options = new DefaultAzureCredentialOptions
             {
-                CredentialProcessTimeout = TimeSpan.FromSeconds(15),
+                CredentialProcessTimeout = TimeSpan.FromSeconds(30),
                 ExcludeVisualStudioCredential = true
             };
 
