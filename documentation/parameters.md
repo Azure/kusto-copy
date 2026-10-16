@@ -116,7 +116,7 @@ See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data).
 ## 🧮 Aggregation query
 
 Use optional `--aggregation-query` to aggregate the rows selected by the regular query.
-It runs **after** the filters and transformations in `-q` and **before** export.
+It runs **after** the filters and transformations in `-q`.
 
 For example, summarize temperature readings by hour and widget:
 
