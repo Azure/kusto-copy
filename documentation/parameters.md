@@ -23,6 +23,7 @@ Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers)
 Parameter|Description|Example
 -|-|-
 Query (-q)|Optional [query](#query)|"\| where Level == 'error'"
+Aggregation Query (--aggregation-query)|Optional [aggregation query](#aggregation-query)|`\| summarize count() by bin(Timestamp, 1h)`
 Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
 Copy Flow (--copy-flow)|[Copy flow](#copy-flow) stages|ExportOnly
 Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
@@ -65,7 +66,17 @@ Because tracking is done in the specified container / folder, when you want to "
 
 ##  Query
 
-A query is optional.  It allows you to filter and transform the source table's data (e.g. projecting only some columns).  The query shouldn't contain aggregation as those make `ingestion_time()` function unusable (Kusto Copy uses that function).
+A query is optional.  It allows you to filter and transform the source table's data (e.g. projecting only some columns).  Do not put aggregations in this query because Kusto Copy uses `ingestion_time()` to track the copy.  Use [Aggregation Query](#aggregation-query) for aggregation instead.
+
+##  Aggregation Query
+
+The `--aggregation-query` parameter is optional and accepts a KQL query to aggregate the rows selected by the regular query.  It is applied after the filters and transforms specified with `-q` and before the data is exported.
+
+For example, to export hourly temperature totals by widget:
+
+```kql
+--aggregation-query "| summarize sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```
 
 ##  Client ID
 

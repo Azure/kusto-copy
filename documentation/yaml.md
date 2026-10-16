@@ -19,6 +19,7 @@ activities:
         databaseName: "string"
         tableName:  "string"
     kqlQuery: "string"
+    kqlAggregationQuery: "string"
 stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
@@ -44,6 +45,7 @@ activityName|`string`|Yes|N/A|Name of the activity:  displayed in progress statu
 source|Node|Yes|N/A|Source table settings.  See [Source](#source)
 destination|Node|Yes|N/A|Destination table settings.  See [Destination](#destination)
 kqlQuery|`string`|No|N/A|See [query](parameters.md#query)
+kqlAggregationQuery|`string`|No|N/A|See [aggregation query](parameters.md#aggregation-query)
 
 #### Source
 
