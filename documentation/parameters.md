@@ -23,7 +23,7 @@ Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers)
 Parameter|Description|Example
 -|-|-
 Query (-q)|Optional [query](#query)|"\| where Level == 'error'"
-Aggregation Query (--aggregation-query)|Optional [aggregation query](#aggregation-query)|`\| summarize count() by bin(Timestamp, 1h)`
+Aggregation Query (--aggregation-query)|[Not applied by current export](#aggregation-query)|N/A
 Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
 Copy Flow (--copy-flow)|[Copy flow](#copy-flow) stages|ExportOnly
 Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
@@ -70,13 +70,10 @@ A query is optional.  It allows you to filter and transform the source table's d
 
 ##  Aggregation Query
 
-The `--aggregation-query` parameter is optional and accepts a KQL query to aggregate the rows selected by the regular query.  It is applied after the filters and transforms specified with `-q` and before the data is exported.
-
-For example, to export hourly temperature totals by widget:
-
-```kql
---aggregation-query "| summarize sum(Temperature) by bin(Timestamp, 1h), WidgetId"
-```
+The CLI accepts `--aggregation-query` and YAML accepts `kqlAggregationQuery`, but the current
+implementation does not apply this value during export. Do not rely on it to produce
+aggregated output. Aggregation in `-q` is not a supported workaround because planning needs
+row-level ingestion metadata.
 
 ##  Client ID
 
@@ -96,7 +93,11 @@ Mode|Description
 -|-
 BackfillOnly|The default:  copy historical data and will not copy data after the point where the copy started.
 BackfillAndNew|Copy historical data and will iteratively copy new data.
-NewOnly|Copy only new data.
+NewOnly|Intended to copy only new data; currently includes history on a fresh job (see below).
+
+**Current implementation limitation:** on a fresh tracking folder, `NewOnly` starts with an
+empty cursor and includes history, just like `BackfillAndNew`. Do not rely on it to skip
+historical data. See [incremental copying](scenarios.md#backfill-then-copy-new-arrivals).
 
 **See also**: [Iteration Period](#iteration-period) - controls polling frequency for BackfillAndNew and NewOnly modes.
 
@@ -112,6 +113,10 @@ IngestOnly|Ingest previously exported data from staging storage (no export).
 
 This parameter is meant to support a multi-tenant migration where the export portion would be done with a Managed Identity (MI) from the source tenant whereas the ingestion would be done with a MI from the destination tenant (Entra ID Managed Identity does not support multiple tenants).
 
+**Current implementation limitation:** `ExportOnly` does not initialize activities on a fresh
+tracking folder. Review [split flows](advanced.md#split-flows-and-tenant-boundaries) before
+depending on this workflow.
+
 ##  Iteration Period
 
 This parameter is relevant only for [Copy Mode](#copy-mode) `BackfillAndNew` & `NewOnly` (not `BackfillOnly`).
@@ -122,9 +127,12 @@ When you don't specify an iteration period, Kusto Copy will copy the data for an
 
 ##  Parallel export
 
-By default Kusto Copy will use the maximum value between the data export capacity of the source cluster and 20.
+`--export` defaults to 20 and caps parallel exports per source cluster, across its activities.
+Effective parallelism is the **minimum** of that setting and the source cluster's data export
+capacity. Raising the setting does not override cluster capacity.
 
-Exporting more or less could improve the performance.  You could try varying that as fine tuning.
+Tune it based on [observed bottlenecks](troubleshooting.md#the-copy-is-slow); extra exports
+will not fix slow destination ingestion.
 
 ##  YAML file
 
@@ -135,3 +143,6 @@ CLI parameters have precedence:  for example, if an export count is specified bo
 The big advantage of using YAML file is that it allows to run multiple table copies in parallel.
 
 See [YAML file schema](yaml.md) for details about the schema of the YAML file.
+
+For operational guidance, see [common scenarios](scenarios.md) and
+[advanced topics](advanced.md).

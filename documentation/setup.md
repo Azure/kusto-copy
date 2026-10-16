@@ -50,7 +50,13 @@ See previous section on how.
 
 ### ADLS Gen2 container permissions
 
-You need to assign Azure RBAC roles **Storage Blob Delegator** & **Storage Blob Data Contributor** on the ADLS gen 2 container.
+Assign **Storage Blob Data Contributor** on the staging container (or a parent scope).
+Also grant permission to request a user delegation key at the storage account level or
+above, for example with **Storage Blob Delegator** on the storage account. Assigning
+Delegator only on a container does not grant that account-level operation.
+
+See [authentication and security](advanced.md#authentication-and-security) for managed
+identities, service principals, and network access.
 
 ## Preparing the destination table
 
@@ -74,3 +80,8 @@ See [Reading progress](progress.md) for details on how to interpret the copy pro
 
 You should always validate the copy.  You can do this by looking at the number of rows but also by doing some sort of aggregation that returns a small amount of rows (or even just one number, e.g. the average of a column) you can compare with the source table.
 
+## Next steps
+
+- [Common scenarios](scenarios.md): multiple tables, filtering, and incremental copies.
+- [Troubleshooting & performance](troubleshooting.md): errors, stalls, and capacity tuning.
+- [Advanced topics](advanced.md): pipeline behavior, resume, security, and production checks.

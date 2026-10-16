@@ -1,5 +1,8 @@
 # Reading progress
 
+For errors, stalls, and tuning steps, see [Troubleshooting & performance](troubleshooting.md).
+For temporary tables and recovery behavior, see [Advanced topics](advanced.md).
+
 Kusto Copy reports progress every 20 seconds in the console as follow:
 
 ```
