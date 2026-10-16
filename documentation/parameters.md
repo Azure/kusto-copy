@@ -33,7 +33,7 @@ Look up an option here, or run `kc --help` for the options in your installed ver
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `-q`, `--query` | Row-level [query](#query) | `"\| where Level == 'error'"` |
-| `--aggregation-query` | [Not applied by current export](#aggregation-query) | N/A |
+| `--aggregation-query` | Optional [aggregation](#aggregation-query) | `"\| summarize count()"` |
 | `--copy-mode` | [Data selection mode](#copy-mode) | `BackfillOnly` |
 | `--copy-flow` | [Pipeline stages](#copy-flow) | `ExportOnly` |
 | `--iteration-period` | [New-data polling interval](#iteration-period) | `00:15:00` |
@@ -107,18 +107,27 @@ Use optional `-q` to filter rows or transform columns, for example:
 -q "| where Level == 'error' | project Timestamp, Message, Level"
 ```
 
-Do not aggregate here: planning needs row-level `ingestion_time()` metadata.
-See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data) and the
-[aggregation limitation](#aggregation-query).
+Keep `-q` for row-level filtering and transformations. To summarize the selected rows, use
+[aggregation query](#aggregation-query) instead.
+See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data).
 
 <a id="aggregation-query"></a>
 
 ## 🧮 Aggregation query
 
-> [!WARNING]
-> The CLI accepts `--aggregation-query` and YAML accepts `kqlAggregationQuery`, but the current
-> implementation does **not apply it during export**. Do not rely on it for aggregated output.
-> Aggregation in `-q` is not a supported workaround.
+Use optional `--aggregation-query` to aggregate the rows selected by the regular query.
+It runs **after** the filters and transformations in `-q` and **before** export.
+
+For example, summarize temperature readings by hour and widget:
+
+```text
+--aggregation-query "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```
+
+In YAML, set `kqlAggregationQuery` on the activity. The destination table's schema must match
+the aggregation output, not the original source rows.
+
+See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete command.
 
 <a id="client-id"></a>
 

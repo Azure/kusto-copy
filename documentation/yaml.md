@@ -61,7 +61,7 @@ Each activity connects one source table to one destination table.
 | source | Object | Yes | — | [Source settings](#source) |
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
-| kqlAggregationQuery | String | No | — | [Current aggregation limitation][aggregation] |
+| kqlAggregationQuery | String | No | — | [Aggregation after the row-level query][aggregation] |
 
 #### Source
 

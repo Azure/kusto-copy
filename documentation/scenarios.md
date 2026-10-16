@@ -8,6 +8,7 @@ Commands below use Bash line continuations.
 
 **Pick your recipe:** [Rename](#copy-into-a-differently-named-table) ·
 [Multiple tables](#copy-multiple-tables) · [Filter](#filter-or-project-source-data) ·
+[Aggregate](#aggregate-before-copying) ·
 [New arrivals](#backfill-then-copy-new-arrivals) · [Cross-tenant](#copy-across-tenants)
 
 <a id="copy-into-a-differently-named-table"></a>
@@ -77,9 +78,29 @@ and export, so use a stable predicate for reproducible results. For example, use
 datetime boundary rather than `ago(30d)` during a long-running migration.
 
 > [!IMPORTANT]
-> Do not aggregate in `-q`: planning needs row-level ingestion metadata. The current
-> implementation also does not apply `--aggregation-query` during export; see the
-> [aggregation option's limitation](parameters.md#aggregation-query).
+> Keep `-q` for row-level filtering and transformations. Put aggregations in
+> `--aggregation-query`, as shown below.
+
+<a id="aggregate-before-copying"></a>
+
+## 🧮 Aggregate before copying
+
+Use `-q` to select the input rows and `--aggregation-query` to summarize them before export:
+
+```bash
+kc -s https://source.kusto.windows.net/db/Readings \
+   -d https://dest.kusto.windows.net/db/HourlyTemperature \
+   -t https://storage.blob.core.windows.net/container/hourly-temperature \
+   -q "| where isnotnull(Temperature)" \
+   --aggregation-query "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```
+
+Create `HourlyTemperature` with columns and types matching the aggregation output:
+`Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather
+than comparing destination row counts with raw source row counts.
+
+For YAML activities, use `kqlQuery` and `kqlAggregationQuery` respectively.
+See [aggregation query](parameters.md#aggregation-query) for the option details.
 
 <a id="backfill-then-copy-new-arrivals"></a>
 

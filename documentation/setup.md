@@ -109,6 +109,7 @@ Always validate the result, not just the process exit status:
 
 - **Compare row counts** for the same selected dataset.
 - **Compare aggregates** that return a small result, such as an average or totals by time bucket.
+- **For aggregation copies,** compare the intended summaries, not raw source row counts.
 - Follow the [production checklist](advanced.md#production-checklist) for a larger migration.
 
 <a id="next-steps"></a>

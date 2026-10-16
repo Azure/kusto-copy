@@ -47,7 +47,8 @@ selection and network paths.
 - Verify that the source workload group uses strong consistency.
 - Ensure the `execute_show_command` plugin is available; planning uses it to obtain extent
   metadata.
-- Check any `-q` fragment. It must remain suitable for row-level planning, not aggregate rows.
+- Check any `-q` fragment. Use it for row-level operations; put summaries in
+  [`--aggregation-query`](parameters.md#aggregation-query).
 - Watch the total block count. It can grow during `Planning`, while export and ingestion
   are already running. Planning also pauses intentionally when enough blocks are in flight.
 

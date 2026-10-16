@@ -183,6 +183,7 @@ from the export phase; it is not an importer for arbitrary Parquet files.
 
 - [ ] Compare counts for the same selected dataset, not an ever-growing unbounded source.
 - [ ] Compare deterministic aggregates, representative records, and transformed columns.
+- [ ] When copying aggregated data, validate the summaries rather than raw source row counts.
 - [ ] Validate update-policy outputs separately from the directly copied table.
 - [ ] Coordinate a source ingestion pause or agreed ingestion boundary for final cutover,
   copy the remaining arrivals, and reconcile results before redirecting consumers.
