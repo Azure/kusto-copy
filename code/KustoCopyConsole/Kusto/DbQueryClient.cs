@@ -172,7 +172,8 @@ let BaseData = ['{tableName}']
     ;
 //  Let's list extents from the time window
 BaseData
-| summarize by extent_id()
+| summarize by ExtentId=extent_id()
+| where ExtentId != guid(00000000-0000-0000-0000-000000000000)
 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -278,10 +279,14 @@ let BaseData = ['{tableName}']
     ;
 //  Get the data by extent
 let DataByExtent = BaseData
-    | summarize RowCount=count(), MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+    | summarize
+        RowCount=count(),
+        MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
         by PartitionBin=bin(ingestion_time(), PartitionResolution), ExtentId=extent_id()
     | lookup kind=leftouter ExtentIdCreationTime on ExtentId
-    | summarize RowCount=sum(RowCount), MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime), CreatedOn=max(CreatedOn)
+    | summarize
+        RowCount=sum(RowCount), CreatedOn=max(CreatedOn),
+        MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime)
         by PartitionBin
     | order by MinIngestionTime asc
     | extend MinIngestionTime=tostring(MinIngestionTime)
@@ -309,7 +314,7 @@ DataByExtent
                             (long)r["RowCount"],
                             (string)r["MinIngestionTime"],
                             (string)r["MaxIngestionTime"],
-                            (DateTime?)r["CreatedOn"]))
+                            r["CreatedOn"].To<DateTime>()))
                         .ToImmutableArray();
 
                     return results;
