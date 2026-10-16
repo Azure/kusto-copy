@@ -1,26 +1,37 @@
-# Troubleshooting & performance
+# 🛠️ Troubleshooting & performance
 
 [Documentation home](README.md) | [Progress guide](progress.md) | [Advanced topics](advanced.md)
 
-## Collect useful evidence
+**Find your symptom:** [Authentication](#authentication-or-authorization-errors) ·
+[Planning](#planning-fails-or-never-seems-to-finish) · [Slow copy](#the-copy-is-slow) ·
+[No progress](#progress-is-missing-or-appears-stuck) ·
+[Restart mismatch](#restart-reports-a-configuration-mismatch) · [Counts](#counts-do-not-match)
+
+<a id="collect-useful-evidence"></a>
+
+## 🧾 Collect useful evidence
 
 Keep the version printed at startup, the command or YAML configuration, the error output,
 and several progress reports taken over time. Add `-v` (or `--verbose`) to the same command
 for informational diagnostics. Capture console output with your shell or job runner.
 
-Remove credentials, SAS query strings, and sensitive data before sharing logs. Kusto requests
-are tagged with `KUSTO-COPY;<version>`, which helps correlate them with cluster-side queries.
+> [!IMPORTANT]
+> Remove credentials, SAS query strings, and sensitive data before sharing logs.
 
-## Authentication or authorization errors
+Kusto requests are tagged with `KUSTO-COPY;<version>` to help correlate cluster-side queries.
+
+<a id="authentication-or-authorization-errors"></a>
+
+## 🔐 Authentication or authorization errors
 
 Check the identity selected by `DefaultAzureCredential`; an Azure CLI login on a developer
 machine may not be the identity you intended for an unattended job.
 
-- Source: database viewer permission.
-- Destination: database admin permission, including access to temporary tables.
-- Storage: blob data access plus permission to request a user delegation key. Role scope
+- **Source:** database viewer permission.
+- **Destination:** database admin permission, including access to temporary tables.
+- **Storage:** blob data access plus permission to request a user delegation key. Role scope
   matters; see [storage permissions](setup.md#adls-gen2-container-permissions).
-- Managed identity: run on a host where the identity is available. For a user-assigned
+- **Managed identity:** run on a host where the identity is available. For a user-assigned
   identity, use its **client ID**, not its object ID, with `--clientId`.
 
 Some Kusto failures are retried before the process exits. Repeated permission warnings are
@@ -29,7 +40,9 @@ not evidence that a permission problem will resolve by itself.
 See [authentication and security](advanced.md#authentication-and-security) for credential
 selection and network paths.
 
-## Planning fails or never seems to finish
+<a id="planning-fails-or-never-seems-to-finish"></a>
+
+## 🧩 Planning fails or never seems to finish
 
 - Verify that the source workload group uses strong consistency.
 - Ensure the `execute_show_command` plugin is available; planning uses it to obtain extent
@@ -40,7 +53,9 @@ selection and network paths.
 
 See [iteration states](progress.md#iteration-state) before treating planning as a stall.
 
-## The copy is slow
+<a id="the-copy-is-slow"></a>
+
+## 🐌 The copy is slow
 
 Compare several progress reports, not a single snapshot. Blocks are not equal-sized byte
 units: wide rows and large dynamic columns can take much longer than narrow rows.
@@ -53,7 +68,7 @@ units: wide rows and large dynamic columns can take much longer than narrow rows
 
 The [bottleneck reference](progress.md#bottlenecks) explains the columns in more detail.
 
-Tune one factor at a time:
+**Tune one factor at a time:**
 
 1. Establish throughput with a representative subset and record cluster and storage metrics.
 2. If export is limiting progress, adjust `--export` within the source cluster's capacity.
@@ -66,7 +81,9 @@ Tune one factor at a time:
 Do not disable destination policies just to improve a benchmark without understanding the
 behavioral change. Update policies execute when copied extents move into the final table.
 
-## Progress is missing or appears stuck
+<a id="progress-is-missing-or-appears-stuck"></a>
+
+## 📊 Progress is missing or appears stuck
 
 The progress table refreshes approximately every 20 seconds after initialization. Startup
 authentication and connection initialization happen before normal progress reporting.
@@ -79,7 +96,9 @@ authentication and connection initialization happen before normal progress repor
 The CLI provides console progress, not a built-in monitoring or alerting service. Use your
 hosting environment to capture output, detect process failure, and alert on lack of progress.
 
-## Restart reports a configuration mismatch
+<a id="restart-reports-a-configuration-mismatch"></a>
+
+## 🔄 Restart reports a configuration mismatch
 
 The staging folder contains persisted job state. A tracked activity cannot be removed,
 renamed, or redirected to different source or destination tables and still be treated as
@@ -89,7 +108,9 @@ Restore the original configuration to resume, or choose a new dedicated staging 
 an independent copy. Do not delete tracking data as a routine error-recovery step.
 See [resume and restart](advanced.md#resume-and-restart), including the duplicate-data risk.
 
-## Counts do not match
+<a id="counts-do-not-match"></a>
+
+## ⚖️ Counts do not match
 
 Validate the same filtered data and a fixed boundary on both sides. A live source can keep
 growing after the copy's cursor was captured, so comparing unbounded counts can be misleading.

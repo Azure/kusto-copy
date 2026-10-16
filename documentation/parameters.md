@@ -1,148 +1,211 @@
-# Parameters
+# 📋 CLI parameters
 
-The parameters of the CLI are the following:
+[Documentation home](README.md) | [Common scenarios](scenarios.md) | [YAML schema](yaml.md)
 
-> **Note**: You need either CLI parameters OR a YAML file. A minimal command requires at least source (-s), destination (-d), and staging storage (-t) which can be specified in the command line or a YAML file.
+Look up an option here, or run `kc --help` for the options in your installed version.
 
-## Quick Reference
+> [!TIP]
+> A minimal copy needs a **source** (`-s`), **destination** (`-d`), and **staging storage**
+> (`-t`). Supply them through CLI options or YAML. CLI values take precedence when combined.
 
-**[Connection](#connection)** • **[Storage](#storage)** • **[Copy Behavior](#copy-behavior)** • **[Authentication](#authentication)** • **[Performance](#performance)** • **[Configuration](#configuration)**
+<a id="quick-reference"></a>
+
+## 🧭 Quick reference
+
+[Connection](#connection) · [Storage](#storage) · [Copy behavior](#copy-behavior) ·
+[Authentication](#authentication) · [Performance](#performance) · [Configuration](#configuration)
 
 ### Connection
-Parameter|Description|Example
--|-|-
-Source (-s)|Source [table](#database--table-uri)|https://mycluster.eastus.kusto.windows.net/mydb/mytable
-Destination (-d)|Destination [database or table](#database--table-uri)|https://yourcluster.eastus.kusto.windows.net/yourdb
 
-### Storage  
-Parameter|Description|Example
--|-|-
-Staging Storage (-t)|One or many [ADLS gen 2 containers](#adls-gen-2-containers) (can be a sub folder)|https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
+| Parameter | Description |
+|-----------|-------------|
+| `-s`, `--source` | Source [table URI](#database--table-uri) |
+| `-d`, `--destination` | Destination [database or table URI](#database--table-uri) |
+
+### Storage
+
+| Parameter | Description |
+|-----------|-------------|
+| `-t`, `--staging-storage` | One or more [ADLS Gen2 directories](#adls-gen-2-containers) |
 
 ### Copy Behavior
-Parameter|Description|Example
--|-|-
-Query (-q)|Optional [query](#query)|"\| where Level == 'error'"
-Aggregation Query (--aggregation-query)|[Not applied by current export](#aggregation-query)|N/A
-Copy Mode (--copy-mode)|[Copy mode](#copy-mode) behavior|BackfillOnly
-Copy Flow (--copy-flow)|[Copy flow](#copy-flow) stages|ExportOnly
-Iteration Period (--iteration-period)|[Iteration period](#iteration-period) for new data|0:15:00
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `-q`, `--query` | Row-level [query](#query) | `"\| where Level == 'error'"` |
+| `--aggregation-query` | [Not applied by current export](#aggregation-query) | N/A |
+| `--copy-mode` | [Data selection mode](#copy-mode) | `BackfillOnly` |
+| `--copy-flow` | [Pipeline stages](#copy-flow) | `ExportOnly` |
+| `--iteration-period` | [New-data polling interval](#iteration-period) | `00:15:00` |
 
 ### Authentication
-Parameter|Description|Example
--|-|-
-Managed Identity Client ID (--clientId)|[Client ID](#client-id)|GUID
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `--clientId` | Managed identity [client ID](#client-id) | GUID |
 
 ### Performance
-Parameter|Description|Example
--|-|-
-Export Count (--export)|Maximum [parallel export](#parallel-export) (default is 20)|10
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--export` | Maximum [parallel exports](#parallel-export) | `20` |
 
 ### Configuration
-Parameter|Description|Example
--|-|-
-YAML (-y)|[Path of YAML file](#yaml-file)|my-activities.yaml
 
-##  Database & Table URI
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `-y`, `--yaml` | [YAML file path](#yaml-file) | `my-activities.yaml` |
+| `-v`, `--verbose` | Informational diagnostics | `kc -y my-activities.yaml -v` |
 
-Kusto Copy uses a table URI notation, for example, https://mycluster.eastus.kusto.windows.net/mydb/mytable refers to the table `mytable` in database `mydb` on the cluster `https://mycluster.eastus.kusto.windows.net`.
+<a id="database--table-uri"></a>
 
-The source **always** points to a table while a destination can either point to a database (i.e. the table is ommitted) or a table.  If the destination specifies a database, the table name is infered (as the source's table name).
+## 🔗 Database & table URI
 
-##  ADLS gen 2 containers
+A table URI combines the cluster, database, and table:
 
-The staging storage points to a container and can even be a sub folder in that container.  It cannot be the storage account URL (i.e. above a container).
+```text
+https://mycluster.eastus.kusto.windows.net/mydb/mytable
+```
 
-**Why would you use more than one storage account**?  Azure Storage API can throttle when usage is high.  If you are copying data between two big clusters (more than 500 cores), it is possible they will exceed the storage account capacity and get throttled, slowing down the process.  In those cases, adding different storage accounts could help.
+- **Source:** always points to a table.
+- **Destination:** can point to a database or a table. If the table is omitted, its name
+  defaults to the source table name.
 
-**Specifying multiple containers within the same storage account is useless**:  throttling is at the storage account level.
+<a id="adls-gen-2-containers"></a>
 
-Kusto Copy uses storage for two purposes:
+## ☁️ ADLS Gen2 containers
 
-1. Track copy (in `tracking` sub folder), by persisting tracking information
-1. Stage data (in `activities` sub folder), source cluster exports data there for the destination cluster to ingest
+Use a container URL, optionally including a subfolder:
 
-Because tracking is done in the specified container / folder, when you want to "start over", it is important to either whip out the folder or specify a new one.  Otherwise, Kusto Copy will try to resume the same copy activities.
+```text
+https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
+```
 
-##  Query
+An account-only URL is not sufficient. Storage serves two purposes:
 
-A query is optional.  It allows you to filter and transform the source table's data (e.g. projecting only some columns).  Do not put aggregations in this query because Kusto Copy uses `ingestion_time()` to track the copy.  Use [Aggregation Query](#aggregation-query) for aggregation instead.
+| Subfolder | Purpose |
+|-----------|---------|
+| `tracking/` | Persist copy state in the first configured staging directory |
+| `activities/` | Stage exported data for destination ingestion |
 
-##  Aggregation Query
+> [!IMPORTANT]
+> Reuse the same staging directories to **resume**. Choose a new dedicated folder to
+> **start over**; this does not clear the destination table.
+> Read [resume and restart](advanced.md#resume-and-restart) before resetting a job.
 
-The CLI accepts `--aggregation-query` and YAML accepts `kqlAggregationQuery`, but the current
-implementation does not apply this value during export. Do not rely on it to produce
-aggregated output. Aggregation in `-q` is not a supported workaround because planning needs
-row-level ingestion metadata.
+**When should you use multiple accounts?** Large clusters can hit Azure Storage throttling.
+If storage is the measured bottleneck, spreading exports across different storage accounts
+can help. More containers within the **same account** do not avoid account-level throttling.
 
-##  Client ID
+<a id="query"></a>
 
-Kusto copy needs an Azure Entra identity to authenticate against source and destination Kusto clusters as well as Azure Storage.
+## 🔍 Query
 
-By default it uses the [default Azure Authentication](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet) which tries different authentication, most of them about the currently logged in user.
+Use optional `-q` to filter rows or transform columns, for example:
 
-For long running copies (i.e. more than 10 minutes), we recommend using an [Azure Managed Identity](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview) to authenticate Kusto Copy.
+```text
+-q "| where Level == 'error' | project Timestamp, Message, Level"
+```
 
-If you are running Kusto Copy on an Azure VM, you could, for instance, use the VM system identity.
+Do not aggregate here: planning needs row-level `ingestion_time()` metadata.
+See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data) and the
+[aggregation limitation](#aggregation-query).
 
-##  Copy Mode
+<a id="aggregation-query"></a>
 
-The --copy-mode parameter controls the copy behavior and can take the following values:
+## 🧮 Aggregation query
 
-Mode|Description
--|-
-BackfillOnly|The default:  copy historical data and will not copy data after the point where the copy started.
-BackfillAndNew|Copy historical data and will iteratively copy new data.
-NewOnly|Intended to copy only new data; currently includes history on a fresh job (see below).
+> [!WARNING]
+> The CLI accepts `--aggregation-query` and YAML accepts `kqlAggregationQuery`, but the current
+> implementation does **not apply it during export**. Do not rely on it for aggregated output.
+> Aggregation in `-q` is not a supported workaround.
 
-**Current implementation limitation:** on a fresh tracking folder, `NewOnly` starts with an
-empty cursor and includes history, just like `BackfillAndNew`. Do not rely on it to skip
-historical data. See [incremental copying](scenarios.md#backfill-then-copy-new-arrivals).
+<a id="client-id"></a>
 
-**See also**: [Iteration Period](#iteration-period) - controls polling frequency for BackfillAndNew and NewOnly modes.
+## 🔐 Client ID
 
-##  Copy Flow
+Kusto Copy uses [DefaultAzureCredential][credential] to authenticate to both Kusto and Storage.
+For long-running copies, prefer an [Azure managed identity][mi].
 
-The --copy-flow parameter controls which stages of the copy are run and can take the following values:
+- **System-assigned identity:** for example, use the identity of the Azure VM running the CLI.
+- **User-assigned identity:** select it with `--clientId <managed-identity-client-id>`.
 
-Flow|Description
--|-
-All|The default: export data to staging storage and ingest it into the destination.
-ExportOnly|Export data to staging storage without ingesting it into the destination.
-IngestOnly|Ingest previously exported data from staging storage (no export).
+For credential selection details and service principals, see
+[authentication and security](advanced.md#authentication-and-security).
 
-This parameter is meant to support a multi-tenant migration where the export portion would be done with a Managed Identity (MI) from the source tenant whereas the ingestion would be done with a MI from the destination tenant (Entra ID Managed Identity does not support multiple tenants).
+<a id="copy-mode"></a>
 
-**Current implementation limitation:** `ExportOnly` does not initialize activities on a fresh
-tracking folder. Review [split flows](advanced.md#split-flows-and-tenant-boundaries) before
-depending on this workflow.
+## 🔄 Copy mode
 
-##  Iteration Period
+`--copy-mode` controls which data is copied:
 
-This parameter is relevant only for [Copy Mode](#copy-mode) `BackfillAndNew` & `NewOnly` (not `BackfillOnly`).
+| Mode | Behavior |
+|------|----------|
+| `BackfillOnly` | **Default.** Copy history up to the initial copy boundary. |
+| `BackfillAndNew` | Copy history, then iteratively copy new arrivals. |
+| `NewOnly` | Intended to skip history; see the current limitation below. |
 
-When you don't specify an iteration period, Kusto Copy will copy the data for an iteration and exit once the iteration is completed (for each activity).  Specifying an iteration period has Kusto Copy run indefinitely and tries to start a new copy recurrently.
+> [!WARNING]
+> On a fresh tracking folder, `NewOnly` starts with an empty cursor and **includes history**,
+> just like `BackfillAndNew`. Do not rely on it to skip historical data.
 
-**See also**: [Copy Mode](#copy-mode) - determines when iteration period is used.
+**Next:** [Iteration period](#iteration-period) controls polling.
+See the [incremental-copy recipe](scenarios.md#backfill-then-copy-new-arrivals).
 
-##  Parallel export
+<a id="copy-flow"></a>
 
-`--export` defaults to 20 and caps parallel exports per source cluster, across its activities.
-Effective parallelism is the **minimum** of that setting and the source cluster's data export
-capacity. Raising the setting does not override cluster capacity.
+## 🌐 Copy flow
 
-Tune it based on [observed bottlenecks](troubleshooting.md#the-copy-is-slow); extra exports
-will not fix slow destination ingestion.
+`--copy-flow` controls which pipeline stages run:
 
-##  YAML file
+| Flow | Behavior |
+|------|----------|
+| `All` | **Default.** Export to staging storage, then ingest into the destination. |
+| `ExportOnly` | Export to staging storage without destination ingestion. |
+| `IngestOnly` | Ingest previously exported data using the same tracking state; no export. |
 
-A YAML file can be used instead of CLI parameters.
+Split flows are intended for cross-tenant migrations with separate source and destination
+managed identities. A managed identity cannot authenticate outside its own tenant.
 
-CLI parameters have precedence:  for example, if an export count is specified both in the YAML file and as a CLI parameter, the CLI parameter will be used.
+> [!WARNING]
+> `ExportOnly` does not initialize activities on a fresh tracking folder. Review
+> [split flows](advanced.md#split-flows-and-tenant-boundaries) before relying on this workflow.
 
-The big advantage of using YAML file is that it allows to run multiple table copies in parallel.
+<a id="iteration-period"></a>
 
-See [YAML file schema](yaml.md) for details about the schema of the YAML file.
+## 🕒 Iteration period
 
-For operational guidance, see [common scenarios](scenarios.md) and
-[advanced topics](advanced.md).
+`--iteration-period` is relevant to `BackfillAndNew` and `NewOnly`, not `BackfillOnly`.
+
+| Setting | Process behavior |
+|---------|------------------|
+| Omitted | Complete the current iteration for each activity, then exit. |
+| Specified, e.g. `00:15:00` | Stay running and try to start iterations at that interval. |
+
+See [copy mode](#copy-mode) to choose which data each iteration selects.
+
+<a id="parallel-export"></a>
+
+## ⚡ Parallel export
+
+`--export` defaults to **20** and caps parallel exports per source cluster, across activities.
+
+```text
+Effective parallelism = min(--export, source cluster data export capacity)
+```
+
+Raising the setting does not override cluster capacity. Tune from the
+[observed bottleneck](troubleshooting.md#the-copy-is-slow): extra exports will not fix slow
+destination ingestion.
+
+<a id="yaml-file"></a>
+
+## ⚙️ YAML file
+
+Use `-y my-activities.yaml` to configure multiple table copies in one job.
+**CLI parameters take precedence:** a CLI export count overrides the YAML export count.
+
+See the [YAML schema](yaml.md) and [multi-table recipe](scenarios.md#copy-multiple-tables).
+
+[credential]: https://learn.microsoft.com/dotnet/api/azure.identity.defaultazurecredential
+[mi]: https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview
