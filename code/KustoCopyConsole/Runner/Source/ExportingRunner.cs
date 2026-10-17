@@ -59,6 +59,7 @@ namespace KustoCopyConsole.Runner.Source
                 writableUris,
                 sourceTable.TableName,
                 activityParam.KqlQuery,
+                activityParam.KqlAggregationQuery,
                 iterationRecord.CursorStart,
                 iterationRecord.CursorEnd,
                 blockRecord.IngestionTimeStart,
