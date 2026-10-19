@@ -10,6 +10,9 @@ namespace KustoCopyConsole.Entity
     internal record PlanningPartitionRecord2(
         IterationKey IterationKey,
         int Level,
+        //  Partition ID is unique only within a parent partition
+        //  The reason that isn't an issue is that we do depth-first, so repeating partition IDs
+        //  will never be present together
         int PartitionId,
         long RowCount,
         long ExtentCount,
