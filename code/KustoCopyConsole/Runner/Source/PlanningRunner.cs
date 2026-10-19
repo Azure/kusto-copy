@@ -208,7 +208,7 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2? lastPartition = null;
 
             do
-            {
+            {   //  Depth first
                 lastPartition = Database.PlanningPartitions2.Query()
                     .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
                     .OrderByDescending(pp => pp.Level)
