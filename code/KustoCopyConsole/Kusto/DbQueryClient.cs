@@ -86,6 +86,7 @@ let BaseData = ['{tableName}']
     ;
 BaseData
 | summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
 | project
     MinIngestionTime=tostring(PartitionBin),
     MaxIngestionTime=tostring(PartitionBin+PartitionResolution)

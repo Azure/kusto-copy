@@ -239,7 +239,7 @@ namespace KustoCopyConsole.Runner.Source
                 .First();
 
             if (lastPartition != null
-                && lastPartition.Level >= 2
+                && lastPartition.Level >= 3
                 && lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION
                 && lastPartition.ExtentCount <= MAX_EXTENT_COUNT)
             {
@@ -381,7 +381,7 @@ namespace KustoCopyConsole.Runner.Source
                 null => TimeSpan.FromDays(1),
                 1 => TimeSpan.FromHours(1),
                 2 => TimeSpan.FromMinutes(1),
-                3 => TimeSpan.FromSeconds(2),
+                3 => TimeSpan.FromSeconds(1),
                 4 => TimeSpan.FromMilliseconds(100),
                 _ => throw new NotSupportedException($"Level {level}")
             };
