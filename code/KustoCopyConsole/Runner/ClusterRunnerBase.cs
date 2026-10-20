@@ -1,5 +1,6 @@
 ﻿using KustoCopyConsole.Entity.State;
 using KustoCopyConsole.JobParameter;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -14,8 +15,8 @@ namespace KustoCopyConsole.Runner
         protected ClusterRunnerBase(
             RunnerParameters parameters,
             bool bySourceCluster,
-            TimeSpan wakePeriod)
-            : base(parameters, wakePeriod)
+            TimeSpan wakeUpPeriod)
+            : base(parameters, wakeUpPeriod)
         {
             _bySourceCluster = bySourceCluster;
         }
@@ -54,7 +55,7 @@ namespace KustoCopyConsole.Runner
             IEnumerable<string> activityNames,
             CancellationToken ct);
 
-        private Uri GetClusterUri(ActivityParameterization a)
+        protected Uri GetClusterUri(ActivityParameterization a)
         {
             return _bySourceCluster
                 ? a.GetSourceTableIdentity().ClusterUri
