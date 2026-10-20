@@ -161,11 +161,9 @@ namespace KustoCopyConsole.Runner
             var planningRunner = new PlanningRunner(RunnerParameters);
             var tempTableRunner = new TempTableCreatingRunner(RunnerParameters);
             var exportingRunner = new ExportingRunner(RunnerParameters);
-            var awaitExportedRunner = new AwaitExportedRunner(RunnerParameters);
             var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
             var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
             var movingExtentRunner = new MovingExtentRunner(RunnerParameters);
-            var awaitMovedExtentRunner = new AwaitMovedRunner(RunnerParameters);
             var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
             var runnerTasks = new[]
@@ -175,11 +173,9 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => planningRunner.RunAsync(ct)),
                 Task.Run(() => tempTableRunner.RunAsync(ct)),
                 Task.Run(() => exportingRunner.RunAsync(ct)),
-                Task.Run(() => awaitExportedRunner.RunAsync(ct)),
                 Task.Run(() => queueIngestRunner.RunAsync(ct)),
                 Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                 Task.Run(() => movingExtentRunner.RunAsync(ct)),
-                Task.Run(() => awaitMovedExtentRunner.RunAsync(ct)),
                 Task.Run(() => blockCompletingRunner.RunAsync(ct)),
                 Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct))
             };

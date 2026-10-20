@@ -13,14 +13,14 @@ namespace KustoCopyConsole.Runner
     {
         private static readonly TraceSource _traceSource = new(TraceConstants.TRACE_SOURCE);
 
-        private readonly TimeSpan _wakePeriod;
+        private readonly TimeSpan _wakeUpPeriod;
         private readonly TaskCompletionSource _allActivityCompletedSource
             = new TaskCompletionSource();
 
-        public RunnerBase(RunnerParameters parameters, TimeSpan wakePeriod)
+        public RunnerBase(RunnerParameters parameters, TimeSpan wakeUpPeriod)
         {
             RunnerParameters = parameters;
-            _wakePeriod = wakePeriod;
+            _wakeUpPeriod = wakeUpPeriod;
         }
 
         public abstract Task RunAsync(CancellationToken ct);
@@ -113,12 +113,12 @@ namespace KustoCopyConsole.Runner
         {
             await Task.WhenAny(
                 _allActivityCompletedSource.Task,
-                Task.Delay(_wakePeriod, ct));
+                Task.Delay(_wakeUpPeriod, ct));
 
             if (ct.IsCancellationRequested)
             {
                 Trace.TraceInformation("");
-                Trace.TraceInformation($"General failure:  {GetType().Name}");
+                Trace.TraceInformation($"Cancel requested:  {GetType().Name}");
                 Trace.TraceInformation("");
             }
             ct.ThrowIfCancellationRequested();
