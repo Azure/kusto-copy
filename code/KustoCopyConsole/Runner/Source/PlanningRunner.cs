@@ -208,7 +208,7 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2? lastPartition = null;
 
             do
-            {
+            {   //  Depth first
                 lastPartition = Database.PlanningPartitions2.Query()
                     .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
                     .OrderByDescending(pp => pp.Level)
@@ -239,7 +239,8 @@ namespace KustoCopyConsole.Runner.Source
                 .First();
 
             if (lastPartition != null
-                && (lastPartition.Level > 1 || lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION)
+                && lastPartition.Level >= 3
+                && lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION
                 && lastPartition.ExtentCount <= MAX_EXTENT_COUNT)
             {
                 return await LoadBlocksAsync(
@@ -267,32 +268,15 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2? parentPartition,
             CancellationToken ct)
         {
-            var rowPartitions = await queryClient.PartitionRowsAsync(
-                new KustoPriority(iteration.IterationKey),
-                activityParam.GetSourceTableIdentity().TableName,
-                activityParam.KqlQuery,
-                iteration.CursorStart,
-                iteration.CursorEnd,
-                parentPartition?.MinIngestionTime,
-                parentPartition?.MaxIngestionTime,
-                GetPartitionResolution(parentPartition?.Level),
-                MAX_ROW_COUNT_PER_PARTITION,
-                MAX_EXTENT_COUNT,
+            var planningPartitions = await GetSubPlanningPartitionRecordsAsync(
+                queryClient,
+                activityParam,
+                iteration,
+                parentPartition,
                 ct);
 
-            if (rowPartitions.Count() > 0)
+            if (planningPartitions.Count() > 0)
             {
-                var planningPartitions = rowPartitions
-                    .Index()
-                    .Select(rp => new PlanningPartitionRecord2(
-                        iteration.IterationKey,
-                        (parentPartition?.Level ?? 0) + 1,
-                        GetPartitionId(parentPartition?.Level, parentPartition?.PartitionId, rp.Index),
-                        rp.Item.RowCount,
-                        rp.Item.ExtentCount,
-                        rp.Item.MinIngestionTime,
-                        rp.Item.MaxIngestionTime));
-
                 using (var tx = Database.CreateTransaction())
                 {
                     Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
@@ -311,9 +295,74 @@ namespace KustoCopyConsole.Runner.Source
             }
         }
 
-        private void DeletePartition(
-            PlanningPartitionRecord2? partition,
-            TransactionContext tx)
+        private async Task<PlanningPartitionRecord2[]> GetSubPlanningPartitionRecordsAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            PlanningPartitionRecord2? parentPartition,
+            CancellationToken ct)
+        {
+            var level = (parentPartition?.Level ?? 0) + 1;
+
+            if (level < 3)
+            {
+                var timeIntervals = await queryClient.BasicPartitionRowsAsync(
+                    new KustoPriority(iteration.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
+                    parentPartition?.MinIngestionTime,
+                    parentPartition?.MaxIngestionTime,
+                    GetPartitionResolution(parentPartition?.Level),
+                    MAX_ROW_COUNT_PER_PARTITION,
+                    MAX_EXTENT_COUNT,
+                    ct);
+                var planningPartitions = timeIntervals
+                    .Index()
+                    .Select(ti => new PlanningPartitionRecord2(
+                        iteration.IterationKey,
+                        level,
+                        ti.Index,
+                        0,
+                        0,
+                        ti.Item.MinIngestionTime,
+                        ti.Item.MaxIngestionTime))
+                    .ToArray();
+
+                return planningPartitions;
+            }
+            else
+            {
+                var rowPartitions = await queryClient.DetailedPartitionRowsAsync(
+                    new KustoPriority(iteration.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
+                    parentPartition!.MinIngestionTime,
+                    parentPartition!.MaxIngestionTime,
+                    GetPartitionResolution(parentPartition.Level),
+                    MAX_ROW_COUNT_PER_PARTITION,
+                    MAX_EXTENT_COUNT,
+                    ct);
+                var planningPartitions = rowPartitions
+                    .Index()
+                    .Select(rp => new PlanningPartitionRecord2(
+                        iteration.IterationKey,
+                        level,
+                        rp.Index,
+                        rp.Item.RowCount,
+                        rp.Item.ExtentCount,
+                        rp.Item.TimeInterval.MinIngestionTime,
+                        rp.Item.TimeInterval.MaxIngestionTime))
+                    .ToArray();
+
+                return planningPartitions;
+            }
+        }
+
+        private void DeletePartition(PlanningPartitionRecord2? partition, TransactionContext tx)
         {
             if (partition != null)
             {
@@ -330,18 +379,10 @@ namespace KustoCopyConsole.Runner.Source
             return level switch
             {
                 null => TimeSpan.FromDays(1),
-                1 => TimeSpan.FromMinutes(1),
-                _ => throw new NotSupportedException($"Level {level}")
-            };
-        }
-
-        private int GetPartitionId(int? level, int? parentPartitionId, int index)
-        {
-            return level switch
-            {
-                null => index,
-                1 => (int)(GetPartitionResolution(null) / GetPartitionResolution(1))
-                * parentPartitionId!.Value + index,
+                1 => TimeSpan.FromHours(1),
+                2 => TimeSpan.FromMinutes(1),
+                3 => TimeSpan.FromSeconds(1),
+                4 => TimeSpan.FromMilliseconds(100),
                 _ => throw new NotSupportedException($"Level {level}")
             };
         }

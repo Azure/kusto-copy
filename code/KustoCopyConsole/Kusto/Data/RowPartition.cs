@@ -7,9 +7,5 @@ using System.Threading.Tasks;
 
 namespace KustoCopyConsole.Kusto.Data
 {
-    internal record RowPartition(
-        long RowCount,
-        long ExtentCount,
-        string MinIngestionTime,
-        string MaxIngestionTime);
+    internal record RowPartition(long RowCount, long ExtentCount, TimeInterval TimeInterval);
 }
