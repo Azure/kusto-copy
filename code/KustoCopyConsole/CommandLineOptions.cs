@@ -42,12 +42,6 @@ namespace KustoCopyConsole
         public string Query { get; set; } = string.Empty;
 
         [Option(
-            "aggregation-query",
-            Required = false,
-            HelpText = "Set aggregation query, e.g. | summarize sum(Temperature) by bin(Timestamp, WidgetId)")]
-        public string AggregationQuery { get; set; } = string.Empty;
-
-        [Option(
             "export",
             Required = false,
             HelpText = "Parallel export count")]

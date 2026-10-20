@@ -103,8 +103,7 @@ namespace KustoCopyConsole.JobParameter
                         DatabaseName = destinationDb,
                         TableName = destinationTable
                     },
-                    KqlQuery = options.Query.Trim(),
-                    KqlAggregationQuery = options.AggregationQuery.Trim()
+                    KqlQuery = options.Query.Trim()
                 };
 
                 parameterization.Activities = new([activity]);

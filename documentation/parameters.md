@@ -33,7 +33,6 @@ Look up an option here, or run `kc --help` for the options in your installed ver
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `-q`, `--query` | Row-level [query](#query) | `"\| where Level == 'error'"` |
-| `--aggregation-query` | Optional [aggregation](#aggregation-query) | `"\| summarize count()"` |
 | `--copy-mode` | [Data selection mode](#copy-mode) | `BackfillOnly` |
 | `--copy-flow` | [Pipeline stages](#copy-flow) | `ExportOnly` |
 | `--iteration-period` | [New-data polling interval](#iteration-period) | `00:15:00` |
@@ -115,19 +114,22 @@ See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data).
 
 ## 🧮 Aggregation query
 
-Use optional `--aggregation-query` to aggregate the rows selected by the regular query.
-It runs **after** the filters and transformations in `-q`.
+Use the YAML activity property `kqlAggregationQuery` to aggregate the rows selected by the
+regular query. It runs **after** the filters and transformations in `-q` or `kqlQuery`.
 
 For example, summarize temperature readings by hour and widget:
 
-```text
---aggregation-query "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```yaml
+activities:
+- activityName: "hourly-temperature"
+  kqlQuery: "| where isnotnull(Temperature)"
+  kqlAggregationQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
 ```
 
-In YAML, set `kqlAggregationQuery` on the activity. The destination table's schema must match
-the aggregation output, not the original source rows.
+The destination table's schema must match the aggregation output, not the original source
+rows.
 
-See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete command.
+See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
 
 <a id="client-id"></a>
 

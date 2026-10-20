@@ -79,28 +79,39 @@ datetime boundary rather than `ago(30d)` during a long-running migration.
 
 > [!IMPORTANT]
 > Keep `-q` for row-level filtering and transformations. Put aggregations in
-> `--aggregation-query`, as shown below.
+> `kqlAggregationQuery`, as shown below.
 
 <a id="aggregate-before-copying"></a>
 
 ## 🧮 Aggregate before copying
 
-Use `-q` to select the input rows and `--aggregation-query` to summarize them before export:
+Use `-q` or `kqlQuery` to select the input rows and `kqlAggregationQuery` to summarize them
+before export:
 
-```bash
-kc -s https://source.kusto.windows.net/db/Readings \
-   -d https://dest.kusto.windows.net/db/HourlyTemperature \
-   -t https://storage.blob.core.windows.net/container/hourly-temperature \
-   -q "| where isnotnull(Temperature)" \
-   --aggregation-query "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```yaml
+activities:
+- activityName: "hourly-temperature"
+  source:
+    clusterUri: "https://source.kusto.windows.net"
+    databaseName: "db"
+    tableName: "Readings"
+  destination:
+    clusterUri: "https://dest.kusto.windows.net"
+    databaseName: "db"
+    tableName: "HourlyTemperature"
+  kqlQuery: "| where isnotnull(Temperature)"
+  kqlAggregationQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+stagingStorageDirectories:
+- "https://storage.blob.core.windows.net/container/hourly-temperature"
 ```
+
+Run it with `kc -y my-activities.yaml`.
 
 Create `HourlyTemperature` with columns and types matching the aggregation output:
 `Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather
 than comparing destination row counts with raw source row counts.
 
-For YAML activities, use `kqlQuery` and `kqlAggregationQuery` respectively.
-See [aggregation query](parameters.md#aggregation-query) for the option details.
+See [aggregation query](parameters.md#aggregation-query) for the YAML property details.
 
 <a id="backfill-then-copy-new-arrivals"></a>
 
