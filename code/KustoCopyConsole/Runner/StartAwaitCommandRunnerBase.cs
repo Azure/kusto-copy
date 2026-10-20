@@ -42,7 +42,7 @@ namespace KustoCopyConsole.Runner
         {
         }
 
-        protected override async Task<bool> RunClusterAsync(
+        protected override async Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
             CancellationToken ct)
@@ -61,8 +61,6 @@ namespace KustoCopyConsole.Runner
                 _cacheMap[clusterUri].CachedCapacity,
                 activityNames,
                 ct);
-
-            return false;
         }
 
         #region Abstract Properties / Methods
@@ -95,9 +93,9 @@ namespace KustoCopyConsole.Runner
             IEnumerable<string> activityNames,
             CancellationToken ct)
         {
-            var doReRun = false;
+            var doReRun = true;
 
-            do
+            while (doReRun)
             {
                 doReRun = false;
                 while (await RunStartBatchAsync(
@@ -123,7 +121,6 @@ namespace KustoCopyConsole.Runner
                     }
                 }
             }
-            while (doReRun);
         }
 
         #region Start logic
