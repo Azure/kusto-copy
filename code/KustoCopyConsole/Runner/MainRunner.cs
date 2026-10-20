@@ -164,8 +164,9 @@ namespace KustoCopyConsole.Runner
             var awaitExportedRunner = new AwaitExportedRunner(RunnerParameters);
             var queueIngestRunner = new QueueIngestRunner(RunnerParameters);
             var awaitIngestRunner = new AwaitIngestRunner(RunnerParameters);
-            var movingExtentRunner = new MovingExtentRunner(RunnerParameters);
-            var awaitMovedExtentRunner = new AwaitMovedRunner(RunnerParameters);
+            var movingExtentRunner = new MovingExtentRunner2(RunnerParameters);
+            //var movingExtentRunner = new MovingExtentRunner(RunnerParameters);
+            //var awaitMovedExtentRunner = new AwaitMovedRunner(RunnerParameters);
             var blockCompletingRunner = new BlockCompletingRunner(RunnerParameters);
             var blockMetricMaintenanceRunner = new BlockMetricMaintenanceRunner(RunnerParameters);
             var runnerTasks = new[]
@@ -179,7 +180,7 @@ namespace KustoCopyConsole.Runner
                 Task.Run(() => queueIngestRunner.RunAsync(ct)),
                 Task.Run(() => awaitIngestRunner.RunAsync(ct)),
                 Task.Run(() => movingExtentRunner.RunAsync(ct)),
-                Task.Run(() => awaitMovedExtentRunner.RunAsync(ct)),
+                //Task.Run(() => awaitMovedExtentRunner.RunAsync(ct)),
                 Task.Run(() => blockCompletingRunner.RunAsync(ct)),
                 Task.Run(() => blockMetricMaintenanceRunner.RunAsync(ct))
             };
