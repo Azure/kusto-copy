@@ -6,10 +6,10 @@ using System.Collections.Immutable;
 
 namespace KustoCopyConsole.Runner.Destination
 {
-    internal class MovingExtentRunner : StartCommandRunnerBase
+    internal class MovingExtentRunner : StartAwaitCommandRunnerBase
     {
         public MovingExtentRunner(RunnerParameters parameters)
-           : base(parameters, false, TimeSpan.FromSeconds(10))
+           : base(parameters, false, TimeSpan.FromSeconds(15))
         {
         }
 
@@ -21,11 +21,20 @@ namespace KustoCopyConsole.Runner.Destination
             }
         }
 
+        protected override int? MaxCapacity => null;
+
         protected override BlockState InitialState => BlockState.Ingested;
 
-        protected override BlockState DestinationState => BlockState.ExtentMoving;
+        protected override BlockState TransitionState => BlockState.ExtentMoving;
 
-        protected override int? MaxCapacity => null;
+        protected override BlockRecord ResetBlock(BlockRecord block)
+        {
+            return block with
+            {
+                State = BlockState.Ingested,
+                MoveOperationId = string.Empty
+            };
+        }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
         {
@@ -63,6 +72,48 @@ namespace KustoCopyConsole.Runner.Destination
             };
 
             return newBlockRecord;
+        }
+
+        protected override string GetOperationId(BlockRecord block)
+        {
+            return block.MoveOperationId;
+        }
+
+        protected override async Task ProcessOperationAsync(
+            IEnumerable<BlockRecord> blocks,
+            ActivityParameterization activityParam,
+            CancellationToken ct)
+        {
+            var iterationKey = blocks.First().BlockKey.IterationKey;
+            var tableId = activityParam.GetDestinationTableIdentity();
+            var dbClient = DbClientFactory.GetDbCommandClient(
+                tableId.ClusterUri,
+                tableId.DatabaseName);
+            var newBlocks = blocks
+                .Select(b => b with
+                {
+                    State = BlockState.ExtentMoved,
+                    MoveOperationId = string.Empty
+                });
+
+            //  Remove tags on destination tables
+            await dbClient.CleanExtentTagsAsync(
+                new KustoPriority(iterationKey),
+                activityParam.GetDestinationTableIdentity().TableName,
+                blocks.Select(b => b.BlockTag),
+                ct);
+            using (var tx = Database.CreateTransaction())
+            {
+                Database.Blocks.Query(tx)
+                    .Where(pf => pf.Equal(b => b.BlockKey.IterationKey, iterationKey))
+                    .Where(pf => pf.In(
+                        b => b.BlockKey.BlockId,
+                        blocks.Select(b => b.BlockKey.BlockId)))
+                    .Delete();
+                Database.Blocks.AppendRecords(newBlocks, tx);
+
+                tx.Complete();
+            }
         }
     }
 }
