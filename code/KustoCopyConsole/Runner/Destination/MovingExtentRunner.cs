@@ -8,10 +8,8 @@ namespace KustoCopyConsole.Runner.Destination
 {
     internal class MovingExtentRunner : StartCommandRunnerBase
     {
-        private const int MAXIMUM_EXTENT_MOVING = 500;
-
         public MovingExtentRunner(RunnerParameters parameters)
-           : base(parameters, false, TimeSpan.FromSeconds(15))
+           : base(parameters, false, TimeSpan.FromSeconds(10))
         {
         }
 

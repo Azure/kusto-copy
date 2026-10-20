@@ -49,7 +49,7 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task<IEnumerable<RowPartition>> PartitionRowsAsync(
+        public async Task<IEnumerable<TimeInterval>> BasicPartitionRowsAsync(
             KustoPriority priority,
             string tableName,
             string kqlQuery,
@@ -75,6 +75,62 @@ namespace KustoCopyConsole.Kusto
                     var upperIngestionTimeFilter = maxIngestionTime == null
                     ? string.Empty
                     : $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
+                    var query = @$"
+let PartitionResolution=timespan({partitionResolution});
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    {lowerIngestionTimeFilter}
+    {upperIngestionTimeFilter}
+    {kqlQuery}
+    ;
+BaseData
+| summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
+| project
+    MinIngestionTime=tostring(PartitionBin),
+    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var rowPartitions = reader
+                        .ToEnumerable(r => new TimeInterval(
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"]))
+                        .ToImmutableArray();
+
+                    return rowPartitions;
+                },
+                ct);
+        }
+
+        public async Task<IEnumerable<RowPartition>> DetailedPartitionRowsAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string? cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            TimeSpan partitionResolution,
+            long MaxRowCount,
+            long MaxExtentCount,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var lowerIngestionTimeFilter =
+                    $@"| where ingestion_time()>=todatetime('{minIngestionTime}')";
+                    var upperIngestionTimeFilter =
+                    $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
                     var query = @$"
 let PartitionResolution=timespan({partitionResolution});
 let MaxRowCount = {MaxRowCount};
@@ -134,8 +190,9 @@ BaseData
                         .ToEnumerable(r => new RowPartition(
                             (long)r["RowCount"],
                             (long)r["ExtentCount"],
-                            (string)r["MinIngestionTime"],
-                            (string)r["MaxIngestionTime"]))
+                            new TimeInterval(
+                                (string)r["MinIngestionTime"],
+                                (string)r["MaxIngestionTime"])))
                         .ToImmutableArray();
 
                     return rowPartitions;
