@@ -97,14 +97,12 @@ namespace KustoCopyConsole.Runner
 
             while (doReRun)
             {
-                doReRun = false;
                 while (await RunStartBatchAsync(
                     clusterUri,
                     capacity,
                     activityNames,
                     ct))
                 {
-                    doReRun = true;
                     ct.ThrowIfCancellationRequested();
                 }
                 var transitionBlocks = Database.Blocks.Query()
@@ -113,13 +111,8 @@ namespace KustoCopyConsole.Runner
                     .Take(MAX_OPERATIONS)
                     .ToArray();
 
-                if (transitionBlocks.Length > 0)
-                {
-                    if (await UpdateOperationsAsync(clusterUri, transitionBlocks, ct))
-                    {
-                        doReRun = true;
-                    }
-                }
+                doReRun = transitionBlocks.Length > 0
+                    && await UpdateOperationsAsync(clusterUri, transitionBlocks, ct);
             }
         }
 
