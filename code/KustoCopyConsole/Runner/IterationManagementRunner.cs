@@ -31,35 +31,34 @@ namespace KustoCopyConsole.Runner
 
         private async Task ManageIterationsAsync(bool isProcessStarting, CancellationToken ct)
         {
-            using (var tx = Database.CreateTransaction())
+            var activityNames = Parameterization.Activities.Select(a => a.ActivityName);
+            var allIterationsByActivityName = Database.Iterations.Query()
+                .Where(pf => pf.In(t => t.IterationKey.ActivityName, activityNames))
+                .GroupBy(i => i.IterationKey.ActivityName)
+                .ToDictionary(g => g.Key, g => g.OrderBy(i => i.IterationKey.IterationId));
+            var hasActiveIteration = allIterationsByActivityName.Values
+                .SelectMany(a => a)
+                .Any(i => i.State != IterationState.Completed);
+
+            foreach (var activityName in activityNames)
             {
-                var activityNames = Parameterization.Activities.Select(a => a.ActivityName);
-                var allIterationsByActivityName = Database.Iterations.Query(tx)
-                    .Where(pf => pf.In(t => t.IterationKey.ActivityName, activityNames))
-                    .GroupBy(i => i.IterationKey.ActivityName)
-                    .ToDictionary(g => g.Key, g => g.OrderBy(i => i.IterationKey.IterationId).ToArray());
-                var hasActiveIteration = allIterationsByActivityName.Values
-                    .SelectMany(a => a)
-                    .Any(i => i.State != IterationState.Completed);
+                var iterations = allIterationsByActivityName.ContainsKey(activityName)
+                    ? allIterationsByActivityName[activityName].ToArray()
+                    : Array.Empty<IterationRecord>();
 
-                foreach (var activityName in activityNames)
+                CreateIteration(
+                    activityName,
+                    iterations,
+                    isProcessStarting,
+                    hasActiveIteration);
+                await CleanIterationArtefactsAsync(iterations, ct);
+                using (var tx = Database.CreateTransaction())
                 {
-                    var iterations = allIterationsByActivityName.ContainsKey(activityName)
-                        ? allIterationsByActivityName[activityName]
-                        : Array.Empty<IterationRecord>();
-
-                    CreateIteration(
-                        activityName,
-                        iterations,
-                        isProcessStarting,
-                        hasActiveIteration,
-                        tx);
-                    await CompleteIterationAsync(iterations, tx, ct);
                     CleanIterations(activityName, iterations, tx);
                     CompleteActivity(activityName, iterations, tx);
-                }
 
-                tx.Complete();
+                    tx.Complete();
+                }
             }
         }
 
@@ -68,8 +67,7 @@ namespace KustoCopyConsole.Runner
             string activityName,
             IterationRecord[] iterations,
             bool isProcessStarting,
-            bool hasActiveIteration,
-            TransactionContext tx)
+            bool hasActiveIteration)
         {
             if (ShouldCreateIteration(iterations, isProcessStarting, hasActiveIteration))
             {
@@ -80,7 +78,7 @@ namespace KustoCopyConsole.Runner
                 var cursorStart = lastIteration != null
                     ? lastIteration.CursorEnd
                     : string.Empty;
-                var newIterationRecord = new IterationRecord(
+                var newIteration = new IterationRecord(
                     IterationState.Starting,
                     new IterationKey(activityName, newIterationId),
                     cursorStart,
@@ -88,7 +86,7 @@ namespace KustoCopyConsole.Runner
                     0,
                     DateTime.Now);
 
-                Database.Iterations.AppendRecord(newIterationRecord, tx);
+                Database.Iterations.AppendRecord(newIteration);
             }
         }
 
@@ -120,38 +118,47 @@ namespace KustoCopyConsole.Runner
         #endregion
 
         #region Complete Iteration
-        private async Task CompleteIterationAsync(
+        private async Task CleanIterationArtefactsAsync(
             IterationRecord[] iterations,
-            TransactionContext tx,
             CancellationToken ct)
         {
             var plannedIterations = iterations
                 .Where(i => i.State == IterationState.Planned);
+            var toCompleteIterations = await GetIterationToCompleteAsync(plannedIterations, ct);
 
-            foreach (var iteration in plannedIterations)
+            foreach (var iteration in toCompleteIterations)
             {
-                if (await IsIterationCompleted(iteration.IterationKey))
-                {
-                    var cleanDirectoryTask = CleanStorageDirectoryAsync(iteration, ct);
+                var cleanDirectoryTask = CleanStorageDirectoryAsync(iteration, ct);
 
-                    await CleanTempTableAsync(iteration, ct);
-                    await cleanDirectoryTask;
-
-                    Database.TempTables.Query(tx)
-                        .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
-                        .Delete();
-                    Database.PlanningPartitions2.Query(tx)
-                        .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
-                        .Delete();
-                    Database.Iterations.UpdateRecord(
-                        iteration,
-                        iteration with
-                        {
-                            State = IterationState.Completed
-                        },
-                        tx);
-                }
+                await CleanTempTableAsync(iteration, ct);
+                await cleanDirectoryTask;
             }
+            using (var tx = Database.CreateTransaction())
+            {
+                foreach (var iteration in toCompleteIterations)
+                {
+                    CompleteIteration(iteration, tx);
+                }
+
+                tx.Complete();
+            }
+        }
+
+        private void CompleteIteration(IterationRecord iteration, TransactionContext tx)
+        {
+            Database.TempTables.Query(tx)
+                .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                .Delete();
+            Database.PlanningPartitions2.Query(tx)
+                .Where(pf => pf.Equal(i => i.IterationKey, iteration.IterationKey))
+                .Delete();
+            Database.Iterations.UpdateRecord(
+                iteration,
+                iteration with
+                {
+                    State = IterationState.Completed
+                },
+                tx);
         }
 
         private async Task CleanStorageDirectoryAsync(
@@ -183,25 +190,42 @@ namespace KustoCopyConsole.Runner
             }
         }
 
-        private async Task<bool> IsIterationCompleted(IterationKey iterationKey)
+        private async Task<IEnumerable<IterationRecord>> GetIterationToCompleteAsync(
+            IEnumerable<IterationRecord> iterations,
+            CancellationToken ct)
         {
-            using (var tx = Database.CreateTransaction())
+            bool IsIterationToComplete(IterationKey iterationKey, TransactionContext tx)
             {
                 var pendingBlockCount = Database.QueryAggregatedBlockMetrics(iterationKey, tx)
                     .Where(p => p.Key < BlockMetric.ExtentMoved)
                     .Sum(p => p.Value);
 
-                if (pendingBlockCount == 0)
+                return pendingBlockCount == 0;
+            }
+
+            using (var tx = Database.CreateTransaction())
+            {
+                var iterationState = iterations
+                    .Select(i => new
+                    {
+                        Iteration = i,
+                        IsIterationToComplete = IsIterationToComplete(i.IterationKey, tx)
+                    })
+                    .ToArray();
+
+                if (iterationState.Any(s => s.IsIterationToComplete))
                 {
                     await tx.CompleteAsync();
 
-                    return true;
+                    return iterationState
+                        .Where(s => s.IsIterationToComplete)
+                        .Select(s => s.Iteration);
                 }
                 else
                 {
                     tx.Complete();
 
-                    return false;
+                    return Array.Empty<IterationRecord>();
                 }
             }
         }
