@@ -114,6 +114,7 @@ namespace KustoCopyConsole.Kusto
             IEnumerable<Uri> storageRootUris,
             string tableName,
             string? kqlQuery,
+            string? postPlanningKqlQuery,
             string? cursorStart,
             string cursorEnd,
             string ingestionTimeStart,
@@ -129,25 +130,26 @@ namespace KustoCopyConsole.Kusto
                     ? string.Empty
                     : $"| where cursor_after('{cursorStart}')";
                     var commandText = @$"
-.export async compressed to parquet (
-    {rootListText}
-)
-with (
-    namePrefix=""export"",
-    persistDetails=true,
-    parquetDatetimePrecision=""microsecond"",
-    distribution=""per_node"",
-    parquetRowGroupSize=5,
-    sizeLimit=10000000
-) <| 
-let ['{tableName}'] = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at('{cursorEnd}')
-    | where ingestion_time() >= todatetime('{ingestionTimeStart}')
-    | where ingestion_time() <= todatetime('{ingestionTimeEnd}');
-['{tableName}']
-{kqlQuery}
-";
+ .export async compressed to parquet (
+     {rootListText}
+ )
+ with (
+     namePrefix=""export"",
+     persistDetails=true,
+     parquetDatetimePrecision=""microsecond"",
+     distribution=""per_node"",
+     parquetRowGroupSize=5,
+     sizeLimit=10000000
+ ) <| 
+ let ['{tableName}'] = ['{tableName}']
+     {cursorStartFilter}
+     | where cursor_before_or_at('{cursorEnd}')
+     | where ingestion_time() >= todatetime('{ingestionTimeStart}')
+     | where ingestion_time() <= todatetime('{ingestionTimeEnd}');
+ ['{tableName}']
+ {kqlQuery}
+ {postPlanningKqlQuery}
+ ";
                     var reader = await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
                         commandText);

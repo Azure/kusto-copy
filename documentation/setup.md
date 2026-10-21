@@ -1,8 +1,15 @@
-# Setup guide
+# 🚀 Setup guide
 
-This article will guide you through the setup to use Kusto Copy to copy a table from one cluster to another.
+[Documentation home](README.md) | [CLI reference](parameters.md) | [Common scenarios](scenarios.md)
 
-## Prerequisites
+From download to your first validated table copy.
+
+**Your path:** [Prepare](#prerequisites) · [Download](#download-kusto-copy-cli) ·
+[Grant access](#permissions) · [Run](#running-the-tool) · [Validate](#validating-the-copy)
+
+<a id="prerequisites"></a>
+
+## ✅ Prerequisites
 
 *   A source Kusto cluster (either Azure Data Explorer or Fabric Eventhouse)
     * Default workload group should be strongly consistent
@@ -11,23 +18,29 @@ This article will guide you through the setup to use Kusto Copy to copy a table 
     * Soft Delete shouldn't be enabled
 *   Somewhere to run the Kusto Copy CLI (e.g. a laptop, Cloud Shell, etc.)
 
-## Download Kusto Copy CLI
+<a id="download-kusto-copy-cli"></a>
 
-You can download the CLI by going [here](https://github.com/Azure/kusto-copy/releases).  This is the release page and should show you a list of different releases starting with the latest one:
+## 📥 Download Kusto Copy CLI
+
+1. Open the [releases page](https://github.com/Azure/kusto-copy/releases), newest release first.
+2. Download the package for your OS: **Linux, macOS, or Windows**.
+3. Extract the package to make the CLI available.
 
 ![Release](artefacts/setup/release.png)
 
-Download the package matching the OS you want to run on (Linux / Mac OS / Windows), uncompress it and you should be good to go.
+<a id="permissions"></a>
 
-## Permissions
+## 🔐 Permissions
 
-Kusto Copy runs with an Azure Entra ID identity which identity will:
+Kusto Copy runs with a Microsoft Entra ID identity that needs to:
 
 * Execute queries on the source database
 * Ingest data, create temporary tables and run queries on the destination database
-* Generate read / write SAS tokens in ADLS gen 2 storage container to export data and have it read for ingestion & also write directly audit blobs
+* Generate read/write SAS tokens for staging exports and ingestion, and write tracking data
 
-Kusto Copy uses [DefaultAzureCredential](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet).  For long running scenarios (i.e. more than 5-10 minutes), it is recommended to leverage a managed identity.  By default, **your identity** will be used by leveraging Azure CLI login (not recommended for long running scenarios).
+> [!TIP]
+> Kusto Copy uses [DefaultAzureCredential][credential]. An Azure CLI login can be used for
+> local trials. For long-running or unattended jobs, prefer a **managed identity**.
 
 ### Source Database permissions
 
@@ -38,39 +51,74 @@ There are two ways to assign the **viewer role** to a principal:
     * Through Azure CLI
     * Through PowerShell
 * Data Plane
-    * By [running KQL commands](https://learn.microsoft.com/en-us/kusto/management/manage-database-security-roles?view=azure-data-explorer)
+    * By [running KQL commands][database-roles]
 
-Although this permission can be assigned at the cluster level, the minimum permission requires to be at the database level.
+The minimum scope is the **source database**; cluster-level assignment is not required.
 
 ### Destination Database permissions
 
-You need to assign the **admin** permisison at the database level.
+Assign **admin** permission at the **destination database** level.
 
-See previous section on how.
+Use the same assignment methods described above.
 
 ### ADLS Gen2 container permissions
 
-You need to assign Azure RBAC roles **Storage Blob Delegator** & **Storage Blob Data Contributor** on the ADLS gen 2 container.
+Assign **Storage Blob Data Contributor** on the staging container (or a parent scope).
+Also grant permission to request a user delegation key at the storage account level or
+above, for example with **Storage Blob Delegator** on the storage account. Assigning
+Delegator only on a container does not grant that account-level operation.
 
-## Preparing the destination table
+See [authentication and security](advanced.md#authentication-and-security) for managed
+identities, service principals, and network access.
 
-Kusto Copy **does not** create the destination table:  it expects it to be present with a schema compatible with what is exported from the source table.
+<a id="preparing-the-destination-table"></a>
 
-## Running the tool
+## 🗃️ Preparing the destination table
 
-Here is an example:
+> [!IMPORTANT]
+> Kusto Copy **does not create the destination table**. Create it first with a schema
+> compatible with the data exported from the source table.
 
+<a id="running-the-tool"></a>
+
+## ▶️ Running the tool
+
+Replace the example endpoints, database, table, and staging folder:
+
+```bash
+kc -s https://mycluster.eastus.kusto.windows.net/mydb/mytable \
+   -d https://yourcluster.eastus.kusto.windows.net/yourdb/ \
+   -t https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
 ```
-kc -s https://mycluster.eastus.kusto.windows.net/mydb/mytable -d https://yourcluster.eastus.kusto.windows.net/yourdb/ -t https://mystorageaccount.blob.core.windows.net/mycontainer/myfolder
-```
+
+*Shell tip:* `\` is Bash continuation syntax. In PowerShell, use one line or backticks.
 
 See [Parameters](parameters.md) for details about the CLI's parameters.
 
-##  Progress
+<a id="progress"></a>
 
-See [Reading progress](progress.md) for details on how to interpret the copy progression.
+## 📊 Progress
 
-## Validating the copy
+See [Reading progress](progress.md) to interpret the copy's progress.
 
-You should always validate the copy.  You can do this by looking at the number of rows but also by doing some sort of aggregation that returns a small amount of rows (or even just one number, e.g. the average of a column) you can compare with the source table.
+<a id="validating-the-copy"></a>
 
+## 🔎 Validating the copy
+
+Always validate the result, not just the process exit status:
+
+- **Compare row counts** for the same selected dataset.
+- **Compare aggregates** that return a small result, such as an average or totals by time bucket.
+- **For aggregation copies,** compare the intended summaries, not raw source row counts.
+- Follow the [production checklist](advanced.md#production-checklist) for a larger migration.
+
+<a id="next-steps"></a>
+
+## 🧭 Next steps
+
+- [Common scenarios](scenarios.md): multiple tables, filtering, and incremental copies.
+- [Troubleshooting & performance](troubleshooting.md): errors, stalls, and capacity tuning.
+- [Advanced topics](advanced.md): pipeline behavior, resume, security, and production checks.
+
+[credential]: https://learn.microsoft.com/dotnet/api/azure.identity.defaultazurecredential
+[database-roles]: https://learn.microsoft.com/kusto/management/manage-database-security-roles

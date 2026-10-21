@@ -1,147 +1,41 @@
-# 📚 Kusto Copy Documentation
+# 📚 Kusto Copy documentation
 
-Welcome to the complete guide for **Kusto Copy** - your ultimate companion for seamless data migration between Fabric Eventhouse and Azure Data Explorer clusters!
+**Your next copy starts here.** Move data between Azure Data Explorer and Fabric Eventhouse
+using your own ADLS Gen2 staging storage.
 
-## 🚀 Quick Navigation
+## Start here
 
-<table>
-<tr>
-<td width="50%">
+1. **Get ready.** Follow the [setup guide](setup.md) to install the CLI, grant permissions,
+   and prepare the destination table.
+2. **Start copying.** Run a single-table copy:
 
-### 🏃‍♂️ **I'm New Here**
-Just getting started? These guides will get you up and running:
+   ```bash
+   kc -s https://source.kusto.windows.net/sourcedb/mytable \
+      -d https://dest.kusto.windows.net/destdb \
+      -t https://storage.blob.core.windows.net/container/my-copy
+   ```
 
-- 🛠️ **[Setup Guide](setup.md)** - Install and configure Kusto Copy
-- ⚡ **[First Copy](setup.md#your-first-copy)** - Run your first data migration
-- 🎯 **[Common Scenarios](#common-scenarios)** - Popular use cases
+   This copies historical data into the existing destination table with the same name.
+   It does not clear that table first.
+3. **Watch and verify.** [Read progress](progress.md), then
+   [validate the copy](setup.md#validating-the-copy).
 
-</td>
-<td width="50%">
+> 💡 **Keep your place:** use a dedicated staging folder for each independent copy.
+> Reuse that folder when resuming the same job.
 
-### 🔧 **I Need Details** 
-Ready to dive deep? Find the technical details here:
+*Shell tip:* examples with `\` line continuations use Bash syntax. In PowerShell, put the
+command on one line or use backticks for continuation.
 
-- 📋 **[CLI Parameters](parameters.md)** - Complete command reference
-- 📄 **[YAML Configuration](yaml.md)** - Multi-table orchestration
-- 📊 **[Progress Monitoring](progress.md)** - Track your migrations
+## Guides and reference
 
-</td>
-</tr>
-</table>
+| Guide | Use it to |
+|-------|-----------|
+| 🚀 [Setup](setup.md) | Install, assign permissions, and run your first copy |
+| 🎯 [Common scenarios](scenarios.md) | Copy multiple tables, filter rows, or copy new arrivals |
+| 🛠️ [Troubleshooting & performance](troubleshooting.md) | Fix errors, stalls, and slow copies |
+| 🔬 [Advanced topics](advanced.md) | Explore the pipeline, security, resume, and operations |
+| 📋 [CLI parameters](parameters.md) | Look up command-line options and defaults |
+| ⚙️ [YAML configuration](yaml.md) | Define multiple copy activities |
+| 📊 [Progress & monitoring](progress.md) | Interpret iteration states and block counts |
 
----
-
-## 🎯 Common Scenarios
-
-### 📦 Single Table Copy
-**Need to move one table quickly?**
-```bash
-kc -s https://source.kusto.windows.net/sourcedb/mytable \
-   -d https://dest.kusto.windows.net/destdb/ \
-   -t https://storage.blob.core.windows.net/container/temp
-```
-👉 **[Full setup walkthrough](setup.md)**
-
-### 🏢 Multi-Table Migration  
-**Moving entire databases or multiple tables?**
-Use YAML configuration for complex scenarios.
-
-👉 **[YAML Configuration Guide](yaml.md)**
-
-### 🔍 Filtered Data Copy
-**Need to transform data during migration?**
-Copy query results instead of full tables using the `-q` parameter.
-
-👉 **[Query Parameter Guide](parameters.md#-q-query)**
-
-### 🔍 Multi-Tenant Copy
-
-**Copying data between clusters in different tenants?**
-
-The default `DefaultAzureCredential` authentication flow can use your signed-in Azure CLI identity. A managed identity (MI), however, can authenticate only in its own Microsoft Entra tenant.
-
-To copy with managed identities, run the export with an MI from the source cluster's tenant, then run the ingestion with a different MI from the destination cluster's tenant. Use the `--copy-flow` parameter to run the `ExportOnly` and `IngestOnly` stages separately.
-
-👉 **[Copy Flow parameter](parameters.md#copy-flow)**
-
----
-
-## 🆘 Troubleshooting & Performance
-
-### 🐌 **My copy is slow**
-- Check [performance bottlenecks](progress.md#bottlenecks)
-- Verify cluster capacity and scaling
-- Review staging storage configuration
-
-### ❌ **I'm getting errors**  
-- Validate [prerequisites](setup.md#prerequisites)
-- Check authentication and permissions
-- Review [common error patterns](progress.md#troubleshooting)
-
-### 📊 **I can't see progress**
-- Learn to [read progress indicators](progress.md)
-- Set up monitoring and logging
-- Understand the copy pipeline stages
-
----
-
-## 🔧 Advanced Topics
-
-<details>
-<summary><strong>🏗️ Architecture Deep Dive</strong></summary>
-
-Understanding the three-stage pipeline:
-1. **Export** - Data extraction from source
-2. **Staging** - Temporary storage in Azure Storage  
-3. **Ingestion** - Import into destination
-
-</details>
-
-<details>
-<summary><strong>🔐 Authentication & Security</strong></summary>
-
-- Service Principal authentication
-- Managed Identity support
-- Storage account permissions
-- Network security considerations
-
-</details>
-
-<details>
-<summary><strong>⚙️ Production Best Practices</strong></summary>
-
-- Capacity planning guidelines
-- Monitoring and alerting setup  
-- Backup and recovery strategies
-- Performance optimization tips
-
-</details>
-
----
-
-## 📖 Complete Reference
-
-| Document | What's Inside |
-|----------|---------------|
-| **[Setup Guide](setup.md)** | Step-by-step installation and first copy |
-| **[CLI Parameters](parameters.md)** | Complete command-line reference |
-| **[YAML Schema](yaml.md)** | Configuration files for complex scenarios |
-| **[Progress & Monitoring](progress.md)** | Understanding output and troubleshooting |
-
----
-
-## 💡 Pro Tips
-
-- 🎯 **Start small** - Test with a subset before copying large datasets
-- 🔄 **Use staging strategically** - Choose storage regions close to your clusters  
-- 📊 **Monitor progress** - Large copies can take hours, keep an eye on bottlenecks
-- 🛡️ **Plan for interruptions** - Copies are resumable, don't worry about network hiccups
-
----
-
-<div align="center">
-
-**Need something that's not covered here?**  
-Check out specific guides above or refer to command-line help with `kc --help`
-
-</div> 
+For available options in your installed version, run `kc --help`.
