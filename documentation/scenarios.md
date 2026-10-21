@@ -86,8 +86,11 @@ datetime boundary rather than `ago(30d)` during a long-running migration.
 
 ## 🧮 Aggregate before copying
 
-Use `-q` or `kqlQuery` to select the input rows that matter to planning, and
-`postPlanningKqlQuery` to shape the export result after planning:
+In general, use `-q` or `kqlQuery` to select the input rows that matter to planning, and
+`postPlanningKqlQuery` to shape the export result after planning.
+
+In the following example, `kqlQuery` keeps only rows with non-null `Temperature` values,
+while `postPlanningKqlQuery` aggregates the exported result.
 
 ```yaml
 activities:
@@ -106,13 +109,16 @@ stagingStorageDirectories:
 - "https://storage.blob.core.windows.net/container/hourly-temperature"
 ```
 
-Run it with `kc -y my-activities.yaml`.
-
-Create `HourlyTemperature` with columns and types matching the post-planning query output:
-`Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather than
-comparing destination row counts with raw source row counts.
-
 See [post-planning KQL query](parameters.md#post-planning-kql-query) for the YAML property details.
+
+**Aggregations cannot be used in `kqlQuery`**: `summarize` removes `ingestion_time()`,
+which is needed for planning.
+
+Filters and projections can be done in both `kqlQuery` and `postPlanningKqlQuery`, but only
+`kqlQuery` affects planning. In general, most filters should be done in `kqlQuery` to plan
+optimally sized blocks. For costly filters, such as heavy parsing, it may be better to do them
+in `postPlanningKqlQuery` to avoid parsing all rows during planning, which could time out.
+certain planning queries (since they are executed on large amount of potentially cold data).
 
 <a id="backfill-then-copy-new-arrivals"></a>
 

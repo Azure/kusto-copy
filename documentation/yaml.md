@@ -30,6 +30,7 @@ activities:
     tableName: "string"
   kqlQuery: "string"
   postPlanningKqlQuery: "string"
+  withCreationTime: true
   stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
@@ -62,6 +63,7 @@ Each activity connects one source table to one destination table.
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
 | postPlanningKqlQuery | String | No | — | [Post-planning KQL query][postPlanning] |
+| withCreationTime | Boolean | No | true | Keep extent times aligned. Set false to opt out. |
 
 #### Source
 

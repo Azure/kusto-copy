@@ -14,6 +14,8 @@ namespace KustoCopyConsole.JobParameter
 
         public string PostPlanningKqlQuery { get; set; } = string.Empty;
 
+        public bool WithCreationTime { get; set; } = true;
+
         public void Validate()
         {
             if (string.IsNullOrWhiteSpace(ActivityName))
