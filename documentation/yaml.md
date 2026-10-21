@@ -29,8 +29,8 @@ activities:
     databaseName: "string"
     tableName: "string"
   kqlQuery: "string"
-  kqlAggregationQuery: "string"
-stagingStorageDirectories:
+  postPlanningKqlQuery: "string"
+  stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
 copyMode: "string"
@@ -61,7 +61,7 @@ Each activity connects one source table to one destination table.
 | source | Object | Yes | — | [Source settings](#source) |
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
-| kqlAggregationQuery | String | No | — | [Aggregation after the row-level query][aggregation] |
+| postPlanningKqlQuery | String | No | — | [Post-planning KQL query][postPlanning] |
 
 #### Source
 
@@ -92,5 +92,5 @@ reference in that group.
 [export]: parameters.md#parallel-export
 [identity]: parameters.md#client-id
 [query]: parameters.md#query
-[aggregation]: parameters.md#aggregation-query
+[postPlanning]: parameters.md#post-planning-kql-query
 [entity-group]: https://learn.microsoft.com/kusto/management/entity-groups

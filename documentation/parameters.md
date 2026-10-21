@@ -106,16 +106,21 @@ Use optional `-q` to filter rows or transform columns, for example:
 -q "| where Level == 'error' | project Timestamp, Message, Level"
 ```
 
-Keep `-q` for row-level filtering and transformations. To summarize the selected rows, use
-[aggregation query](#aggregation-query) instead.
+Keep `-q` for row-level filtering and transformations that should affect planning. For
+export-only transformations, use the YAML property `postPlanningKqlQuery` instead.
 See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data).
 
-<a id="aggregation-query"></a>
+<a id="post-planning-kql-query"></a>
 
-## 🧮 Aggregation query
+## 🧮 Post-planning KQL query
 
-Use the YAML activity property `kqlAggregationQuery` to aggregate the rows selected by the
-regular query. It runs **after** the filters and transformations in `-q` or `kqlQuery`.
+Use the YAML activity property `postPlanningKqlQuery` to run additional KQL on the rows
+selected by the regular query during the export phase only. It is intentionally not used by
+planning, so it does not influence block selection or query planning cost.
+
+This is useful for aggregations, expensive filters, or other transformations that you want to
+apply only to exported data. A common example is summarizing by hour, but a regex-based filter
+can also be appropriate if you want to trade planning cost for export-only processing.
 
 For example, summarize temperature readings by hour and widget:
 
@@ -123,11 +128,12 @@ For example, summarize temperature readings by hour and widget:
 activities:
 - activityName: "hourly-temperature"
   kqlQuery: "| where isnotnull(Temperature)"
-  kqlAggregationQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+  postPlanningKqlQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
 ```
 
-The destination table's schema must match the aggregation output, not the original source
-rows.
+The destination table's schema must match the post-planning query output, not the original
+source rows. Because the query is not part of planning, the exported result may be smaller or
+more selective than the planner's assumptions; choose carefully based on your workload.
 
 See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
 

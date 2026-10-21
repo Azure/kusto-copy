@@ -47,8 +47,8 @@ selection and network paths.
 - Verify that the source workload group uses strong consistency.
 - Ensure the `execute_show_command` plugin is available; planning uses it to obtain extent
   metadata.
-- Check any `-q` fragment. Use it for row-level operations; put summaries in the YAML
-  activity property [`kqlAggregationQuery`](yaml.md#activities).
+- Check any `-q` fragment. Use it for row-level operations that matter to planning; put
+  export-only transforms in the YAML activity property [`postPlanningKqlQuery`](yaml.md#activities).
 - Watch the total block count. It can grow during `Planning`, while export and ingestion
   are already running. Planning also pauses intentionally when enough blocks are in flight.
 

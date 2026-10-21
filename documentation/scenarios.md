@@ -78,15 +78,16 @@ and export, so use a stable predicate for reproducible results. For example, use
 datetime boundary rather than `ago(30d)` during a long-running migration.
 
 > [!IMPORTANT]
-> Keep `-q` for row-level filtering and transformations. Put aggregations in
-> `kqlAggregationQuery`, as shown below.
+> Keep `-q` for row-level filtering and transformations that should affect planning. Use
+> `postPlanningKqlQuery` for export-only work such as aggregation or heavy post-processing,
+> as shown below.
 
 <a id="aggregate-before-copying"></a>
 
 ## 🧮 Aggregate before copying
 
-Use `-q` or `kqlQuery` to select the input rows and `kqlAggregationQuery` to summarize them
-before export:
+Use `-q` or `kqlQuery` to select the input rows that matter to planning, and
+`postPlanningKqlQuery` to shape the export result after planning:
 
 ```yaml
 activities:
@@ -100,18 +101,18 @@ activities:
     databaseName: "db"
     tableName: "HourlyTemperature"
   kqlQuery: "| where isnotnull(Temperature)"
-  kqlAggregationQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+  postPlanningKqlQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
 stagingStorageDirectories:
 - "https://storage.blob.core.windows.net/container/hourly-temperature"
 ```
 
 Run it with `kc -y my-activities.yaml`.
 
-Create `HourlyTemperature` with columns and types matching the aggregation output:
-`Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather
-than comparing destination row counts with raw source row counts.
+Create `HourlyTemperature` with columns and types matching the post-planning query output:
+`Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather than
+comparing destination row counts with raw source row counts.
 
-See [aggregation query](parameters.md#aggregation-query) for the YAML property details.
+See [post-planning KQL query](parameters.md#post-planning-kql-query) for the YAML property details.
 
 <a id="backfill-then-copy-new-arrivals"></a>
 
