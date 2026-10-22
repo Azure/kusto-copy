@@ -110,7 +110,7 @@ stagingStorageDirectories:
 - "https://storage.blob.core.windows.net/container/hourly-temperature"
 ```
 
-See [post-planning KQL query](parameters.md#post-planning-kql-query) for the YAML property details.
+See [post-planning KQL query](yaml.md#post-planning-kql-query) for the YAML property details.
 
 **Aggregations cannot be used in `kqlQuery`**: `summarize` removes `ingestion_time()`,
 which is needed for planning.
@@ -132,7 +132,7 @@ reconcile.
 The usual pattern is to copy the underlying source table and then create the materialized
 view on the destination table. Copying the full source table can be wasteful if the source is
 much larger than the materialized view output. In that case, use
-[`postPlanningKqlQuery`](parameters.md#post-planning-kql-query) as shown in the
+[`postPlanningKqlQuery`](yaml.md#post-planning-kql-query) as shown in the
 [aggregate-before-copying](#aggregate-before-copying) recipe to pre-aggregate the rows before
 export.
 
@@ -150,8 +150,8 @@ For example, extending the aggregation scenario:
 }
 ```
 
-If you only care about the materialized-view output, you can set `withCreationTime: false`
-and keep the destination retention short so the copied data expires quickly.
+Using a non-empty `postPlanningKqlQuery` means destination extent creation times are not
+matched to the source. Review destination retention with that behavior in mind.
 
 <a id="backfill-then-copy-new-arrivals"></a>
 

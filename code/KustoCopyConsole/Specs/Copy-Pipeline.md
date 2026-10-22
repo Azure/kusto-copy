@@ -27,6 +27,9 @@ blocks at once.
   rows into groups of at most 16 M with `row_cumsum`.
 * The user's `KqlQuery` is spliced into planning **and** export, so counts reflect the query.
   It must not aggregate (breaks `ingestion_time()`).
+* With a non-empty `PostPlanningKqlQuery`, planning skips extent creation-time lookup and
+  creates one block per planning partition with a null `CreationTime`. The query runs only
+  during export; destination extent creation times are not matched to the source.
 
 ## Export (`ExportingRunner`, `AwaitExportedRunner`)
 
@@ -46,7 +49,8 @@ until moved), partitioning removed, `restricted_view_access`.  Folder `kc`.
 ## Ingestion (`QueueIngestRunner`, `AwaitIngestRunner`)
 
 * Queued ingestion through the destination's `ingest-<host>` endpoint, using read SAS URLs,
-  `CreationTime` = block creation time (preserves retention), extent tag = block tag.
+  `CreationTime` = block creation time (preserves retention unless `PostPlanningKqlQuery`
+  is non-empty, in which case it is null), extent tag = block tag.
 * Success = rows for the tag in the temp table equal the expected count.  Greater means
   duplicates -> re-export.  `FailureDetection` checks only the **oldest** queued block's
   ingestion operations (`Failed` / `Cancelled` / `PartialSuccess` -> re-export).

@@ -48,7 +48,8 @@ selection and network paths.
 - Ensure the `execute_show_command` plugin is available; planning uses it to obtain extent
   metadata.
 - Check any `-q` fragment. Use it for row-level operations that matter to planning; put
-  export-only transforms in the YAML activity property [`postPlanningKqlQuery`](yaml.md#activities).
+  export-only transforms in the YAML activity property
+  [`postPlanningKqlQuery`](yaml.md#post-planning-kql-query).
 - Watch the total block count. It can grow during `Planning`, while export and ingestion
   are already running. Planning also pauses intentionally when enough blocks are in flight.
 
@@ -117,8 +118,10 @@ Validate the same filtered data and a fixed boundary on both sides. A live sourc
 growing after the copy's cursor was captured, so comparing unbounded counts can be misleading.
 
 Also check source retention or deletions during the copy, destination retention, query
-projections, and update policies. Kusto Copy preserves extent creation time, so old data can
-be subject to destination retention immediately.
+projections, and update policies. Without a non-empty
+[`postPlanningKqlQuery`](yaml.md#post-planning-kql-query), Kusto Copy preserves extent
+creation time, so old data can be subject to destination retention immediately. With a
+post-planning query, destination extent creation times are not matched to the source.
 
 Completion means the planned pipeline work finished, not that an independent data comparison
 was performed. Follow the [validation checklist](advanced.md#production-checklist).

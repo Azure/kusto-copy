@@ -35,11 +35,11 @@ Keep source data available until the copy is validated. Rows deleted or expired 
 are copied cannot be recovered by restarting the job.
 
 > [!IMPORTANT]
-> Review **destination retention** before copying old data. Kusto Copy preserves source
-> extent creation times, so copied data can already be old enough to expire under the
-> destination's retention policy. Set `withCreationTime: false` in an activity's YAML to
-> deliberately opt out of that fidelity; the flag is YAML-only and is not consumed by the
-> runners.
+> Review **destination retention** before copying old data. Unless a non-empty
+> [`postPlanningKqlQuery`](yaml.md#post-planning-kql-query) is used, Kusto Copy preserves
+> source extent creation times, so copied data can already be old enough to expire under the
+> destination's retention policy. With a post-planning query, destination extent creation
+> times are not matched to the source.
 
 This is batch copying, not change-data capture: source deletions and updates are not
 reconciled at the destination. See [common scenarios](scenarios.md) for supported workflows.

@@ -30,8 +30,7 @@ activities:
     tableName: "string"
   kqlQuery: "string"
   postPlanningKqlQuery: "string"
-  withCreationTime: true
-  stagingStorageDirectories:
+stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
 copyMode: "string"
@@ -63,7 +62,6 @@ Each activity connects one source table to one destination table.
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
 | postPlanningKqlQuery | String | No | — | [Post-planning KQL query][postPlanning] |
-| withCreationTime | Boolean | No | true | Keep extent times aligned. Set false to opt out. |
 
 #### Source
 
@@ -89,10 +87,41 @@ reference in that group.
 > Destination tables must already exist with compatible schemas. YAML defines copy
 > activities; it does not create the final tables.
 
+<a id="post-planning-kql-query"></a>
+
+## 🧮 Post-planning KQL query
+
+Use the YAML activity property `postPlanningKqlQuery` to run additional KQL on the rows
+selected by the regular query during the export phase only. It is intentionally not used by
+planning, so it does not influence block selection or query planning cost.
+
+When `postPlanningKqlQuery` is non-empty, destination extent `CreationTime` is no longer
+matched to the source, even if the query only filters or projects rows. Without a
+post-planning query, source extent creation times are preserved.
+
+This is useful for aggregations, expensive filters, or other transformations that you want to
+apply only to exported data. A common example is summarizing by hour, but a regex-based filter
+can also be appropriate if you want to trade planning cost for export-only processing.
+
+For example, summarize temperature readings by hour and widget:
+
+```yaml
+activities:
+- activityName: "hourly-temperature"
+  kqlQuery: "| where isnotnull(Temperature)"
+  postPlanningKqlQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+```
+
+The destination table's schema must match the post-planning query output, not the original
+source rows. Because the query is not part of planning, the exported result may be smaller or
+more selective than the planner's assumptions; choose carefully based on your workload.
+
+See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
+
 [storage]: parameters.md#adls-gen-2-containers
 [mode]: parameters.md#copy-mode
 [export]: parameters.md#parallel-export
 [identity]: parameters.md#client-id
 [query]: parameters.md#query
-[postPlanning]: parameters.md#post-planning-kql-query
+[postPlanning]: #post-planning-kql-query
 [entity-group]: https://learn.microsoft.com/kusto/management/entity-groups

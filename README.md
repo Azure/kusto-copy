@@ -16,7 +16,8 @@
 🔥 **Battle-tested at scale** - Handles petabytes without breaking a sweat  
 🛡️ **Zero data loss guarantee** - Fault-tolerant with exact copy semantics  
 ⚡ **Resume anywhere** - Interrupted? No problem. Pick up right where you left off  
-🕒 **Preserves data lineage** - Maintains extent creation times for accurate retention policies  
+🕒 **Preserves data lineage** - Maintains extent creation times unless a
+[post-planning query](documentation/yaml.md#post-planning-kql-query) is used<br>
 🎯 **Flexible transformations** - Copy queries, not just tables. Filter and transform on-the-fly
 
 ## 🔥 Power User Scenarios
@@ -77,7 +78,8 @@ See how easy it is to migrate terabytes of data:
 
 ```bash
 # Copy only specific columns and rows
-kc -s "https://cluster.kusto.windows.net/db/table | where Timestamp > ago(30d) | project UserId, EventType, Timestamp" \
+kc -s https://cluster.kusto.windows.net/db/table \
+   -q "| where Timestamp > ago(30d) | project UserId, EventType, Timestamp" \
    -d https://dest-cluster.kusto.windows.net/destdb/ \
    -t https://storage.blob.core.windows.net/container/staging
 ```

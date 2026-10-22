@@ -8,8 +8,8 @@ code already says.  Public how-to docs are not repeated:  see the
 ## What it is
 
 `kc` is a .NET console app that copies Kusto tables (ADX / Fabric Eventhouse) to Kusto tables
-at petabyte scale, exactly-once, resumable, preserving extent creation time.  It only
-**orchestrates**:
+at petabyte scale, exactly-once, resumable, preserving extent creation time unless a non-empty
+`PostPlanningKqlQuery` is used.  It only **orchestrates**:
 
 ```
 Source --.export parquet--> ADLS Gen2 staging --queued ingest--> temp table --.move--> Destination
