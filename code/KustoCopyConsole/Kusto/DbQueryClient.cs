@@ -378,5 +378,75 @@ DataByExtent
                 },
                 ct);
         }
+
+        public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksWithoutCreationTimeAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            TimeSpan partitionResolution,
+            long maxRowCountPerBlock,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var cursorStartFilter = cursorStart == null
+                    ? string.Empty
+                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var query = @$"
+let MinIngestionTime = datetime({minIngestionTime});
+let MaxIngestionTime = datetime({maxIngestionTime});
+let PartitionResolution = timespan({partitionResolution});
+let MaxRowCountPerBlock = long({maxRowCountPerBlock});
+let BaseData = ['{tableName}']
+    {cursorStartFilter}
+    | where cursor_before_or_at(""{cursorEnd}"")
+    | where ingestion_time()>=MinIngestionTime
+    | where ingestion_time()<=MaxIngestionTime
+    {kqlQuery}
+    ;
+//  Get the data by partition bins
+let DataByIngestionTimeBin = BaseData
+    | summarize
+        RowCount=count(),
+        MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
+        by PartitionBin=bin(ingestion_time(), PartitionResolution)
+    | order by MinIngestionTime asc
+    | extend MinIngestionTime=tostring(MinIngestionTime)
+    | extend MaxIngestionTime=tostring(MaxIngestionTime)
+    | project-away PartitionBin;
+//  Merge the data into MaxRowCountPerBlock blocks
+DataByIngestionTimeBin
+| extend CummulativeSum = row_cumsum(RowCount)
+| extend BlockId = (CummulativeSum - 1) / MaxRowCountPerBlock
+| extend RowNum = row_number()
+| summarize
+    RowCount = sum(RowCount),
+    Info1 = arg_min(RowNum, MinIngestionTime),
+    Info2 = arg_max(RowNum, MaxIngestionTime)
+  by BlockId
+| project RowCount, MinIngestionTime, MaxIngestionTime";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var results = reader
+                        .ToEnumerable(r => new ProtoBlock(
+                            (long)r["RowCount"],
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"],
+                            null))
+                        .ToImmutableArray();
+
+                    return results;
+                },
+                ct);
+        }
     }
 }
