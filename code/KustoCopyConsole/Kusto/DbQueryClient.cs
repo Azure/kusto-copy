@@ -1,4 +1,4 @@
-﻿using Kusto.Data.Common;
+using Kusto.Data.Common;
 using KustoCopyConsole.Concurrency;
 using KustoCopyConsole.Kusto.Data;
 using System;
@@ -66,31 +66,23 @@ namespace KustoCopyConsole.Kusto
                 priority,
                 async () =>
                 {
-                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
-                    var lowerIngestionTimeFilter = minIngestionTime == null
-                    ? string.Empty
-                    : $@"| where ingestion_time()>=todatetime('{minIngestionTime}')";
-                    var upperIngestionTimeFilter = maxIngestionTime == null
-                    ? string.Empty
-                    : $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
+                    var baseDataQuery = BuildBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
                     var query = @$"
-let PartitionResolution=timespan({partitionResolution});
-let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
-    {lowerIngestionTimeFilter}
-    {upperIngestionTimeFilter}
-    {kqlQuery}
-    ;
-BaseData
-| summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
-| order by PartitionBin asc
-| project
-    MinIngestionTime=tostring(PartitionBin),
-    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
-";
+                let PartitionResolution=timespan({partitionResolution});
+                {baseDataQuery}
+                BaseData
+                | summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
+                | order by PartitionBin asc
+                | project
+                    MinIngestionTime=tostring(PartitionBin),
+                    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
+                ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
@@ -124,63 +116,60 @@ BaseData
                 priority,
                 async () =>
                 {
-                    var cursorStartFilter = string.IsNullOrWhiteSpace(cursorStart)
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
-                    var lowerIngestionTimeFilter =
-                    $@"| where ingestion_time()>=todatetime('{minIngestionTime}')";
-                    var upperIngestionTimeFilter =
-                    $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
+                    var baseDataQuery = BuildBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
                     var query = @$"
-let PartitionResolution=timespan({partitionResolution});
-let MaxRowCount = {MaxRowCount};
-let MaxExtentCount = {MaxExtentCount};
-let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
-    {lowerIngestionTimeFilter}
-    {upperIngestionTimeFilter}
-    {kqlQuery}
-    ;
-BaseData
-| summarize RowCount=count(), ExtentCount=count_distinct(extent_id()),
-    MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
-    by PartitionBin=bin(ingestion_time(), PartitionResolution)
-| order by MinIngestionTime asc
-| scan declare (
-    PartitionId:long = 0,
-    RunningRowCount:long = 0,
-    RunningExtentCount:long = 0
-) with (
-    step s: true =>
-        PartitionId = s.PartitionId + tolong(
-            s.RunningRowCount + RowCount >= MaxRowCount
-            or s.RunningExtentCount + ExtentCount >= MaxExtentCount
-        ),
-        RunningRowCount = iff(
-            s.RunningRowCount + RowCount >= MaxRowCount
-            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
-            RowCount,
-            s.RunningRowCount + RowCount
-        ),
-        RunningExtentCount = iff(
-            s.RunningRowCount + RowCount >= MaxRowCount
-            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
-            ExtentCount,
-            s.RunningExtentCount + ExtentCount
-        );
-)
-| summarize
-    RowCount = sum(RowCount),
-    ExtentCount = sum(ExtentCount),
-    MinIngestionTime = min(MinIngestionTime),
-    MaxIngestionTime = max(MaxIngestionTime)
-    by PartitionId
-| project-away PartitionId
-| order by MinIngestionTime asc
-| extend MinIngestionTime=tostring(MinIngestionTime)
-| extend MaxIngestionTime=tostring(MaxIngestionTime)
-";
+                let PartitionResolution=timespan({partitionResolution});
+                let MaxRowCount = {MaxRowCount};
+                let MaxExtentCount = {MaxExtentCount};
+                {baseDataQuery}
+                BaseData
+                | summarize
+                    RowCount=count(),
+                    ExtentCount=count_distinct(extent_id()),
+                    MinIngestionTime=min(ingestion_time()),
+                    MaxIngestionTime=max(ingestion_time())
+                    by PartitionBin=bin(ingestion_time(), PartitionResolution)
+                | order by MinIngestionTime asc
+                | scan declare (
+                    PartitionId:long = 0,
+                    RunningRowCount:long = 0,
+                    RunningExtentCount:long = 0
+                ) with (
+                    step s: true =>
+                        PartitionId = s.PartitionId + tolong(
+                            s.RunningRowCount + RowCount >= MaxRowCount
+                            or s.RunningExtentCount + ExtentCount >= MaxExtentCount
+                        ),
+                        RunningRowCount = iff(
+                            s.RunningRowCount + RowCount >= MaxRowCount
+                            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
+                            RowCount,
+                            s.RunningRowCount + RowCount
+                        ),
+                        RunningExtentCount = iff(
+                            s.RunningRowCount + RowCount >= MaxRowCount
+                            or s.RunningExtentCount + ExtentCount >= MaxExtentCount,
+                            ExtentCount,
+                            s.RunningExtentCount + ExtentCount
+                        );
+                )
+                | summarize
+                    RowCount = sum(RowCount),
+                    ExtentCount = sum(ExtentCount),
+                    MinIngestionTime = min(MinIngestionTime),
+                    MaxIngestionTime = max(MaxIngestionTime)
+                    by PartitionId
+                | project-away PartitionId
+                | order by MinIngestionTime asc
+                | extend MinIngestionTime=tostring(MinIngestionTime)
+                | extend MaxIngestionTime=tostring(MaxIngestionTime)
+                ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
@@ -214,24 +203,20 @@ BaseData
                 priority,
                 async () =>
                 {
-                    var cursorStartFilter = cursorStart == null
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var baseDataQuery = BuildTimeRangeBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
                     var query = @$"
-let MinIngestionTime = datetime({minIngestionTime});
-let MaxIngestionTime = datetime({maxIngestionTime});
-let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
-    | where ingestion_time()>=MinIngestionTime
-    | where ingestion_time()<=MaxIngestionTime
-    {kqlQuery}
-    ;
-//  Let's list extents from the time window
-BaseData
-| summarize by ExtentId=extent_id()
-| where ExtentId != guid(00000000-0000-0000-0000-000000000000)
-";
+                {baseDataQuery}
+                //  Let's list extents from the time window
+                BaseData
+                | summarize by ExtentId=extent_id()
+                | where ExtentId != guid(00000000-0000-0000-0000-000000000000)
+                ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
@@ -260,23 +245,19 @@ BaseData
                 priority,
                 async () =>
                 {
-                    var cursorStartFilter = cursorStart == null
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
+                    var baseDataQuery = BuildTimeRangeBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
                     var query = @$"
-let MinIngestionTime = datetime({minIngestionTime});
-let MaxIngestionTime = datetime({maxIngestionTime});
-let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
-    | where ingestion_time()>=MinIngestionTime
-    | where ingestion_time()<=MaxIngestionTime
-    {kqlQuery}
-    ;
-//  Let's list extents from the time window
-BaseData
-| summarize count_distinct(extent_id())
-";
+                {baseDataQuery}
+                //  Let's list extents from the time window
+                BaseData
+                | summarize count_distinct(extent_id())
+                ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
@@ -306,61 +287,68 @@ BaseData
         {
             return await RequestRunAsync(
                 priority,
-                async () =>
-                {
-                    var extentCreationTimesJsonList = string.Join(
-                        ",\n",
-                        extentCreationTimes
-                        .Select(ect => $"{{ \"extentId\" : \"{ect.ExtentId}\", \"creationTime\" : \"{ect.CreationTime}\" }}"));
-                    var cursorStartFilter = cursorStart == null
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
-                    var query = @$"
-let ExtentIdCreationTime = print ExtentIdCreationTime=dynamic([
-    {extentCreationTimesJsonList}
-])
-    | mv-expand ExtentIdCreationTime
-    | project
-        ExtentId=toguid(ExtentIdCreationTime.extentId),
-        CreatedOn=todatetime(ExtentIdCreationTime.creationTime);
-let MinIngestionTime = datetime({minIngestionTime});
-let MaxIngestionTime = datetime({maxIngestionTime});
-let PartitionResolution = timespan({partitionResolution});
-let MaxRowCountPerBlock = long({maxRowCountPerBlock});
-let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
-    | where ingestion_time()>=MinIngestionTime
-    | where ingestion_time()<=MaxIngestionTime
-    {kqlQuery}
-    ;
-//  Get the data by extent
-let DataByExtent = BaseData
-    | summarize
-        RowCount=count(),
-        MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
-        by PartitionBin=bin(ingestion_time(), PartitionResolution), ExtentId=extent_id()
-    | lookup kind=leftouter ExtentIdCreationTime on ExtentId
-    | summarize
-        RowCount=sum(RowCount), CreatedOn=max(CreatedOn),
-        MinIngestionTime=min(MinIngestionTime), MaxIngestionTime=max(MaxIngestionTime)
-        by PartitionBin
-    | order by MinIngestionTime asc
-    | extend MinIngestionTime=tostring(MinIngestionTime)
-    | extend MaxIngestionTime=tostring(MaxIngestionTime)
-    | project-away PartitionBin;
-//  Merge the data into MaxRowCountPerBlock blocks
-DataByExtent
-| extend CummulativeSum = row_cumsum(RowCount)
-| extend BlockId = (CummulativeSum - 1) / MaxRowCountPerBlock
-| extend RowNum = row_number()
-| summarize
-    RowCount = sum(RowCount),
-    CreatedOn = max(CreatedOn),
-    Info1 = arg_min(RowNum, MinIngestionTime),
-    Info2 = arg_max(RowNum, MaxIngestionTime)
-  by BlockId
-| project RowCount, MinIngestionTime, MaxIngestionTime, CreatedOn";
+                                async () =>
+                                {
+                                        var extentCreationTimesJsonList = string.Join(
+                                            ",\n",
+                                            extentCreationTimes
+                                                .Select(ect =>
+                                                    "{ \"extentId\" : \""
+                                                    + ect.ExtentId
+                                                    + "\", \"creationTime\" : \""
+                                                    + ect.CreationTime
+                                                    + "\" }"));
+                                        var baseDataQuery = BuildTimeRangeBaseDataQuery(
+                                            tableName,
+                                            cursorStart,
+                                            cursorEnd,
+                                            minIngestionTime,
+                                            maxIngestionTime,
+                                            kqlQuery);
+                                        var query = @$"
+                                    let ExtentIdCreationTime = print ExtentIdCreationTime=dynamic([
+                                        {extentCreationTimesJsonList}
+                                    ])
+                                        | mv-expand ExtentIdCreationTime
+                                        | project
+                                            ExtentId=toguid(ExtentIdCreationTime.extentId),
+                                            CreatedOn=todatetime(
+                                                ExtentIdCreationTime.creationTime);
+                                    let PartitionResolution = timespan({partitionResolution});
+                                    let MaxRowCountPerBlock = long({maxRowCountPerBlock});
+                                    {baseDataQuery}
+                                    //  Get the data by extent
+                                    let DataByExtent = BaseData
+                                        | summarize
+                                            RowCount=count(),
+                                            MinIngestionTime=min(ingestion_time()),
+                                            MaxIngestionTime=max(ingestion_time())
+                                            by
+                                                PartitionBin=bin(
+                                                    ingestion_time(), PartitionResolution),
+                                                ExtentId=extent_id()
+                                        | lookup kind=leftouter ExtentIdCreationTime on ExtentId
+                                        | summarize
+                                            RowCount=sum(RowCount), CreatedOn=max(CreatedOn),
+                                            MinIngestionTime=min(MinIngestionTime),
+                                            MaxIngestionTime=max(MaxIngestionTime)
+                                            by PartitionBin
+                    | order by MinIngestionTime asc
+                    | extend MinIngestionTime=tostring(MinIngestionTime)
+                    | extend MaxIngestionTime=tostring(MaxIngestionTime)
+                    | project-away PartitionBin;
+                //  Merge the data into MaxRowCountPerBlock blocks
+                DataByExtent
+                | extend CummulativeSum = row_cumsum(RowCount)
+                | extend BlockId = (CummulativeSum - 1) / MaxRowCountPerBlock
+                | extend RowNum = row_number()
+                | summarize
+                    RowCount = sum(RowCount),
+                    CreatedOn = max(CreatedOn),
+                    Info1 = arg_min(RowNum, MinIngestionTime),
+                    Info2 = arg_max(RowNum, MaxIngestionTime)
+                  by BlockId
+                | project RowCount, MinIngestionTime, MaxIngestionTime, CreatedOn";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
                         query,
@@ -379,74 +367,61 @@ DataByExtent
                 ct);
         }
 
-        public async Task<IEnumerable<ProtoBlock>> GetProtoBlocksWithoutCreationTimeAsync(
-            KustoPriority priority,
+        #region Query Builders
+        private static string BuildCursorStartFilter(string? cursorStart)
+        {
+            return string.IsNullOrWhiteSpace(cursorStart)
+                ? string.Empty
+                : $@"| where cursor_after(""{cursorStart}"")";
+        }
+
+        private string BuildBaseDataQuery(
             string tableName,
-            string kqlQuery,
             string? cursorStart,
-            string cursorEnd,
+            string? cursorEnd,
+            string? minIngestionTime,
+            string? maxIngestionTime,
+            string kqlQuery)
+        {
+            var lowerIngestionTimeFilter = string.IsNullOrWhiteSpace(minIngestionTime)
+                ? string.Empty
+                : $@"| where ingestion_time()>=todatetime('{minIngestionTime}')";
+            var upperIngestionTimeFilter = string.IsNullOrWhiteSpace(maxIngestionTime)
+                ? string.Empty
+                : $@"| where ingestion_time()<=todatetime('{maxIngestionTime}')";
+            var normalizedCursorEnd = cursorEnd ?? string.Empty;
+
+            return $@"
+let BaseData = ['{tableName}']
+    {BuildCursorStartFilter(cursorStart)}
+    | where cursor_before_or_at(""{normalizedCursorEnd}"")
+    {lowerIngestionTimeFilter}
+    {upperIngestionTimeFilter}
+    {kqlQuery}
+    ;";
+        }
+
+        private string BuildTimeRangeBaseDataQuery(
+            string tableName,
+            string? cursorStart,
+            string? cursorEnd,
             string minIngestionTime,
             string maxIngestionTime,
-            TimeSpan partitionResolution,
-            long maxRowCountPerBlock,
-            CancellationToken ct)
+            string kqlQuery)
         {
-            return await RequestRunAsync(
-                priority,
-                async () =>
-                {
-                    var cursorStartFilter = cursorStart == null
-                    ? string.Empty
-                    : $@"| where cursor_after(""{cursorStart}"")";
-                    var query = @$"
+            var normalizedCursorEnd = cursorEnd ?? string.Empty;
+
+            return $@"
 let MinIngestionTime = datetime({minIngestionTime});
 let MaxIngestionTime = datetime({maxIngestionTime});
-let PartitionResolution = timespan({partitionResolution});
-let MaxRowCountPerBlock = long({maxRowCountPerBlock});
 let BaseData = ['{tableName}']
-    {cursorStartFilter}
-    | where cursor_before_or_at(""{cursorEnd}"")
+    {BuildCursorStartFilter(cursorStart)}
+    | where cursor_before_or_at(""{normalizedCursorEnd}"")
     | where ingestion_time()>=MinIngestionTime
     | where ingestion_time()<=MaxIngestionTime
     {kqlQuery}
-    ;
-//  Get the data by partition bins
-let DataByIngestionTimeBin = BaseData
-    | summarize
-        RowCount=count(),
-        MinIngestionTime=min(ingestion_time()), MaxIngestionTime=max(ingestion_time())
-        by PartitionBin=bin(ingestion_time(), PartitionResolution)
-    | order by MinIngestionTime asc
-    | extend MinIngestionTime=tostring(MinIngestionTime)
-    | extend MaxIngestionTime=tostring(MaxIngestionTime)
-    | project-away PartitionBin;
-//  Merge the data into MaxRowCountPerBlock blocks
-DataByIngestionTimeBin
-| extend CummulativeSum = row_cumsum(RowCount)
-| extend BlockId = (CummulativeSum - 1) / MaxRowCountPerBlock
-| extend RowNum = row_number()
-| summarize
-    RowCount = sum(RowCount),
-    Info1 = arg_min(RowNum, MinIngestionTime),
-    Info2 = arg_max(RowNum, MaxIngestionTime)
-  by BlockId
-| project RowCount, MinIngestionTime, MaxIngestionTime";
-                    var reader = await _provider.ExecuteQueryAsync(
-                        _databaseName,
-                        query,
-                        EMPTY_PROPERTIES,
-                        ct);
-                    var results = reader
-                        .ToEnumerable(r => new ProtoBlock(
-                            (long)r["RowCount"],
-                            (string)r["MinIngestionTime"],
-                            (string)r["MaxIngestionTime"],
-                            null))
-                        .ToImmutableArray();
-
-                    return results;
-                },
-                ct);
+    ;";
         }
+        #endregion
     }
 }

@@ -394,12 +394,18 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
-            var protoBlocks = await LoadProtoBlocksAsync(
-                queryClient,
-                commandClient,
-                activityParam,
-                parentPartition,
-                ct);
+            var protoBlocks = string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery)
+                ? await LoadProtoBlocksAsync(
+                    queryClient,
+                    commandClient,
+                    activityParam,
+                    parentPartition,
+                    ct)
+                : [new ProtoBlock(
+                    0,
+                    parentPartition.MinIngestionTime,
+                    parentPartition.MaxIngestionTime,
+                    null)];
 
             using (var tx = Database.CreateTransaction())
             {
@@ -453,9 +459,24 @@ namespace KustoCopyConsole.Runner.Source
 
             while (true)
             {
-                if (activityParam.WithCreationTime)
+                var extentIds = await queryClient.GetExtentIdsAsync(
+                    new KustoPriority(parentPartition.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
+                    parentPartition.MinIngestionTime,
+                    parentPartition.MaxIngestionTime,
+                    ct);
+                var extentCreationTimes = await commandClient.GetExtentCreationTimeAsync(
+                    new KustoPriority(parentPartition.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    extentIds,
+                    ct);
+
+                if (extentIds.Count() == extentCreationTimes.Count())
                 {
-                    var extentIds = await queryClient.GetExtentIdsAsync(
+                    var protoBlocks = await queryClient.GetProtoBlocksAsync(
                         new KustoPriority(parentPartition.IterationKey),
                         activityParam.GetSourceTableIdentity().TableName,
                         activityParam.KqlQuery,
@@ -463,52 +484,18 @@ namespace KustoCopyConsole.Runner.Source
                         iteration.CursorEnd,
                         parentPartition.MinIngestionTime,
                         parentPartition.MaxIngestionTime,
-                        ct);
-                    var extentCreationTimes = await commandClient.GetExtentCreationTimeAsync(
-                        new KustoPriority(parentPartition.IterationKey),
-                        activityParam.GetSourceTableIdentity().TableName,
-                        extentIds,
-                        ct);
-
-                    if (extentIds.Count() == extentCreationTimes.Count())
-                    {
-                        var protoBlocks = await queryClient.GetProtoBlocksAsync(
-                            new KustoPriority(parentPartition.IterationKey),
-                            activityParam.GetSourceTableIdentity().TableName,
-                            activityParam.KqlQuery,
-                            iteration.CursorStart,
-                            iteration.CursorEnd,
-                            parentPartition.MinIngestionTime,
-                            parentPartition.MaxIngestionTime,
-                            extentCreationTimes,
-                            TimeSpan.FromSeconds(0.01),
-                            MAX_ROW_COUNT_PER_BLOCK,
-                            ct);
-
-                        return protoBlocks;
-                    }
-                    else
-                    {
-                        Trace.TraceWarning(
-                            $"Extent count mismatch:  {extentIds.Count()} extents," +
-                            $" {extentCreationTimes.Count()} creation times");
-                    }
-                }
-                else
-                {
-                    var protoBlocks = await queryClient.GetProtoBlocksWithoutCreationTimeAsync(
-                        new KustoPriority(parentPartition.IterationKey),
-                        activityParam.GetSourceTableIdentity().TableName,
-                        activityParam.KqlQuery,
-                        iteration.CursorStart,
-                        iteration.CursorEnd,
-                        parentPartition.MinIngestionTime,
-                        parentPartition.MaxIngestionTime,
+                        extentCreationTimes,
                         TimeSpan.FromSeconds(0.01),
                         MAX_ROW_COUNT_PER_BLOCK,
                         ct);
 
                     return protoBlocks;
+                }
+                else
+                {
+                    Trace.TraceWarning(
+                        $"Extent count mismatch:  {extentIds.Count()} extents," +
+                        $" {extentCreationTimes.Count()} creation times");
                 }
             }
         }
