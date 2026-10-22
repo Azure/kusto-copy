@@ -37,7 +37,9 @@ are copied cannot be recovered by restarting the job.
 > [!IMPORTANT]
 > Review **destination retention** before copying old data. Kusto Copy preserves source
 > extent creation times, so copied data can already be old enough to expire under the
-> destination's retention policy.
+> destination's retention policy. Set `withCreationTime: false` in an activity's YAML to
+> deliberately opt out of that fidelity; the flag is YAML-only and is not consumed by the
+> runners.
 
 This is batch copying, not change-data capture: source deletions and updates are not
 reconciled at the destination. See [common scenarios](scenarios.md) for supported workflows.

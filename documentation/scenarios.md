@@ -9,6 +9,7 @@ Commands below use Bash line continuations.
 **Pick your recipe:** [Rename](#copy-into-a-differently-named-table) ·
 [Multiple tables](#copy-multiple-tables) · [Filter](#filter-or-project-source-data) ·
 [Aggregate](#aggregate-before-copying) ·
+[Materialized views](#copy-materialized-views) ·
 [New arrivals](#backfill-then-copy-new-arrivals) · [Cross-tenant](#copy-across-tenants)
 
 <a id="copy-into-a-differently-named-table"></a>
@@ -86,8 +87,11 @@ datetime boundary rather than `ago(30d)` during a long-running migration.
 
 ## 🧮 Aggregate before copying
 
-Use `-q` or `kqlQuery` to select the input rows that matter to planning, and
-`postPlanningKqlQuery` to shape the export result after planning:
+In general, use `-q` or `kqlQuery` to select the input rows that matter to planning, and
+`postPlanningKqlQuery` to shape the export result after planning.
+
+In the following example, `kqlQuery` keeps only rows with non-null `Temperature` values,
+while `postPlanningKqlQuery` aggregates the exported result.
 
 ```yaml
 activities:
@@ -106,13 +110,48 @@ stagingStorageDirectories:
 - "https://storage.blob.core.windows.net/container/hourly-temperature"
 ```
 
-Run it with `kc -y my-activities.yaml`.
-
-Create `HourlyTemperature` with columns and types matching the post-planning query output:
-`Timestamp`, `WidgetId`, and `TotalTemp`. Validate the resulting summaries rather than
-comparing destination row counts with raw source row counts.
-
 See [post-planning KQL query](parameters.md#post-planning-kql-query) for the YAML property details.
+
+**Aggregations cannot be used in `kqlQuery`**: `summarize` removes `ingestion_time()`,
+which is needed for planning.
+
+Filters and projections can be done in both `kqlQuery` and `postPlanningKqlQuery`, but only
+`kqlQuery` affects planning. In general, most filters should be done in `kqlQuery` to plan
+optimally sized blocks. For costly filters, such as heavy parsing, it may be better to do them
+in `postPlanningKqlQuery` to avoid parsing all rows during planning, which could time out
+certain planning queries when they are executed across large amounts of potentially cold data.
+
+<a id="copy-materialized-views"></a>
+
+## 🧮 Copy materialized views
+
+Copying materialized views is a little subtle. A materialized view does not support
+cursors, and it often removes rows as part of its maintenance, which Kusto Copy does not
+reconcile.
+
+The usual pattern is to copy the underlying source table and then create the materialized
+view on the destination table. Copying the full source table can be wasteful if the source is
+much larger than the materialized view output. In that case, use
+[`postPlanningKqlQuery`](parameters.md#post-planning-kql-query) as shown in the
+[aggregate-before-copying](#aggregate-before-copying) recipe to pre-aggregate the rows before
+export.
+
+This matches the materialized view output within a block, but it does not replicate a
+cross-block aggregate. To model the full view, create the materialized view on the destination
+after the copy finishes.
+
+For example, extending the aggregation scenario:
+
+```kql
+.create materialized-view HourlyTemperatureMV on table HourlyTemperature
+{
+  HourlyTemperature
+  | summarize TotalTemp=sum(TotalTemp) by bin(Timestamp, 1h), WidgetId
+}
+```
+
+If you only care about the materialized-view output, you can set `withCreationTime: false`
+and keep the destination retention short so the copied data expires quickly.
 
 <a id="backfill-then-copy-new-arrivals"></a>
 
