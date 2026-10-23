@@ -107,10 +107,7 @@ namespace KustoCopyConsole.Runner.Source
 
         private bool CanPlan()
         {
-            var activityNames = Parameterization.Activities
-                .Select(a => a.ActivityName);
             var activeBlockCount = Database.BlockMetrics.Query()
-                .Where(pf => pf.In(bm => bm.IterationKey.ActivityName, activityNames))
                 .Where(pf => pf.LessThan(bm => bm.BlockMetric, BlockMetric.ExtentMoved))
                 .Sum(bm => bm.Value);
 
