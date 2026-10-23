@@ -20,6 +20,18 @@ for informational diagnostics. Capture console output with your shell or job run
 
 Kusto requests are tagged with `KUSTO-COPY;<version>` to help correlate cluster-side queries.
 
+## Published executable fails during tracking schema initialization
+
+An error containing `Sequence contains no elements` in
+`TrackDb.Lib.TypedTableSchema.ConstructorMapping.FromConstructor` can indicate that
+publishing with trimming removed a record constructor needed through reflection.
+This can affect a published executable even when running from Visual Studio succeeds.
+
+Tracking records, including legacy schemas needed for existing job state, must preserve
+their public constructors and properties during trimming. Rebuild with those preservation
+annotations or install a release containing the fix. Do not delete staging data to work
+around this startup error.
+
 <a id="authentication-or-authorization-errors"></a>
 
 ## 🔐 Authentication or authorization errors
