@@ -109,8 +109,14 @@ For example, summarize temperature readings by hour and widget:
 activities:
 - activityName: "hourly-temperature"
   kqlQuery: "| where isnotnull(Temperature)"
-  postPlanningKqlQuery: "| summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1h), WidgetId"
+  postPlanningKqlQuery: >-
+    | summarize TotalTemp=sum(Temperature)
+    by bin(Timestamp, 1h), WidgetId
 ```
+
+Use `>-` to split long queries across lines: YAML folds equally indented lines into spaces
+and removes the trailing newline. More-indented lines retain line breaks, which KQL also
+accepts.
 
 The destination table's schema must match the post-planning query output, not the original
 source rows. Because the query is not part of planning, the exported result may be smaller or

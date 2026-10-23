@@ -3,6 +3,7 @@ using Azure.Identity;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -204,6 +205,12 @@ namespace KustoCopyConsole.JobParameter
             return yaml;
         }
 
+        // YamlDotNet discovers constructors and property accessors through reflection.
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(MainJobParameterization))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(ActivityParameterization))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(TableParameterization))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(SourceTableParameterization))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor, typeof(DestinationTableParameterization))]
         private static MainJobParameterization LoadYaml(string yamlPath)
         {
             var yamlContent = File.ReadAllText(yamlPath);
