@@ -22,8 +22,7 @@ namespace KustoCopyConsole.Runner.Source
         #endregion
 
         private const int MAX_EXTENT_COUNT = 10000;
-        private const int MAX_ACTIVE_BLOCKS_PER_ITERATION = 2000;
-        private const int MIN_ACTIVE_BLOCKS_PER_ITERATION = 1000;
+        private const int MAX_ACTIVE_BLOCKS = 2000;
         private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
         private const long MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
 
@@ -90,7 +89,7 @@ namespace KustoCopyConsole.Runner.Source
 
                 iteration = TransitionToPlanning(iteration, cursor);
             }
-            if (iteration.State == IterationState.Planning && ShouldPlan(iteration.IterationKey))
+            if (iteration.State == IterationState.Planning && CanPlan())
             {
                 await MigrateDataAsync(
                     queryClient,
@@ -106,38 +105,17 @@ namespace KustoCopyConsole.Runner.Source
             }
         }
 
-        #region Planning conditions
-        private bool ShouldPlan(IterationKey iterationKey)
+        private bool CanPlan()
         {
-            var activeBlockCount = Database.QueryAggregatedBlockMetrics(iterationKey)
-                .Where(p => p.Key < BlockMetric.ExtentMoved)
-                .Sum(p => p.Value);
-
-            return activeBlockCount < MIN_ACTIVE_BLOCKS_PER_ITERATION;
-        }
-
-        private bool CanKeepPlanning(IterationKey iterationKey)
-        {
-            //  Find all activities on the same cluster
-            var activity = Parameterization.GetActivity(iterationKey.ActivityName);
-            var sourceClusterUri = activity.GetSourceTableIdentity().ClusterUri;
             var activityNames = Parameterization.Activities
-                .Where(a => a.GetSourceTableIdentity().ClusterUri == sourceClusterUri)
                 .Select(a => a.ActivityName);
-            //  Find all iteration keys on that cluster
-            var iterationKeys = Database.Iterations.Query()
-                .Where(pf => pf.In(i => i.IterationKey.ActivityName, activityNames))
-                .AsEnumerable()
-                .Select(i => i.IterationKey);
-            //  Count active blocks across those iterations
-            var activeBlockCount = iterationKeys
-                .SelectMany(k => Database.QueryAggregatedBlockMetrics(k))
-                .Where(p => p.Key < BlockMetric.ExtentMoved)
-                .Sum(p => p.Value);
+            var activeBlockCount = Database.BlockMetrics.Query()
+                .Where(pf => pf.In(bm => bm.IterationKey.ActivityName, activityNames))
+                .Where(pf => pf.LessThan(bm => bm.BlockMetric, BlockMetric.ExtentMoved))
+                .Sum(bm => bm.Value);
 
-            return activeBlockCount < MAX_ACTIVE_BLOCKS_PER_ITERATION;
+            return activeBlockCount < MAX_ACTIVE_BLOCKS;
         }
-        #endregion
 
         private async Task MigrateDataAsync(
             DbQueryClient queryClient,
@@ -223,7 +201,7 @@ namespace KustoCopyConsole.Runner.Source
                 iterationKey,
                 lastPartition,
                 ct)
-            && CanKeepPlanning(iterationKey));
+            && CanPlan());
         }
 
         private async Task<bool> SubPartitionAsync(
