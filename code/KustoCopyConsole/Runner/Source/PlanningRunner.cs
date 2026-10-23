@@ -111,7 +111,7 @@ namespace KustoCopyConsole.Runner.Source
                 .Where(pf => pf.LessThan(bm => bm.BlockMetric, BlockMetric.ExtentMoved))
                 .Sum(bm => bm.Value);
 
-            return activeBlockCount < MAX_ACTIVE_BLOCKS;
+            return activeBlockCount <= MAX_ACTIVE_BLOCKS;
         }
 
         private async Task MigrateDataAsync(
