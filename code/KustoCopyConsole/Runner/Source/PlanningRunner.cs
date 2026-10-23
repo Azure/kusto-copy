@@ -309,7 +309,6 @@ namespace KustoCopyConsole.Runner.Source
                 var timeIntervals = await queryClient.BasicPartitionRowsAsync(
                     new KustoPriority(iteration.IterationKey),
                     activityParam.GetSourceTableIdentity().TableName,
-                    activityParam.KqlQuery,
                     iteration.CursorStart,
                     iteration.CursorEnd,
                     parentPartition?.MinIngestionTime,

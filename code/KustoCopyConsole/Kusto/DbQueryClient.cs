@@ -52,7 +52,6 @@ namespace KustoCopyConsole.Kusto
         public async Task<IEnumerable<TimeInterval>> BasicPartitionRowsAsync(
             KustoPriority priority,
             string tableName,
-            string kqlQuery,
             string? cursorStart,
             string? cursorEnd,
             string? minIngestionTime,
@@ -72,7 +71,7 @@ namespace KustoCopyConsole.Kusto
                         cursorEnd,
                         minIngestionTime,
                         maxIngestionTime,
-                        kqlQuery);
+                        string.Empty);
                     var query = @$"
                 let PartitionResolution=timespan({partitionResolution});
                 {baseDataQuery}
