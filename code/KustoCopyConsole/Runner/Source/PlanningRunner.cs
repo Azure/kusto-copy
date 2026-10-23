@@ -44,10 +44,13 @@ namespace KustoCopyConsole.Runner.Source
             IEnumerable<string> activityNames,
             CancellationToken ct)
         {
-            foreach (var activityName in activityNames)
+            if (CanPlan())
             {
-                ct.ThrowIfCancellationRequested();
-                await RunActivityAsync(activityName, ct);
+                foreach (var activityName in activityNames)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await RunActivityAsync(activityName, ct);
+                }
             }
         }
 
@@ -70,6 +73,11 @@ namespace KustoCopyConsole.Runner.Source
 
             foreach (var iteration in iterations)
             {
+                if(!CanPlan())
+                {
+                    return;
+                }
+                ct.ThrowIfCancellationRequested();
                 await RunIterationAsync(activityParam, iteration, queryClient, commandClient, ct);
             }
         }
@@ -89,7 +97,7 @@ namespace KustoCopyConsole.Runner.Source
 
                 iteration = TransitionToPlanning(iteration, cursor);
             }
-            if (iteration.State == IterationState.Planning && CanPlan())
+            if (iteration.State == IterationState.Planning)
             {
                 await MigrateDataAsync(
                     queryClient,
@@ -191,14 +199,14 @@ namespace KustoCopyConsole.Runner.Source
                     .Take(1)
                     .FirstOrDefault();
             }
-            while (await SubPartitionAsync(
+            while (CanPlan()
+            && await SubPartitionAsync(
                 queryClient,
                 commandClient,
                 activityParam,
                 iterationKey,
                 lastPartition,
-                ct)
-            && CanPlan());
+                ct));
         }
 
         private async Task<bool> SubPartitionAsync(
