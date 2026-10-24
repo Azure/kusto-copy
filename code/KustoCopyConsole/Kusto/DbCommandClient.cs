@@ -8,6 +8,7 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbCommandClient : KustoClientBase
     {
+        private static readonly ClientRequestProperties EMPTY_PROPERTIES = new();
         private readonly ICslAdminProvider _provider;
         private readonly Uri _queryUri;
 
@@ -174,11 +175,10 @@ namespace KustoCopyConsole.Kusto
                     var commandText = @$"
 .show operation {operationId} details
 ";
-                    var properties = new ClientRequestProperties();
                     var reader = await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
                         commandText,
-                        properties);
+                        EMPTY_PROPERTIES);
                     var result = reader
                         .ToEnumerable(r => new ExportDetail(
                             new Uri((string)(r[0])),
@@ -204,12 +204,11 @@ namespace KustoCopyConsole.Kusto
                     var commandText = @$"
 .drop table ['{tableName}'] ifexists
 ";
-                    var properties = new ClientRequestProperties();
 
                     await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
                         commandText,
-                        properties);
+                        EMPTY_PROPERTIES);
 
                     return 0;
                 },
@@ -253,11 +252,10 @@ namespace KustoCopyConsole.Kusto
 
     .alter table ['{tempTableName}'] policy restricted_view_access true
 ";
-                    var properties = new ClientRequestProperties();
                     var reader = await _provider.ExecuteControlCommandAsync(
                         DatabaseName,
                         commandText,
-                        properties);
+                        EMPTY_PROPERTIES);
                     var result = reader
                         .ToEnumerable(r => new
                         {
@@ -338,11 +336,10 @@ namespace KustoCopyConsole.Kusto
 | where Tags in ({tagListText})
 | project ExtentId, Tags, RowCount
 ";
-                   var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
-                       properties);
+                       EMPTY_PROPERTIES);
                    var results = reader
                         .ToEnumerable(r => new ExtentRowCount(
                             ((Guid)r["ExtentId"]).ToString(),
@@ -372,11 +369,10 @@ namespace KustoCopyConsole.Kusto
     with (setNewIngestionTime=true)
     ({extentIdTextList})
 ";
-                   var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
-                       properties);
+                       EMPTY_PROPERTIES);
                    var operationId = reader
                     .ToEnumerable(r => DbNullHelper.To<Guid>(r[0]))
                     .FirstOrDefault();
@@ -439,11 +435,10 @@ namespace KustoCopyConsole.Kusto
 .drop table ['{tableName}'] extent tags
     ({tagListText})
 ";
-                   var properties = new ClientRequestProperties();
                    var reader = await _provider.ExecuteControlCommandAsync(
                        DatabaseName,
                        commandText,
-                       properties);
+                       EMPTY_PROPERTIES);
                    var results = reader
                     .ToEnumerable(r => new
                     {
