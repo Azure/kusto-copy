@@ -30,6 +30,7 @@ activities:
     tableName: "string"
   kqlQuery: "string"
   postPlanningKqlQuery: "string"
+  blockRowCountTarget: "integer"
 stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
@@ -62,6 +63,7 @@ Each activity connects one source table to one destination table.
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
 | postPlanningKqlQuery | String | No | — | [Post-planning KQL query][postPlanning] |
+| blockRowCountTarget | Integer | No | 250000000 | [Block row target][blockTarget] |
 
 #### Source
 
@@ -124,10 +126,40 @@ more selective than the planner's assumptions; choose carefully based on your wo
 
 See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
 
+<a id="block-row-count-target"></a>
+
+## Block row count target
+
+`blockRowCountTarget` is an optional positive 64-bit integer on each activity, next to
+`postPlanningKqlQuery`. It defaults to `250000000` (250 million rows). It is intended to guide
+the number of input rows per block only when `postPlanningKqlQuery` is non-empty, not the
+number of rows produced by that query. Without a post-planning query, it has no effect.
+
+Planning does not run the post-planning query, so it cannot account for its data reduction or
+processing cost. A daily or weekly aggregation might shrink 250 million input rows to only a
+few thousand output rows; a larger target can avoid wastefully small exports. Conversely,
+complex parsing without aggregation might make 250 million input rows too expensive to
+process at once, calling for a smaller target.
+
+For example, specify a larger input-row target for a daily aggregation:
+
+```yaml
+activities:
+- activityName: "daily-temperature"
+  postPlanningKqlQuery: >-
+    | summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1d), WidgetId
+  blockRowCountTarget: 1000000000
+```
+
+> [!NOTE]
+> This setting is currently accepted, validated, and stored in the parameterization only.
+> It is not yet used by planning or export, so changing it does not change block sizes.
+
 [storage]: parameters.md#adls-gen-2-containers
 [mode]: parameters.md#copy-mode
 [export]: parameters.md#parallel-export
 [identity]: parameters.md#client-id
 [query]: parameters.md#query
 [postPlanning]: #post-planning-kql-query
+[blockTarget]: #block-row-count-target
 [entity-group]: https://learn.microsoft.com/kusto/management/entity-groups
