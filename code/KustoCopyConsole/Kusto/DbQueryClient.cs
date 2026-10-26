@@ -441,35 +441,20 @@ BaseData
 ";
                     try
                     {
-                        var readerTask = _provider.ExecuteQueryAsync(
+                        var properties = EMPTY_PROPERTIES.Clone();
+
+                        properties.SetOption(ClientRequestProperties.OptionServerTimeout, timeout);
+
+                        var reader = await _provider.ExecuteQueryAsync(
                             _databaseName,
                             query,
-                            EMPTY_PROPERTIES,
+                            properties,
                             ct);
-                        var delayTask = Task.Delay(timeout);
+                        var rowPartitions = reader
+                            .ToEnumerable(r => (long)r[0])
+                            .First();
 
-                        await Task.WhenAny(readerTask, delayTask);
-
-                        if (delayTask.IsCompleted)
-                        {
-                            try
-                            {   //  Complete the query not to burden the cluster with
-                                //  multiple concurrent queries
-                                await readerTask;
-                            }
-                            catch { }
-
-                            return null;
-                        }
-                        else
-                        {
-                            var reader = await readerTask;
-                            var rowPartitions = reader
-                                .ToEnumerable(r => (long)r[0])
-                                .First();
-
-                            return rowPartitions;
-                        }
+                        return rowPartitions;
                     }
                     catch (Exception ex)
                     {
