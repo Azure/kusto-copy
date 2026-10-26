@@ -339,12 +339,6 @@ namespace KustoCopyConsole.Runner.Source
                 && parentPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION
                 && parentPartition.ExtentCount <= MAX_EXTENT_COUNT)
             {   //  Ready to actually load blocks
-                if (parentPartition.Level >= MAX_LEVEL)
-                {
-                    throw new InvalidOperationException(
-                        "We reached the deepest allowed planning level");
-                }
-
                 await LoadBlocksWithoutPostPlanningQueryAsync(
                     queryClient,
                     commandClient,
