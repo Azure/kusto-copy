@@ -77,14 +77,14 @@ For the second level onward, we use `kqlQuery` to estimate how much data falls i
 If a query times out or runs out of memory, we retry without the `kqlQuery` fragment as a fallback;
 if it still fails, planning fails permanently with a clear error.
 
-We recursively sub-partition a partition until one of these is true:
-
-* the partition is small enough to be a single block
-* the partition is as granular as the chosen time resolution allows
-* the projected output is within the target block size and can be exported as-is
+We recursively sub-partition a partition when its raw row count or extent count exceeds the
+partition limits, stopping when it is small enough to load as one or more blocks.  Sub-partitioning
+may continue through the last supported time-resolution level.  At that last level, load blocks if
+the partition is non-empty and within the row and extent limits; if it still requires
+sub-partitioning, fail planning rather than splitting beyond the supported resolution.
 
 Small sub-partitions are merged at the KQL level with `row_cumsum()` to avoid generating a large
-number of near-empty partitions.
+number of near-empty blocks.
 
 ### With a post-planning query
 
@@ -96,10 +96,13 @@ resulting row estimate as the planning budget.
 The target algorithm is:
 
 * estimate the output size of the partition after the post-planning query
-* if the estimate is below the target block threshold, keep the partition large and create a block
-* if the estimate is above the threshold, split the partition into smaller time bins and re-estimate
-* continue until the projected output fits within a block budget, or until the partition reaches the
-  smallest supported time resolution
+* if the estimate is at or below the target block threshold, keep the partition large and create a
+  block
+* if the estimate is above the threshold, or cannot be evaluated, split the partition into smaller
+  time bins and re-estimate
+* continue splitting through the last supported time-resolution level; at that level, create a block
+  if the estimate is within the threshold, but fail planning if it is still too large or cannot be
+  evaluated rather than splitting beyond the supported resolution
 
 This is intentionally different from "raw row count decides block size."  With aggregation-heavy
 exports, raw source row counts are a poor proxy for useful work.

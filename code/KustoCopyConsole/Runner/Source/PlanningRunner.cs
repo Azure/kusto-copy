@@ -14,6 +14,7 @@ namespace KustoCopyConsole.Runner.Source
 {
     internal class PlanningRunner : ClusterRunnerBase
     {
+        private static readonly TimeSpan POST_PLANNING_TIMEOUT = TimeSpan.FromMinutes(2.5);
         private const int MAX_EXTENT_COUNT = 10000;
         private const int MAX_ACTIVE_BLOCKS = 2000;
         private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
@@ -302,6 +303,7 @@ namespace KustoCopyConsole.Runner.Source
                 iteration.CursorEnd,
                 parentPartition.MinIngestionTime,
                 parentPartition.MaxIngestionTime,
+                POST_PLANNING_TIMEOUT,
                 ct);
 
             if (rowCount == null || rowCount > MAX_ROW_COUNT_PER_BLOCK)

@@ -419,6 +419,7 @@ namespace KustoCopyConsole.Kusto
             string cursorEnd,
             string minIngestionTime,
             string maxIngestionTime,
+            TimeSpan timeout,
             CancellationToken ct)
         {
             return await RequestRunAsync(
@@ -434,21 +435,41 @@ namespace KustoCopyConsole.Kusto
                         kqlQuery);
                     var query = @$"
 {baseDataQuery}
+BaseData
 {postPlanningQuery}
 | count
 ";
                     try
                     {
-                        var reader = await _provider.ExecuteQueryAsync(
+                        var readerTask = _provider.ExecuteQueryAsync(
                             _databaseName,
                             query,
                             EMPTY_PROPERTIES,
                             ct);
-                        var rowPartitions = reader
-                            .ToEnumerable(r => (long)r[0])
-                            .First();
+                        var delayTask = Task.Delay(timeout);
 
-                        return rowPartitions;
+                        await Task.WhenAny(readerTask, delayTask);
+
+                        if (delayTask.IsCompleted)
+                        {
+                            try
+                            {   //  Complete the query not to burden the cluster with
+                                //  multiple concurrent queries
+                                await readerTask;
+                            }
+                            catch { }
+
+                            return null;
+                        }
+                        else
+                        {
+                            var reader = await readerTask;
+                            var rowPartitions = reader
+                                .ToEnumerable(r => (long)r[0])
+                                .First();
+
+                            return rowPartitions;
+                        }
                     }
                     catch (Exception ex)
                     {
