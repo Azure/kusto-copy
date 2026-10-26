@@ -94,16 +94,18 @@ reference in that group.
 ## 🧮 Post-planning KQL query
 
 Use the YAML activity property `postPlanningKqlQuery` to run additional KQL on the rows
-selected by the regular query during the export phase only. It is intentionally not used by
-planning, so it does not influence block selection or query planning cost.
+selected by the regular query. Planning also executes the combined query to count output rows,
+targeting at most 16 million rows per block rather than limiting raw input rows. Large or expensive
+partitions are subdivided down to 1 ms; a successful query at that resolution may exceed the
+target.
 
 When `postPlanningKqlQuery` is non-empty, destination extent `CreationTime` is no longer
 matched to the source, even if the query only filters or projects rows. Without a
 post-planning query, source extent creation times are preserved.
 
-This is useful for aggregations, expensive filters, or other transformations that you want to
-apply only to exported data. A common example is summarizing by hour, but a regex-based filter
-can also be appropriate if you want to trade planning cost for export-only processing.
+This is useful for aggregations, expensive filters, or other transformations of exported data.
+A common example is summarizing by hour. These transformations also incur planning cost:
+the full query runs during output counting and again during export.
 
 For example, summarize temperature readings by hour and widget:
 
@@ -121,8 +123,8 @@ and removes the trailing newline. More-indented lines retain line breaks, which 
 accepts.
 
 The destination table's schema must match the post-planning query output, not the original
-source rows. Because the query is not part of planning, the exported result may be smaller or
-more selective than the planner's assumptions; choose carefully based on your workload.
+source rows. Aggregations run independently per block, not globally across the copy. Larger
+input partitions let the source aggregate more data before the destination combines the results.
 
 See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
 
@@ -135,11 +137,8 @@ See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a comple
 the number of input rows per block only when `postPlanningKqlQuery` is non-empty, not the
 number of rows produced by that query. Without a post-planning query, it has no effect.
 
-Planning does not run the post-planning query, so it cannot account for its data reduction or
-processing cost. A daily or weekly aggregation might shrink 250 million input rows to only a
-few thousand output rows; a larger target can avoid wastefully small exports. Conversely,
-complex parsing without aggregation might make 250 million input rows too expensive to
-process at once, calling for a smaller target.
+The planner now counts post-planning output rows and subdivides on timeouts or query resource
+limits. Its 16-million-output-row target is separate from this unused input-row setting.
 
 For example, specify a larger input-row target for a daily aggregation:
 

@@ -60,8 +60,10 @@ selection and network paths.
 - Ensure the `execute_show_command` plugin is available; planning uses it to obtain extent
   metadata.
 - Check any `-q` fragment. Use it for row-level operations that matter to planning; put
-  export-only transforms in the YAML activity property
+  aggregations in the YAML activity property
   [`postPlanningKqlQuery`](yaml.md#post-planning-kql-query).
+- Post-planning queries also run during planning. Timeout or query memory/resource-limit failures
+  cause subdivision down to 1 ms; failures at that resolution stop planning with a diagnostic.
 - Watch the total block count. It can grow during `Planning`, while export and ingestion
   are already running. Planning also pauses intentionally when enough blocks are in flight.
 

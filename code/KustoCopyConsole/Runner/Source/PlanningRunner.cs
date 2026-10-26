@@ -25,6 +25,7 @@ namespace KustoCopyConsole.Runner.Source
         private const int MAX_ACTIVE_BLOCKS = 2000;
         private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
         private const long MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
+        private const int MAX_LEVEL = 6;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, true, TimeSpan.FromSeconds(15))
@@ -73,7 +74,7 @@ namespace KustoCopyConsole.Runner.Source
 
             foreach (var iteration in iterations)
             {
-                if(!CanPlan())
+                if (!CanPlan())
                 {
                     return;
                 }
@@ -104,7 +105,7 @@ namespace KustoCopyConsole.Runner.Source
                     activityParam,
                     iteration,
                     ct);
-                await PartitionDataAsync(
+                await PartitionIterationDataAsync(
                     queryClient,
                     commandClient,
                     activityParam,
@@ -181,7 +182,16 @@ namespace KustoCopyConsole.Runner.Source
             return iteration;
         }
 
-        private async Task PartitionDataAsync(
+        private IterationRecord LoadIteration(IterationKey iterationKey)
+        {
+            var iteration = Database.Iterations.Query()
+                .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
+                .First();
+
+            return iteration;
+        }
+
+        private async Task PartitionIterationDataAsync(
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
@@ -191,52 +201,56 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2? lastPartition = null;
 
             do
-            {   //  Depth first
+            {
+                //  Depth first
                 lastPartition = Database.PlanningPartitions2.Query()
                     .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
                     .OrderByDescending(pp => pp.Level)
                     .ThenBy(pp => pp.PartitionId)
                     .Take(1)
                     .FirstOrDefault();
-            }
-            while (CanPlan()
-            && await SubPartitionAsync(
-                queryClient,
-                commandClient,
-                activityParam,
-                iterationKey,
-                lastPartition,
-                ct));
-        }
 
-        private async Task<bool> SubPartitionAsync(
-            DbQueryClient queryClient,
-            DbCommandClient commandClient,
-            ActivityParameterization activityParam,
-            IterationKey iterationKey,
-            PlanningPartitionRecord2? lastPartition,
-            CancellationToken ct)
-        {
-            var iteration = Database.Iterations.Query()
-                .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
-                .First();
-
-            if (lastPartition != null
-                && lastPartition.Level >= 3
-                && lastPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION
-                && lastPartition.ExtentCount <= MAX_EXTENT_COUNT)
-            {
-                return await LoadBlocksAsync(
+                await SubPartitionAsync(
                     queryClient,
                     commandClient,
                     activityParam,
+                    LoadIteration(iterationKey),
+                    lastPartition,
+                    ct);
+            }
+            while (CanPlan() && LoadIteration(iterationKey).State == IterationState.Planning);
+        }
+
+        private async Task SubPartitionAsync(
+            DbQueryClient queryClient,
+            DbCommandClient commandClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            PlanningPartitionRecord2? lastPartition,
+            CancellationToken ct)
+        {
+            if (lastPartition == null)
+            {   //  Level 1:  breakdown per day
+                await InitialBreakdownAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
+                    ct);
+            }
+            else if (string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery))
+            {
+                await SubPartitionWithPostPlanningQueryAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
                     lastPartition,
                     ct);
             }
             else
             {
-                return await PartitionRowsAsync(
+                await SubPartitionWithoutPostPlanningQueryAsync(
                     queryClient,
+                    commandClient,
                     activityParam,
                     iteration,
                     lastPartition,
@@ -244,67 +258,121 @@ namespace KustoCopyConsole.Runner.Source
             }
         }
 
-        private async Task<bool> PartitionRowsAsync(
+        #region Initial Breakdown
+        private async Task InitialBreakdownAsync(
             DbQueryClient queryClient,
             ActivityParameterization activityParam,
             IterationRecord iteration,
-            PlanningPartitionRecord2? parentPartition,
             CancellationToken ct)
         {
-            var planningPartitions = await GetSubPlanningPartitionRecordsAsync(
-                queryClient,
-                activityParam,
-                iteration,
-                parentPartition,
+            var timeIntervals = await queryClient.InitialPartitionRowsAsync(
+                new KustoPriority(iteration.IterationKey),
+                activityParam.GetSourceTableIdentity().TableName,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                GetPartitionResolution(1),
+                ct);
+            var planningPartitions = timeIntervals
+                .Index()
+                .Select(ti => new PlanningPartitionRecord2(
+                    iteration.IterationKey,
+                    1,
+                    ti.Index,
+                    0,
+                    0,
+                    ti.Item.MinIngestionTime,
+                    ti.Item.MaxIngestionTime))
+                .ToArray();
+
+            Database.PlanningPartitions2.AppendRecords(planningPartitions);
+            if (planningPartitions.Length == 0)
+            {
+                PlannedIfPlanningCompleted(iteration.IterationKey);
+            }
+        }
+        #endregion
+
+        #region With Post planning
+        private async Task SubPartitionWithPostPlanningQueryAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            PlanningPartitionRecord2 parentPartition,
+            CancellationToken ct)
+        {
+            var rowCount = await queryClient.GetPostPlanningRowCountAsync(
+                new KustoPriority(iteration.IterationKey),
+                activityParam.GetSourceTableIdentity().TableName,
+                activityParam.KqlQuery,
+                activityParam.PostPlanningKqlQuery,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                parentPartition.MinIngestionTime,
+                parentPartition.MaxIngestionTime,
                 ct);
 
-            if (planningPartitions.Count() > 0)
-            {
-                using (var tx = Database.CreateTransaction())
-                {
-                    Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
-                    DeletePartition(parentPartition, tx);
-
-                    tx.Complete();
-                }
-
-                return true;
+            if (rowCount == null)
+            {   //  Can't evaluate the post planning query:  sub partition further
+                throw new NotImplementedException();
             }
             else
             {
-                ClearPlanning(iteration.IterationKey);
+                var protoBlock = new ProtoBlock(
+                    rowCount.Value,
+                    parentPartition.MinIngestionTime,
+                    parentPartition.MaxIngestionTime,
+                    null);
 
-                return false;
+                PersistBlocks(parentPartition, [protoBlock]);
             }
         }
+        #endregion
 
-        private async Task<PlanningPartitionRecord2[]> GetSubPlanningPartitionRecordsAsync(
+        #region Without Post planning
+        private async Task SubPartitionWithoutPostPlanningQueryAsync(
             DbQueryClient queryClient,
+            DbCommandClient commandClient,
             ActivityParameterization activityParam,
             IterationRecord iteration,
-            PlanningPartitionRecord2? parentPartition,
+            PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
-            var level = (parentPartition?.Level ?? 0) + 1;
+            if (parentPartition.RowCount > 0
+                && parentPartition.RowCount <= MAX_ROW_COUNT_PER_PARTITION
+                && parentPartition.ExtentCount <= MAX_EXTENT_COUNT)
+            {   //  Ready to actually load blocks
+                if (parentPartition.Level >= MAX_LEVEL)
+                {
+                    throw new InvalidOperationException(
+                        "We reached the deepest allowed planning level");
+                }
 
-            if (level < 3)
-            {
-                var timeIntervals = await queryClient.BasicPartitionRowsAsync(
+                await LoadBlocksWithoutPostPlanningQueryAsync(
+                    queryClient,
+                    commandClient,
+                    activityParam,
+                    iteration,
+                    parentPartition,
+                    ct);
+            }
+            else
+            {   //  Sub partition further
+                var timeIntervals = await queryClient.SubPartitionRowsAsync(
                     new KustoPriority(iteration.IterationKey),
                     activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
                     iteration.CursorStart,
                     iteration.CursorEnd,
-                    parentPartition?.MinIngestionTime,
-                    parentPartition?.MaxIngestionTime,
-                    GetPartitionResolution(parentPartition?.Level),
+                    parentPartition.MinIngestionTime,
+                    parentPartition.MaxIngestionTime,
+                    GetPartitionResolution(parentPartition.Level + 1),
                     MAX_ROW_COUNT_PER_PARTITION,
-                    MAX_EXTENT_COUNT,
                     ct);
                 var planningPartitions = timeIntervals
                     .Index()
                     .Select(ti => new PlanningPartitionRecord2(
                         iteration.IterationKey,
-                        level,
+                        parentPartition.Level + 1,
                         ti.Index,
                         0,
                         0,
@@ -312,133 +380,44 @@ namespace KustoCopyConsole.Runner.Source
                         ti.Item.MaxIngestionTime))
                     .ToArray();
 
-                return planningPartitions;
-            }
-            else
-            {
-                var rowPartitions = await queryClient.DetailedPartitionRowsAsync(
-                    new KustoPriority(iteration.IterationKey),
-                    activityParam.GetSourceTableIdentity().TableName,
-                    activityParam.KqlQuery,
-                    iteration.CursorStart,
-                    iteration.CursorEnd,
-                    parentPartition!.MinIngestionTime,
-                    parentPartition!.MaxIngestionTime,
-                    GetPartitionResolution(parentPartition.Level),
-                    MAX_ROW_COUNT_PER_PARTITION,
-                    MAX_EXTENT_COUNT,
-                    ct);
-                var planningPartitions = rowPartitions
-                    .Index()
-                    .Select(rp => new PlanningPartitionRecord2(
-                        iteration.IterationKey,
-                        level,
-                        rp.Index,
-                        rp.Item.RowCount,
-                        rp.Item.ExtentCount,
-                        rp.Item.TimeInterval.MinIngestionTime,
-                        rp.Item.TimeInterval.MaxIngestionTime))
-                    .ToArray();
-
-                return planningPartitions;
-            }
-        }
-
-        private void DeletePartition(PlanningPartitionRecord2? partition, TransactionContext tx)
-        {
-            if (partition != null)
-            {
-                Database.PlanningPartitions2.Query(tx)
-                    .Where(pf => pf.Equal(pp => pp.IterationKey, partition.IterationKey))
-                    .Where(pf => pf.Equal(pp => pp.Level, partition.Level))
-                    .Where(pf => pf.Equal(pp => pp.PartitionId, partition.PartitionId))
-                    .Delete();
-            }
-        }
-
-        private TimeSpan GetPartitionResolution(int? level)
-        {
-            return level switch
-            {
-                null => TimeSpan.FromDays(1),
-                1 => TimeSpan.FromHours(1),
-                2 => TimeSpan.FromMinutes(1),
-                3 => TimeSpan.FromSeconds(1),
-                4 => TimeSpan.FromMilliseconds(100),
-                _ => throw new NotSupportedException($"Level {level}")
-            };
-        }
-
-        private async Task<bool> LoadBlocksAsync(
-            DbQueryClient queryClient,
-            DbCommandClient commandClient,
-            ActivityParameterization activityParam,
-            PlanningPartitionRecord2 parentPartition,
-            CancellationToken ct)
-        {
-            var protoBlocks = string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery)
-                ? await LoadProtoBlocksAsync(
-                    queryClient,
-                    commandClient,
-                    activityParam,
-                    parentPartition,
-                    ct)
-                : [new ProtoBlock(
-                    0,
-                    parentPartition.MinIngestionTime,
-                    parentPartition.MaxIngestionTime,
-                    null)];
-
-            using (var tx = Database.CreateTransaction())
-            {
-                DeletePartition(parentPartition, tx);
-                if (protoBlocks.Count() > 0)
+                using (var tx = Database.CreateTransaction())
                 {
-                    //  Refresh iteration entity
-                    var iteration = Database.Iterations.Query(tx)
-                        .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
-                        .First();
-                    var nextBlockId = iteration.NextBlockId;
-                    var blocks = protoBlocks
-                        .Select(p => new BlockRecord(
-                            BlockState.Planned,
-                            new BlockKey(iteration.IterationKey, nextBlockId++),
-                            p.MinIngestionTime,
-                            p.MaxIngestionTime,
-                            p.CreationTime,
-                            p.RowCount,
-                            0,
-                            string.Empty,
-                            string.Empty,
-                            string.Empty))
-                        .ToImmutableArray();
+                    DeletePartition(parentPartition, tx);
+                    Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
+                    PlannedIfPlanningCompleted(iteration.IterationKey, tx);
 
-                    Database.Blocks.AppendRecords(blocks, tx);
-                    Database.Iterations.UpdateRecord(
-                        iteration,
-                        iteration with { NextBlockId = nextBlockId },
-                        tx);
+                    tx.Complete();
                 }
-
-                var result = ClearPlanning(parentPartition.IterationKey, tx);
-
-                tx.Complete();
-
-                return result;
             }
         }
 
-        private async Task<IEnumerable<ProtoBlock>> LoadProtoBlocksAsync(
+        private async Task LoadBlocksWithoutPostPlanningQueryAsync(
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
+            IterationRecord iteration,
             PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
-            var iteration = Database.Iterations.Query()
-                .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
-                .First();
+            var protoBlocks = await LoadProtoBlocksWithoutPostPlanningQueryAsync(
+                queryClient,
+                commandClient,
+                activityParam,
+                iteration,
+                parentPartition,
+                ct);
 
+            PersistBlocks(parentPartition, protoBlocks);
+        }
+
+        private async Task<IEnumerable<ProtoBlock>> LoadProtoBlocksWithoutPostPlanningQueryAsync(
+            DbQueryClient queryClient,
+            DbCommandClient commandClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            PlanningPartitionRecord2 parentPartition,
+            CancellationToken ct)
+        {
             while (true)
             {
                 var extentIds = await queryClient.GetExtentIdsAsync(
@@ -481,8 +460,76 @@ namespace KustoCopyConsole.Runner.Source
                 }
             }
         }
+        #endregion
 
-        private bool ClearPlanning(IterationKey iterationKey, TransactionContext? tx = null)
+        private void PersistBlocks(
+            PlanningPartitionRecord2 parentPartition,
+            IEnumerable<ProtoBlock> protoBlocks)
+        {
+            using (var tx = Database.CreateTransaction())
+            {
+                DeletePartition(parentPartition, tx);
+                if (protoBlocks.Count() > 0)
+                {
+                    var iteration = Database.Iterations.Query(tx)
+                        .Where(pf => pf.Equal(i => i.IterationKey, parentPartition.IterationKey))
+                        .First();
+                    var nextBlockId = iteration.NextBlockId;
+                    var blocks = protoBlocks
+                        .Select(p => new BlockRecord(
+                            BlockState.Planned,
+                            new BlockKey(iteration.IterationKey, nextBlockId++),
+                            p.MinIngestionTime,
+                            p.MaxIngestionTime,
+                            p.CreationTime,
+                            p.RowCount,
+                            0,
+                            string.Empty,
+                            string.Empty,
+                            string.Empty))
+                        .ToArray();
+
+                    Database.Blocks.AppendRecords(blocks, tx);
+                    Database.Iterations.UpdateRecord(
+                        iteration,
+                        iteration with { NextBlockId = nextBlockId },
+                        tx);
+                }
+                PlannedIfPlanningCompleted(parentPartition.IterationKey, tx);
+
+                tx.Complete();
+            }
+        }
+
+        private void DeletePartition(PlanningPartitionRecord2? partition, TransactionContext tx)
+        {
+            if (partition != null)
+            {
+                Database.PlanningPartitions2.Query(tx)
+                    .Where(pf => pf.Equal(pp => pp.IterationKey, partition.IterationKey))
+                    .Where(pf => pf.Equal(pp => pp.Level, partition.Level))
+                    .Where(pf => pf.Equal(pp => pp.PartitionId, partition.PartitionId))
+                    .Delete();
+            }
+        }
+
+        private TimeSpan GetPartitionResolution(int level)
+        {
+            return level switch
+            {
+                1 => TimeSpan.FromHours(1),
+                2 => TimeSpan.FromMinutes(1),
+                3 => TimeSpan.FromSeconds(1),
+                4 => TimeSpan.FromMilliseconds(100),
+                5 => TimeSpan.FromMilliseconds(10),
+                6 => TimeSpan.FromMilliseconds(1),
+                _ => throw new NotSupportedException($"Level {level}")
+            };
+        }
+
+        private void PlannedIfPlanningCompleted(
+            IterationKey iterationKey,
+            TransactionContext? tx = null)
         {
             var planning = Database.PlanningPartitions2.Query(tx)
                 .Where(pf => pf.Equal(pp => pp.IterationKey, iterationKey))
@@ -495,16 +542,13 @@ namespace KustoCopyConsole.Runner.Source
                     .Where(pf => pf.Equal(i => i.IterationKey, iterationKey))
                     .First();
 
-                Database.Iterations.UpdateRecord(
-                    iteration,
-                    iteration with { State = IterationState.Planned },
-                    tx);
-
-                return false;
-            }
-            else
-            {
-                return true;
+                if (iteration.State != IterationState.Planning)
+                {
+                    Database.Iterations.UpdateRecord(
+                        iteration,
+                        iteration with { State = IterationState.Planned },
+                        tx);
+                }
             }
         }
     }
