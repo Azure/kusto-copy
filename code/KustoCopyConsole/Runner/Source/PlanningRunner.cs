@@ -14,18 +14,11 @@ namespace KustoCopyConsole.Runner.Source
 {
     internal class PlanningRunner : ClusterRunnerBase
     {
-        #region Inner Types
-        private record ExtentBatch(
-            DateTime MinIngestionTime,
-            DateTime MaxIngestionTime,
-            long RecordCount);
-        #endregion
-
         private const int MAX_EXTENT_COUNT = 10000;
         private const int MAX_ACTIVE_BLOCKS = 2000;
         private const long MAX_ROW_COUNT_PER_BLOCK = 16000000;
         private const long MAX_ROW_COUNT_PER_PARTITION = 250 * MAX_ROW_COUNT_PER_BLOCK;
-        private const int MAX_LEVEL = 6;
+        private const int MAX_LEVEL = 7;
 
         public PlanningRunner(RunnerParameters parameters)
            : base(parameters, true, TimeSpan.FromSeconds(15))
@@ -378,6 +371,11 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
+            if (parentPartition.Level >= MAX_LEVEL)
+            {
+                throw new InvalidOperationException(
+                    "We reached the deepest allowed planning level");
+            }
             var timeIntervals = await queryClient.SubPartitionRowsAsync(
                 new KustoPriority(iteration.IterationKey),
                 activityParam.GetSourceTableIdentity().TableName,
@@ -537,12 +535,13 @@ namespace KustoCopyConsole.Runner.Source
         {
             return level switch
             {
-                1 => TimeSpan.FromHours(1),
-                2 => TimeSpan.FromMinutes(1),
-                3 => TimeSpan.FromSeconds(1),
-                4 => TimeSpan.FromMilliseconds(100),
-                5 => TimeSpan.FromMilliseconds(10),
-                6 => TimeSpan.FromMilliseconds(1),
+                1 => TimeSpan.FromDays(1),
+                2 => TimeSpan.FromHours(1),
+                3 => TimeSpan.FromMinutes(1),
+                4 => TimeSpan.FromSeconds(1),
+                5 => TimeSpan.FromMilliseconds(100),
+                6 => TimeSpan.FromMilliseconds(10),
+                7 => TimeSpan.FromMilliseconds(1),
                 _ => throw new NotSupportedException($"Level {level}")
             };
         }
