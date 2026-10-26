@@ -237,9 +237,9 @@ namespace KustoCopyConsole.Runner.Source
                     iteration,
                     ct);
             }
-            else if (string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery))
+            else if (!string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery))
             {
-                await SubPartitionWithPostPlanningQueryAsync(
+                await OpenPartitionWithPostPlanningQueryAsync(
                     queryClient,
                     activityParam,
                     iteration,
@@ -248,7 +248,7 @@ namespace KustoCopyConsole.Runner.Source
             }
             else
             {
-                await SubPartitionWithoutPostPlanningQueryAsync(
+                await OpenPartitionWithoutPostPlanningQueryAsync(
                     queryClient,
                     commandClient,
                     activityParam,
@@ -293,7 +293,7 @@ namespace KustoCopyConsole.Runner.Source
         #endregion
 
         #region With Post planning
-        private async Task SubPartitionWithPostPlanningQueryAsync(
+        private async Task OpenPartitionWithPostPlanningQueryAsync(
             DbQueryClient queryClient,
             ActivityParameterization activityParam,
             IterationRecord iteration,
@@ -311,9 +311,14 @@ namespace KustoCopyConsole.Runner.Source
                 parentPartition.MaxIngestionTime,
                 ct);
 
-            if (rowCount == null)
+            if (rowCount == null || rowCount > MAX_ROW_COUNT_PER_BLOCK)
             {   //  Can't evaluate the post planning query:  sub partition further
-                throw new NotImplementedException();
+                await SubPartitionWithoutPostPlanningQueryAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
+                    parentPartition,
+                    ct);
             }
             else
             {
@@ -329,7 +334,7 @@ namespace KustoCopyConsole.Runner.Source
         #endregion
 
         #region Without Post planning
-        private async Task SubPartitionWithoutPostPlanningQueryAsync(
+        private async Task OpenPartitionWithoutPostPlanningQueryAsync(
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
@@ -357,37 +362,52 @@ namespace KustoCopyConsole.Runner.Source
             }
             else
             {   //  Sub partition further
-                var timeIntervals = await queryClient.SubPartitionRowsAsync(
-                    new KustoPriority(iteration.IterationKey),
-                    activityParam.GetSourceTableIdentity().TableName,
-                    activityParam.KqlQuery,
-                    iteration.CursorStart,
-                    iteration.CursorEnd,
-                    parentPartition.MinIngestionTime,
-                    parentPartition.MaxIngestionTime,
-                    GetPartitionResolution(parentPartition.Level + 1),
-                    MAX_ROW_COUNT_PER_PARTITION,
+                await SubPartitionWithoutPostPlanningQueryAsync(
+                    queryClient,
+                    activityParam,
+                    iteration,
+                    parentPartition,
                     ct);
-                var planningPartitions = timeIntervals
-                    .Index()
-                    .Select(ti => new PlanningPartitionRecord2(
-                        iteration.IterationKey,
-                        parentPartition.Level + 1,
-                        ti.Index,
-                        0,
-                        0,
-                        ti.Item.MinIngestionTime,
-                        ti.Item.MaxIngestionTime))
-                    .ToArray();
+            }
+        }
 
-                using (var tx = Database.CreateTransaction())
-                {
-                    DeletePartition(parentPartition, tx);
-                    Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
-                    PlannedIfPlanningCompleted(iteration.IterationKey, tx);
+        private async Task SubPartitionWithoutPostPlanningQueryAsync(
+            DbQueryClient queryClient,
+            ActivityParameterization activityParam,
+            IterationRecord iteration,
+            PlanningPartitionRecord2 parentPartition,
+            CancellationToken ct)
+        {
+            var timeIntervals = await queryClient.SubPartitionRowsAsync(
+                new KustoPriority(iteration.IterationKey),
+                activityParam.GetSourceTableIdentity().TableName,
+                activityParam.KqlQuery,
+                iteration.CursorStart,
+                iteration.CursorEnd,
+                parentPartition.MinIngestionTime,
+                parentPartition.MaxIngestionTime,
+                GetPartitionResolution(parentPartition.Level + 1),
+                MAX_ROW_COUNT_PER_PARTITION,
+                ct);
+            var planningPartitions = timeIntervals
+                .Index()
+                .Select(ti => new PlanningPartitionRecord2(
+                    iteration.IterationKey,
+                    parentPartition.Level + 1,
+                    ti.Index,
+                    0,
+                    0,
+                    ti.Item.MinIngestionTime,
+                    ti.Item.MaxIngestionTime))
+                .ToArray();
 
-                    tx.Complete();
-                }
+            using (var tx = Database.CreateTransaction())
+            {
+                DeletePartition(parentPartition, tx);
+                Database.PlanningPartitions2.AppendRecords(planningPartitions, tx);
+                PlannedIfPlanningCompleted(iteration.IterationKey, tx);
+
+                tx.Complete();
             }
         }
 

@@ -31,6 +31,8 @@ The levels are:
 * 1 minute
 * 1 second
 * 100 milliseconds
+* 10 milliseconds
+* 1 millisecond
 
 At each level we create partitions over `ingestion_time()` ranges.  We work depth-first:  first
 refine the current partition, then continue until we either reach a leaf partition or we decide it
