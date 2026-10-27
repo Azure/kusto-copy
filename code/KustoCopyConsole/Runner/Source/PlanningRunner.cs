@@ -231,10 +231,11 @@ namespace KustoCopyConsole.Runner.Source
                     iteration,
                     ct);
             }
-            else if (!string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery))
+            else if (string.IsNullOrWhiteSpace(activityParam.PostPlanningKqlQuery))
             {
-                await OpenPartitionWithPostPlanningQueryAsync(
+                await OpenPartitionWithoutPostPlanningQueryAsync(
                     queryClient,
+                    commandClient,
                     activityParam,
                     iteration,
                     lastPartition,
@@ -242,9 +243,8 @@ namespace KustoCopyConsole.Runner.Source
             }
             else
             {
-                await OpenPartitionWithoutPostPlanningQueryAsync(
+                await OpenPartitionWithPostPlanningQueryAsync(
                     queryClient,
-                    commandClient,
                     activityParam,
                     iteration,
                     lastPartition,
@@ -294,20 +294,8 @@ namespace KustoCopyConsole.Runner.Source
             PlanningPartitionRecord2 parentPartition,
             CancellationToken ct)
         {
-            var rowCount = await queryClient.GetPostPlanningRowCountAsync(
-                new KustoPriority(iteration.IterationKey),
-                activityParam.GetSourceTableIdentity().TableName,
-                activityParam.KqlQuery,
-                activityParam.PostPlanningKqlQuery,
-                iteration.CursorStart,
-                iteration.CursorEnd,
-                parentPartition.MinIngestionTime,
-                parentPartition.MaxIngestionTime,
-                POST_PLANNING_TIMEOUT,
-                ct);
-
-            if (rowCount == null || rowCount > MAX_ROW_COUNT_PER_BLOCK)
-            {   //  Can't evaluate the post planning query:  sub partition further
+            if (parentPartition.Level == 1)
+            {   //  Let's first go to level 2
                 await SubPartitionWithoutPostPlanningQueryAsync(
                     queryClient,
                     activityParam,
@@ -316,14 +304,38 @@ namespace KustoCopyConsole.Runner.Source
                     ct);
             }
             else
-            {
-                var protoBlock = new ProtoBlock(
-                    rowCount.Value,
+            {   //  Let's try the post planning query 
+                var rowCount = await queryClient.GetPostPlanningRowCountAsync(
+                    new KustoPriority(iteration.IterationKey),
+                    activityParam.GetSourceTableIdentity().TableName,
+                    activityParam.KqlQuery,
+                    activityParam.PostPlanningKqlQuery,
+                    iteration.CursorStart,
+                    iteration.CursorEnd,
                     parentPartition.MinIngestionTime,
                     parentPartition.MaxIngestionTime,
-                    null);
+                    POST_PLANNING_TIMEOUT,
+                    ct);
 
-                PersistBlocks(parentPartition, [protoBlock]);
+                if (rowCount == null || rowCount > MAX_ROW_COUNT_PER_BLOCK)
+                {   //  Can't evaluate the post planning query:  sub partition further
+                    await SubPartitionWithoutPostPlanningQueryAsync(
+                        queryClient,
+                        activityParam,
+                        iteration,
+                        parentPartition,
+                        ct);
+                }
+                else
+                {
+                    var protoBlock = new ProtoBlock(
+                        rowCount.Value,
+                        parentPartition.MinIngestionTime,
+                        parentPartition.MaxIngestionTime,
+                        null);
+
+                    PersistBlocks(parentPartition, [protoBlock]);
+                }
             }
         }
         #endregion

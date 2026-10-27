@@ -68,14 +68,17 @@ namespace KustoCopyConsole.Kusto
                         string.Empty,
                         string.Empty);
                     var query = @$"
-                let PartitionResolution=timespan({partitionResolution});
-                {baseDataQuery}
-                BaseData
-                | summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
-                | order by PartitionBin asc
-                | project
-                    MinIngestionTime=tostring(PartitionBin),
-                    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
+let PartitionResolution=timespan({partitionResolution});
+{baseDataQuery}
+BaseData
+| summarize
+    MinIngestionTime=min(ingestion_time()),
+    MaxIngestionTime=max(ingestion_time())
+    by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
+| project
+    MinIngestionTime=tostring(MinIngestionTime),
+    MaxIngestionTime=tostring(MaxIngestionTime)
                 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -117,14 +120,17 @@ namespace KustoCopyConsole.Kusto
                         maxIngestionTime,
                         kqlQuery);
                     var query = @$"
-                let PartitionResolution=timespan({partitionResolution});
-                {baseDataQuery}
-                BaseData
-                | summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
-                | order by PartitionBin asc
-                | project
-                    MinIngestionTime=tostring(PartitionBin),
-                    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
+let PartitionResolution=timespan({partitionResolution});
+{baseDataQuery}
+BaseData
+| summarize
+    MinIngestionTime=min(ingestion_time()),
+    MaxIngestionTime=max(ingestion_time())
+    by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
+| project
+    MinIngestionTime=tostring(MinIngestionTime),
+    MaxIngestionTime=tostring(MaxIngestionTime)
                 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
