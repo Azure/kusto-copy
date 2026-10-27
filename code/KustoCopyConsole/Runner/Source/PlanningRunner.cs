@@ -37,6 +37,7 @@ namespace KustoCopyConsole.Runner.Source
         protected override async Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
+            bool isRunnerShared,
             CancellationToken ct)
         {
             if (CanPlan())

@@ -33,7 +33,9 @@ namespace KustoCopyConsole.Runner
                 //  Grouping activities by cluster URI
                 var groupings = Parameterization.Activities
                     .Where(a => activityNames.Contains(a.ActivityName))
-                    .GroupBy(a => GetClusterUri(a), a => a.ActivityName);
+                    .GroupBy(a => GetClusterUri(a), a => a.ActivityName)
+                    .ToArray();
+                var isRunnerShared = groupings.Length > parallelCount;
 
                 await Parallel.ForEachAsync(
                     groupings,
@@ -44,7 +46,7 @@ namespace KustoCopyConsole.Runner
                     },
                     async (g, token) =>
                     {
-                        await Task.Run(() => RunClusterAsync(g.Key, g, token), token);
+                        await Task.Run(() => RunClusterAsync(g.Key, g, isRunnerShared, token), token);
                     });
                 await SleepAsync(ct);
             }
@@ -53,6 +55,7 @@ namespace KustoCopyConsole.Runner
         protected abstract Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
+            bool isRunnerShared,
             CancellationToken ct);
 
         protected Uri GetClusterUri(ActivityParameterization a)
