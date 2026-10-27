@@ -50,7 +50,7 @@ namespace KustoCopyConsole.Kusto
                 Trace.TraceWarning($"   Inner:  {ex.InnerException.GetType().Name}" +
                     $" '{ex.InnerException.Message}'");
             }
-            Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
+            Trace.TraceInformation($"Stack trace:  {ex.StackTrace}");
             Trace.TraceWarning(string.Empty);
         }
     }
