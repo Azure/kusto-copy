@@ -25,6 +25,7 @@ namespace KustoCopyConsole.Runner.Destination
         protected override async Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
+            bool isRunnerShared,
             CancellationToken ct)
         {
             foreach (var activityName in activityNames)

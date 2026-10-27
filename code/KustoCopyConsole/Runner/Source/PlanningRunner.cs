@@ -37,6 +37,7 @@ namespace KustoCopyConsole.Runner.Source
         protected override async Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
+            bool isRunnerShared,
             CancellationToken ct)
         {
             if (CanPlan())
@@ -44,12 +45,12 @@ namespace KustoCopyConsole.Runner.Source
                 foreach (var activityName in activityNames)
                 {
                     ct.ThrowIfCancellationRequested();
-                    await RunActivityAsync(activityName, ct);
+                    await RunActivityAsync(activityName, isRunnerShared, ct);
                 }
             }
         }
 
-        protected async Task RunActivityAsync(string activityName, CancellationToken ct)
+        protected async Task RunActivityAsync(string activityName, bool isRunnerShared, CancellationToken ct)
         {
             var activityParam = Parameterization.GetActivity(activityName);
             var iterations = Database.Iterations.Query()
@@ -73,13 +74,20 @@ namespace KustoCopyConsole.Runner.Source
                     return;
                 }
                 ct.ThrowIfCancellationRequested();
-                await RunIterationAsync(activityParam, iteration, queryClient, commandClient, ct);
+                await RunIterationAsync(
+                    activityParam,
+                    iteration,
+                    isRunnerShared,
+                    queryClient,
+                    commandClient,
+                    ct);
             }
         }
 
         private async Task RunIterationAsync(
             ActivityParameterization activityParam,
             IterationRecord iteration,
+            bool isRunnerShared,
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             CancellationToken ct)
@@ -100,6 +108,7 @@ namespace KustoCopyConsole.Runner.Source
                     iteration,
                     ct);
                 await PartitionIterationDataAsync(
+                    isRunnerShared,
                     queryClient,
                     commandClient,
                     activityParam,
@@ -186,12 +195,24 @@ namespace KustoCopyConsole.Runner.Source
         }
 
         private async Task PartitionIterationDataAsync(
+            bool isRunnerShared,
             DbQueryClient queryClient,
             DbCommandClient commandClient,
             ActivityParameterization activityParam,
             IterationKey iterationKey,
             CancellationToken ct)
         {
+            long GetTotalBlockCount()
+            {
+                var totalBlockCount = Database.BlockMetrics.Query()
+                    .Where(pf => pf.Equal(bm => bm.IterationKey, iterationKey))
+                    .Where(pf => pf.LessThanOrEqual(bm => bm.BlockMetric, BlockMetric.ExtentMoved))
+                    .Sum(bm => bm.Value);
+
+                return totalBlockCount;
+            }
+
+            var initialTotalBlockCount = GetTotalBlockCount();
             PlanningPartitionRecord2? lastPartition = null;
 
             do
@@ -212,7 +233,10 @@ namespace KustoCopyConsole.Runner.Source
                     lastPartition,
                     ct);
             }
-            while (CanPlan() && LoadIteration(iterationKey).State == IterationState.Planning);
+            while (
+            CanPlan()
+            && LoadIteration(iterationKey).State == IterationState.Planning
+            && (!isRunnerShared || initialTotalBlockCount == GetTotalBlockCount()));
         }
 
         private async Task SubPartitionAsync(

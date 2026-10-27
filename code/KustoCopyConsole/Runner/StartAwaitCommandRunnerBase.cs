@@ -45,6 +45,7 @@ namespace KustoCopyConsole.Runner
         protected override async Task RunClusterAsync(
             Uri clusterUri,
             IEnumerable<string> activityNames,
+            bool isRunnerShared,
             CancellationToken ct)
         {
             //  Ensures cached capacity of cluster
