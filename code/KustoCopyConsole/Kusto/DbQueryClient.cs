@@ -8,8 +8,7 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbQueryClient : KustoClientBase
     {
-        private static readonly ClientRequestProperties EMPTY_PROPERTIES =
-            new ClientRequestProperties();
+        private static readonly ClientRequestProperties EMPTY_PROPERTIES = new();
         private readonly ICslQueryProvider _provider;
         private readonly Uri _queryUri;
         private readonly string _databaseName;
@@ -49,16 +48,12 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task<IEnumerable<TimeInterval>> BasicPartitionRowsAsync(
+        public async Task<IEnumerable<TimeInterval>> InitialPartitionRowsAsync(
             KustoPriority priority,
             string tableName,
             string? cursorStart,
-            string? cursorEnd,
-            string? minIngestionTime,
-            string? maxIngestionTime,
+            string cursorEnd,
             TimeSpan partitionResolution,
-            long MaxRowCount,
-            long MaxExtentCount,
             CancellationToken ct)
         {
             return await RequestRunAsync(
@@ -69,18 +64,21 @@ namespace KustoCopyConsole.Kusto
                         tableName,
                         cursorStart,
                         cursorEnd,
-                        minIngestionTime,
-                        maxIngestionTime,
+                        string.Empty,
+                        string.Empty,
                         string.Empty);
                     var query = @$"
-                let PartitionResolution=timespan({partitionResolution});
-                {baseDataQuery}
-                BaseData
-                | summarize by PartitionBin=bin(ingestion_time(), PartitionResolution)
-                | order by PartitionBin asc
-                | project
-                    MinIngestionTime=tostring(PartitionBin),
-                    MaxIngestionTime=tostring(PartitionBin+PartitionResolution)
+let PartitionResolution=timespan({partitionResolution});
+{baseDataQuery}
+BaseData
+| summarize
+    MinIngestionTime=min(ingestion_time()),
+    MaxIngestionTime=max(ingestion_time())
+    by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
+| project
+    MinIngestionTime=tostring(MinIngestionTime),
+    MaxIngestionTime=tostring(MaxIngestionTime)
                 ";
                     var reader = await _provider.ExecuteQueryAsync(
                         _databaseName,
@@ -98,12 +96,64 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task<IEnumerable<RowPartition>> DetailedPartitionRowsAsync(
+        public async Task<IEnumerable<TimeInterval>> SubPartitionRowsAsync(
             KustoPriority priority,
             string tableName,
             string kqlQuery,
             string? cursorStart,
-            string? cursorEnd,
+            string cursorEnd,
+            string? minIngestionTime,
+            string? maxIngestionTime,
+            TimeSpan partitionResolution,
+            long MaxRowCount,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var baseDataQuery = BuildBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
+                    var query = @$"
+let PartitionResolution=timespan({partitionResolution});
+{baseDataQuery}
+BaseData
+| summarize
+    MinIngestionTime=min(ingestion_time()),
+    MaxIngestionTime=max(ingestion_time())
+    by PartitionBin=bin(ingestion_time(), PartitionResolution)
+| order by PartitionBin asc
+| project
+    MinIngestionTime=tostring(MinIngestionTime),
+    MaxIngestionTime=tostring(MaxIngestionTime)
+                ";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var rowPartitions = reader
+                        .ToEnumerable(r => new TimeInterval(
+                            (string)r["MinIngestionTime"],
+                            (string)r["MaxIngestionTime"]))
+                        .ToImmutableArray();
+
+                    return rowPartitions;
+                },
+                ct);
+        }
+
+        public async Task<IEnumerable<RowPartition>> LoadPartitionAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string cursorEnd,
             string minIngestionTime,
             string maxIngestionTime,
             TimeSpan partitionResolution,
@@ -288,23 +338,23 @@ namespace KustoCopyConsole.Kusto
                 priority,
                                 async () =>
                                 {
-                                        var extentCreationTimesJsonList = string.Join(
-                                            ",\n",
-                                            extentCreationTimes
-                                                .Select(ect =>
-                                                    "{ \"extentId\" : \""
-                                                    + ect.ExtentId
-                                                    + "\", \"creationTime\" : \""
-                                                    + ect.CreationTime
-                                                    + "\" }"));
-                                        var baseDataQuery = BuildTimeRangeBaseDataQuery(
-                                            tableName,
-                                            cursorStart,
-                                            cursorEnd,
-                                            minIngestionTime,
-                                            maxIngestionTime,
-                                            kqlQuery);
-                                        var query = @$"
+                                    var extentCreationTimesJsonList = string.Join(
+                                        ",\n",
+                                        extentCreationTimes
+                                            .Select(ect =>
+                                                "{ \"extentId\" : \""
+                                                + ect.ExtentId
+                                                + "\", \"creationTime\" : \""
+                                                + ect.CreationTime
+                                                + "\" }"));
+                                    var baseDataQuery = BuildTimeRangeBaseDataQuery(
+                                        tableName,
+                                        cursorStart,
+                                        cursorEnd,
+                                        minIngestionTime,
+                                        maxIngestionTime,
+                                        kqlQuery);
+                                    var query = @$"
                                     let ExtentIdCreationTime = print ExtentIdCreationTime=dynamic([
                                         {extentCreationTimesJsonList}
                                     ])
@@ -348,20 +398,81 @@ namespace KustoCopyConsole.Kusto
                     Info2 = arg_max(RowNum, MaxIngestionTime)
                   by BlockId
                 | project RowCount, MinIngestionTime, MaxIngestionTime, CreatedOn";
-                    var reader = await _provider.ExecuteQueryAsync(
-                        _databaseName,
-                        query,
-                        EMPTY_PROPERTIES,
-                        ct);
-                    var results = reader
-                        .ToEnumerable(r => new ProtoBlock(
-                            (long)r["RowCount"],
-                            (string)r["MinIngestionTime"],
-                            (string)r["MaxIngestionTime"],
-                            r["CreatedOn"].To<DateTime>()))
-                        .ToImmutableArray();
+                                    var reader = await _provider.ExecuteQueryAsync(
+                                        _databaseName,
+                                        query,
+                                        EMPTY_PROPERTIES,
+                                        ct);
+                                    var results = reader
+                                        .ToEnumerable(r => new ProtoBlock(
+                                            (long)r["RowCount"],
+                                            (string)r["MinIngestionTime"],
+                                            (string)r["MaxIngestionTime"],
+                                            r["CreatedOn"].To<DateTime>()))
+                                        .ToImmutableArray();
 
-                    return results;
+                                    return results;
+                                },
+                ct);
+        }
+
+        public async Task<long?> GetPostPlanningRowCountAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string postPlanningQuery,
+            string? cursorStart,
+            string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            TimeSpan timeout,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var baseDataQuery = BuildBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
+                    var query = @$"
+{baseDataQuery}
+BaseData
+{postPlanningQuery}
+| count
+";
+                    try
+                    {
+                        var properties = EMPTY_PROPERTIES.Clone();
+
+                        properties.SetOption(ClientRequestProperties.OptionServerTimeout, timeout);
+
+                        var reader = await _provider.ExecuteQueryAsync(
+                            _databaseName,
+                            query,
+                            properties,
+                            ct);
+                        var rowPartitions = reader
+                            .ToEnumerable(r => (long)r[0])
+                            .First();
+
+                        return rowPartitions;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (PlanningQuery.IsResourceFailure(ex))
+                        {
+                            return (long?)null;
+                        }
+                        else
+                        {
+                            throw;
+                        }
+                    }
                 },
                 ct);
         }
@@ -377,7 +488,7 @@ namespace KustoCopyConsole.Kusto
         private string BuildBaseDataQuery(
             string tableName,
             string? cursorStart,
-            string? cursorEnd,
+            string cursorEnd,
             string? minIngestionTime,
             string? maxIngestionTime,
             string kqlQuery)
@@ -403,7 +514,7 @@ let BaseData = ['{tableName}']
         private string BuildTimeRangeBaseDataQuery(
             string tableName,
             string? cursorStart,
-            string? cursorEnd,
+            string cursorEnd,
             string minIngestionTime,
             string maxIngestionTime,
             string kqlQuery)

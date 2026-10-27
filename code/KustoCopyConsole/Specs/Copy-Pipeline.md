@@ -17,20 +17,6 @@ Why each stage works the way it does.  Class names are in `Runner/`.
 Turns a cursor window into blocks (at most 16 M rows) without one giant query or millions of
 blocks at once.
 
-* Throttle with hysteresis:  start planning below 600 in-flight blocks, keep going until 1000
-  (counted across all activities on the same source cluster).
-* Partition hierarchy persisted in `PlanningPartition` (resumable):  root -> 1-day bins ->
-  1-minute bins (merged up to 4 G rows) -> blocks.  Partitions of at most 4 G rows go to block
-  loading.
-* Block loading query lists the window's extents with the `execute_show_command` plugin (must
-  not be disabled) to capture each block's **extent creation time**, then cuts the ordered
-  rows into groups of at most 16 M with `row_cumsum`.
-* The user's `KqlQuery` is spliced into planning **and** export, so counts reflect the query.
-  It must not aggregate (breaks `ingestion_time()`).
-* With a non-empty `PostPlanningKqlQuery`, planning skips extent creation-time lookup and
-  creates one block per planning partition with a null `CreationTime`. The query runs only
-  during export; destination extent creation times are not matched to the source.
-
 ## Export (`ExportingRunner`, `AwaitExportedRunner`)
 
 * Capacity = source `DataExport` capacity, capped by `--export`.

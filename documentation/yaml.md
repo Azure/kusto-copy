@@ -30,6 +30,7 @@ activities:
     tableName: "string"
   kqlQuery: "string"
   postPlanningKqlQuery: "string"
+  blockRowCountTarget: "integer"
 stagingStorageDirectories:
 - "uri"
 exportCount: "integer"
@@ -62,6 +63,7 @@ Each activity connects one source table to one destination table.
 | destination | Object | Yes | — | [Destination settings](#destination) |
 | kqlQuery | String | No | — | [Row-level query][query] |
 | postPlanningKqlQuery | String | No | — | [Post-planning KQL query][postPlanning] |
+| blockRowCountTarget | Integer | No | 250000000 | [Block row target][blockTarget] |
 
 #### Source
 
@@ -92,16 +94,18 @@ reference in that group.
 ## 🧮 Post-planning KQL query
 
 Use the YAML activity property `postPlanningKqlQuery` to run additional KQL on the rows
-selected by the regular query during the export phase only. It is intentionally not used by
-planning, so it does not influence block selection or query planning cost.
+selected by the regular query. Planning also executes the combined query to count output rows,
+targeting at most 16 million rows per block rather than limiting raw input rows. Large or expensive
+partitions are subdivided down to 1 ms; a successful query at that resolution may exceed the
+target.
 
 When `postPlanningKqlQuery` is non-empty, destination extent `CreationTime` is no longer
 matched to the source, even if the query only filters or projects rows. Without a
 post-planning query, source extent creation times are preserved.
 
-This is useful for aggregations, expensive filters, or other transformations that you want to
-apply only to exported data. A common example is summarizing by hour, but a regex-based filter
-can also be appropriate if you want to trade planning cost for export-only processing.
+This is useful for aggregations, expensive filters, or other transformations of exported data.
+A common example is summarizing by hour. These transformations also incur planning cost:
+the full query runs during output counting and again during export.
 
 For example, summarize temperature readings by hour and widget:
 
@@ -119,10 +123,36 @@ and removes the trailing newline. More-indented lines retain line breaks, which 
 accepts.
 
 The destination table's schema must match the post-planning query output, not the original
-source rows. Because the query is not part of planning, the exported result may be smaller or
-more selective than the planner's assumptions; choose carefully based on your workload.
+source rows. Aggregations run independently per block, not globally across the copy. Larger
+input partitions let the source aggregate more data before the destination combines the results.
 
 See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a complete example.
+
+<a id="block-row-count-target"></a>
+
+## Block row count target
+
+`blockRowCountTarget` is an optional positive 64-bit integer on each activity, next to
+`postPlanningKqlQuery`. It defaults to `250000000` (250 million rows). It is intended to guide
+the number of input rows per block only when `postPlanningKqlQuery` is non-empty, not the
+number of rows produced by that query. Without a post-planning query, it has no effect.
+
+The planner now counts post-planning output rows and subdivides on timeouts or query resource
+limits. Its 16-million-output-row target is separate from this unused input-row setting.
+
+For example, specify a larger input-row target for a daily aggregation:
+
+```yaml
+activities:
+- activityName: "daily-temperature"
+  postPlanningKqlQuery: >-
+    | summarize TotalTemp=sum(Temperature) by bin(Timestamp, 1d), WidgetId
+  blockRowCountTarget: 1000000000
+```
+
+> [!NOTE]
+> This setting is currently accepted, validated, and stored in the parameterization only.
+> It is not yet used by planning or export, so changing it does not change block sizes.
 
 [storage]: parameters.md#adls-gen-2-containers
 [mode]: parameters.md#copy-mode
@@ -130,4 +160,5 @@ See the [aggregation recipe](scenarios.md#aggregate-before-copying) for a comple
 [identity]: parameters.md#client-id
 [query]: parameters.md#query
 [postPlanning]: #post-planning-kql-query
+[blockTarget]: #block-row-count-target
 [entity-group]: https://learn.microsoft.com/kusto/management/entity-groups

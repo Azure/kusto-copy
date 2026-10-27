@@ -107,7 +107,8 @@ Use optional `-q` to filter rows or transform columns, for example:
 ```
 
 Keep `-q` for row-level filtering and transformations that should affect planning. For
-export-only transformations, see [post-planning queries in YAML](yaml.md#post-planning-kql-query).
+aggregations and output transformations, see [post-planning queries in
+YAML](yaml.md#post-planning-kql-query).
 See the [filtered-copy recipe](scenarios.md#filter-or-project-source-data).
 
 <a id="client-id"></a>

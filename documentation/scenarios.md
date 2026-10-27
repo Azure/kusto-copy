@@ -80,7 +80,7 @@ datetime boundary rather than `ago(30d)` during a long-running migration.
 
 > [!IMPORTANT]
 > Keep `-q` for row-level filtering and transformations that should affect planning. Use
-> `postPlanningKqlQuery` for export-only work such as aggregation or heavy post-processing,
+> `postPlanningKqlQuery` for aggregation or heavy post-processing of the output,
 > as shown below.
 
 <a id="aggregate-before-copying"></a>
@@ -88,7 +88,8 @@ datetime boundary rather than `ago(30d)` during a long-running migration.
 ## 🧮 Aggregate before copying
 
 In general, use `-q` or `kqlQuery` to select the input rows that matter to planning, and
-`postPlanningKqlQuery` to shape the export result after planning.
+`postPlanningKqlQuery` to shape the export result. Planning runs both to size blocks by output
+rows.
 
 In the following example, `kqlQuery` keeps only rows with non-null `Temperature` values,
 while `postPlanningKqlQuery` aggregates the exported result.
@@ -115,11 +116,11 @@ See [post-planning KQL query](yaml.md#post-planning-kql-query) for the YAML prop
 **Aggregations cannot be used in `kqlQuery`**: `summarize` removes `ingestion_time()`,
 which is needed for planning.
 
-Filters and projections can be done in both `kqlQuery` and `postPlanningKqlQuery`, but only
-`kqlQuery` affects planning. In general, most filters should be done in `kqlQuery` to plan
-optimally sized blocks. For costly filters, such as heavy parsing, it may be better to do them
-in `postPlanningKqlQuery` to avoid parsing all rows during planning, which could time out
-certain planning queries when they are executed across large amounts of potentially cold data.
+Filters and projections can be done in both `kqlQuery` and `postPlanningKqlQuery`.
+Both affect planning: the planner counts the combined query's output and subdivides partitions
+that exceed 16 million output rows or encounter timeout/memory limits. Keep row-level filters
+in `kqlQuery` and aggregations in `postPlanningKqlQuery`; expensive parsing still incurs
+planning cost, especially on cold data.
 
 <a id="copy-materialized-views"></a>
 

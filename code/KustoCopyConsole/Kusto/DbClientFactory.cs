@@ -10,6 +10,7 @@ namespace KustoCopyConsole.Kusto
 {
     internal class DbClientFactory : IAsyncDisposable
     {
+        private const int MAX_CONCURRENT_QUERY = 5;
         private const int MAX_CONCURRENT_DM_COMMAND = 10;
         private const int MAX_CONCURRENT_INGEST_QUEUING = 75;
 
@@ -41,30 +42,15 @@ namespace KustoCopyConsole.Kusto
             var allClusterUris = sourceClusterUris
                 .Concat(destinationClusterUris)
                 .Distinct();
-            var queryCapacityTasks = allClusterUris
-                .Select(uri => new
-                {
-                    Task = GetQueryCapacityAsync(providerFactory.GetCommandProvider(uri), ct),
-                    Uri = uri
-                })
-                .ToImmutableArray();
 
-            await Task.WhenAll(queryCapacityTasks.Select(o => o.Task));
-
-            var allClusterQueryCount = queryCapacityTasks
-                .Select(o => new
-                {
-                    o.Uri,
-                    ConcurrentQueryCount = (int)Math.Max(1, 0.1 * o.Task.Result)
-                });
-            var allClusterQueryQueueMap = allClusterQueryCount
+            var allClusterQueryQueueMap = allClusterUris
                 .ToImmutableDictionary(
-                o => o.Uri,
-                o => new PriorityExecutionQueue<KustoPriority>(o.ConcurrentQueryCount));
-            var allClusterCommandQueueMap = allClusterQueryCount
+                u => u,
+                u => new PriorityExecutionQueue<KustoPriority>(MAX_CONCURRENT_QUERY));
+            var allClusterCommandQueueMap = allClusterUris
                 .ToImmutableDictionary(
-                o => o.Uri,
-                o => new PriorityExecutionQueue<KustoPriority>(o.ConcurrentQueryCount));
+                u => u,
+                o => new PriorityExecutionQueue<KustoPriority>(MAX_CONCURRENT_QUERY));
             var destinationClusterDmQueryQueueMap = destinationClusterUris
                 .ToImmutableDictionary(
                 u => u,
@@ -94,22 +80,6 @@ namespace KustoCopyConsole.Kusto
             _allClusterCommandQueueMap = allClusterCommandQueueMap;
             _destinationClusterDmCommandQueueMap = destinationClusterDmCommandQueueMap;
             _destinationClusterIngestCommandQueueMap = destinationClusterIngestCommandQueueMap;
-        }
-
-        private static async Task<int> GetQueryCapacityAsync(
-            ICslAdminProvider provider,
-            CancellationToken ct)
-        {
-            var commandText = @"
-.show capacity queries
-| project Total";
-            var reader = await provider.ExecuteControlCommandAsync(string.Empty, commandText);
-            var capacity = reader.ToDataSet().Tables[0].Rows
-                .Cast<DataRow>()
-                .Select(r => (long)r[0])
-                .First();
-
-            return (int)capacity;
         }
         #endregion
 
