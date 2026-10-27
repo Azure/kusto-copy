@@ -17,8 +17,6 @@ Why each stage works the way it does.  Class names are in `Runner/`.
 Turns a cursor window into blocks (at most 16 M rows) without one giant query or millions of
 blocks at once.
 
-See [Planning.md](Planning.md) for the detailed planning rules and design notes.
-
 ## Export (`ExportingRunner`, `AwaitExportedRunner`)
 
 * Capacity = source `DataExport` capacity, capped by `--export`.
