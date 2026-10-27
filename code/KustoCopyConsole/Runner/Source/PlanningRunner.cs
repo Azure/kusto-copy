@@ -202,6 +202,17 @@ namespace KustoCopyConsole.Runner.Source
             IterationKey iterationKey,
             CancellationToken ct)
         {
+            long GetTotalBlockCount()
+            {
+                var totalBlockCount = Database.BlockMetrics.Query()
+                    .Where(pf => pf.Equal(bm => bm.IterationKey, iterationKey))
+                    .Where(pf => pf.LessThanOrEqual(bm => bm.BlockMetric, BlockMetric.ExtentMoved))
+                    .Sum(bm => bm.Value);
+
+                return totalBlockCount;
+            }
+
+            var initialTotalBlockCount = GetTotalBlockCount();
             PlanningPartitionRecord2? lastPartition = null;
 
             do
@@ -222,7 +233,10 @@ namespace KustoCopyConsole.Runner.Source
                     lastPartition,
                     ct);
             }
-            while (CanPlan() && LoadIteration(iterationKey).State == IterationState.Planning);
+            while (
+            CanPlan()
+            && LoadIteration(iterationKey).State == IterationState.Planning
+            && (!isRunnerShared || initialTotalBlockCount == GetTotalBlockCount()));
         }
 
         private async Task SubPartitionAsync(
