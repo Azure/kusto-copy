@@ -51,6 +51,7 @@ namespace KustoCopyConsole.Kusto
                     $" '{ex.InnerException.Message}'");
             }
             Trace.TraceWarning($"Stack trace:  {ex.StackTrace}");
+            Trace.TraceWarning(string.Empty);
         }
     }
 }
