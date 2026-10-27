@@ -8,7 +8,7 @@ namespace KustoCopyConsole.Runner
 {
     internal abstract class ClusterRunnerBase : RunnerBase
     {
-        private const int PARALLEL_CALL_PER_CORE_COUNT = 1;
+        private const int PARALLEL_CALL_PER_CORE_COUNT = 2;
         //  If true, we group by source clusters, if false, we group by destination clusters
         private readonly bool _bySourceCluster;
 
