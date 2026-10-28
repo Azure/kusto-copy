@@ -48,11 +48,14 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
-        public async Task<IEnumerable<TimeInterval>> InitialPartitionRowsAsync(
+        public async Task<IEnumerable<TimeInterval>> PartitionRowsWithoutMergeAsync(
             KustoPriority priority,
             string tableName,
+            string kqlQuery,
             string? cursorStart,
             string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
             TimeSpan partitionResolution,
             CancellationToken ct)
         {
@@ -64,8 +67,8 @@ namespace KustoCopyConsole.Kusto
                         tableName,
                         cursorStart,
                         cursorEnd,
-                        string.Empty,
-                        string.Empty,
+                        minIngestionTime,
+                        maxIngestionTime,
                         string.Empty);
                     var query = @$"
 let PartitionResolution=timespan({partitionResolution});
@@ -96,59 +99,7 @@ BaseData
                 ct);
         }
 
-        public async Task<IEnumerable<TimeInterval>> SubPartitionRowsAsync(
-            KustoPriority priority,
-            string tableName,
-            string kqlQuery,
-            string? cursorStart,
-            string cursorEnd,
-            string? minIngestionTime,
-            string? maxIngestionTime,
-            TimeSpan partitionResolution,
-            long MaxRowCount,
-            CancellationToken ct)
-        {
-            return await RequestRunAsync(
-                priority,
-                async () =>
-                {
-                    var baseDataQuery = BuildBaseDataQuery(
-                        tableName,
-                        cursorStart,
-                        cursorEnd,
-                        minIngestionTime,
-                        maxIngestionTime,
-                        kqlQuery);
-                    var query = @$"
-let PartitionResolution=timespan({partitionResolution});
-{baseDataQuery}
-BaseData
-| summarize
-    MinIngestionTime=min(ingestion_time()),
-    MaxIngestionTime=max(ingestion_time())
-    by PartitionBin=bin(ingestion_time(), PartitionResolution)
-| order by PartitionBin asc
-| project
-    MinIngestionTime=tostring(MinIngestionTime),
-    MaxIngestionTime=tostring(MaxIngestionTime)
-                ";
-                    var reader = await _provider.ExecuteQueryAsync(
-                        _databaseName,
-                        query,
-                        EMPTY_PROPERTIES,
-                        ct);
-                    var rowPartitions = reader
-                        .ToEnumerable(r => new TimeInterval(
-                            (string)r["MinIngestionTime"],
-                            (string)r["MaxIngestionTime"]))
-                        .ToImmutableArray();
-
-                    return rowPartitions;
-                },
-                ct);
-        }
-
-        public async Task<IEnumerable<RowPartition>> LoadPartitionAsync(
+        public async Task<IEnumerable<RowPartition>> PartitionRowsWithMergeAsync(
             KustoPriority priority,
             string tableName,
             string kqlQuery,
