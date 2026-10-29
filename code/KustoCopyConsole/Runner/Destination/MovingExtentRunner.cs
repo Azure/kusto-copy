@@ -27,29 +27,20 @@ namespace KustoCopyConsole.Runner.Destination
 
         protected override BlockState TransitionState => BlockState.ExtentMoving;
 
-        protected override void ResetBlocks(IEnumerable<BlockRecord> lostBlocks)
+        protected override void ResetLostBlock(BlockRecord lostBlock)
         {
-            using (var tx = Database.CreateTransaction())
-            {
-                foreach (var block in lostBlocks)
+            Database.Blocks.UpdateRecord(
+                lostBlock,
+                lostBlock with
                 {
-                    Database.Blocks.UpdateRecord(
-                        block,
-                        block with
-                        {
-                            State = BlockState.Ingested,
-                            MoveOperationId = string.Empty
-                        },
-                        tx);
-                }
-
-                tx.Complete();
-            }
+                    State = BlockState.Ingested,
+                    MoveOperationId = string.Empty
+                });
         }
 
-        protected override void RetryBlocks(IEnumerable<BlockRecord> failedBlocks)
+        protected override void RetryFailedBlock(BlockRecord failedBlock, string status)
         {
-            ResetBlocks(failedBlocks);
+            ResetLostBlock(failedBlock);
         }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)

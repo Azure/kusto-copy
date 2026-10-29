@@ -71,9 +71,9 @@ namespace KustoCopyConsole.Runner
 
         protected abstract BlockState TransitionState { get; }
 
-        protected abstract void ResetBlocks(IEnumerable<BlockRecord> lostBlocks);
+        protected abstract void ResetLostBlock(BlockRecord lostBlock);
 
-        protected abstract void RetryBlocks(IEnumerable<BlockRecord> failedBlocks);
+        protected abstract void RetryFailedBlock(BlockRecord failedBlock, string status);
 
         protected abstract Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct);
 
@@ -225,7 +225,7 @@ namespace KustoCopyConsole.Runner
             var statusOperationIdBag = status
                 .Select(s => s.OperationId)
                 .ToHashSet();
-            var lostBlocks = new List<BlockRecord>();
+            var hasLostBlocks = false;
 
             foreach (var id in operationIdMap.Keys)
             {
@@ -233,16 +233,16 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    lostBlocks.Add(block);
                     TraceWarning(
                         $"Warning!  Operation ID lost:  '{id}' for " +
                         $"block {block.BlockKey} in state {block.State} ; " +
                         "block marked for reprocessing");
+                    ResetLostBlock(block);
+                    hasLostBlocks = true;
                 }
             }
-            ResetBlocks(lostBlocks);
 
-            return lostBlocks.Count > 0;
+            return hasLostBlocks;
         }
 
         private bool ProcessFailures(
@@ -266,14 +266,13 @@ namespace KustoCopyConsole.Runner
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    failedBlocks.Add(block);
+                    RetryFailedBlock(block, status.Status);
                 }
                 else
                 {
                     throw new CopyException($"Permanent {block.State} error", false);
                 }
             }
-            RetryBlocks(failedBlocks);
 
             return failedBlocks.Count > 0;
         }

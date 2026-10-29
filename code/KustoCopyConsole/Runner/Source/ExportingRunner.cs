@@ -29,14 +29,28 @@ namespace KustoCopyConsole.Runner.Source
 
         protected override BlockState TransitionState => BlockState.Exporting;
 
-        protected override void ResetBlocks(IEnumerable<BlockRecord> lostBlocks)
+        protected override void ResetLostBlock(BlockRecord lostBlock)
         {
-            UpdateBlockStates(lostBlocks, BlockState.Planned);
+            Database.Blocks.UpdateRecord(
+                lostBlock,
+                lostBlock with
+                {
+                    State = BlockState.Planned,
+                    MoveOperationId = string.Empty
+                });
         }
 
-        protected override void RetryBlocks(IEnumerable<BlockRecord> failedBlocks)
+        protected override void RetryFailedBlock(BlockRecord failedBlock, string status)
         {
-            UpdateBlockStates(failedBlocks, BlockState.Replanning);
+            var isExportTooLarge = status.Contains("E_RUNAWAY_QUERY");
+
+            Database.Blocks.UpdateRecord(
+                failedBlock,
+                failedBlock with
+                {
+                    State = isExportTooLarge ? BlockState.Replanning : BlockState.Planned,
+                    MoveOperationId = string.Empty
+                });
         }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
@@ -162,26 +176,6 @@ namespace KustoCopyConsole.Runner.Source
 
                     tx.Complete();
                 }
-            }
-        }
-
-        private void UpdateBlockStates(IEnumerable<BlockRecord> blocks, BlockState state)
-        {
-            using (var tx = Database.CreateTransaction())
-            {
-                foreach (var block in blocks)
-                {
-                    Database.Blocks.UpdateRecord(
-                        block,
-                        block with
-                        {
-                            State = state,
-                            ExportOperationId = string.Empty
-                        },
-                        tx);
-                }
-
-                tx.Complete();
             }
         }
     }
