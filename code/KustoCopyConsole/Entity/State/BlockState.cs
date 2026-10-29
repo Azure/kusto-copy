@@ -3,6 +3,7 @@
     public enum BlockState
     {
         Planned,
+        Replanning,
         Exporting,
         Exported,
         Queued,

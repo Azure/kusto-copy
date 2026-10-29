@@ -71,7 +71,9 @@ namespace KustoCopyConsole.Runner
 
         protected abstract BlockState TransitionState { get; }
 
-        protected abstract BlockRecord ResetBlock(BlockRecord block);
+        protected abstract void ResetBlocks(IEnumerable<BlockRecord> lostBlocks);
+
+        protected abstract void RetryBlocks(IEnumerable<BlockRecord> failedBlocks);
 
         protected abstract Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct);
 
@@ -207,8 +209,8 @@ namespace KustoCopyConsole.Runner
                 KustoPriority.HighestPriority,
                 operationIdMap.Keys,
                 ct);
-            var hasLostOperations = DetectLostOperationIds(operationIdMap, statuses);
-            var hasFailures = DetectFailures(operationIdMap, statuses);
+            var hasLostOperations = ProcessLostOperationIds(operationIdMap, statuses);
+            var hasFailures = ProcessFailures(operationIdMap, statuses);
             var hasCompletedOperations =
                 await CompleteOperationsAsync(operationIdMap, statuses, ct);
 
@@ -216,14 +218,14 @@ namespace KustoCopyConsole.Runner
         }
 
         #region Handle Operations
-        private bool DetectLostOperationIds(
+        private bool ProcessLostOperationIds(
             IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<OperationStatus> status)
         {
             var statusOperationIdBag = status
                 .Select(s => s.OperationId)
                 .ToHashSet();
-            var hasLostOperations = false;
+            var lostBlocks = new List<BlockRecord>();
 
             foreach (var id in operationIdMap.Keys)
             {
@@ -231,25 +233,25 @@ namespace KustoCopyConsole.Runner
                 {
                     var block = operationIdMap[id];
 
-                    hasLostOperations = true;
-                    Database.Blocks.UpdateRecord(block, ResetBlock(block));
+                    lostBlocks.Add(block);
                     TraceWarning(
                         $"Warning!  Operation ID lost:  '{id}' for " +
                         $"block {block.BlockKey} in state {block.State} ; " +
                         "block marked for reprocessing");
                 }
             }
+            ResetBlocks(lostBlocks);
 
-            return hasLostOperations;
+            return lostBlocks.Count > 0;
         }
 
-        private bool DetectFailures(
+        private bool ProcessFailures(
             IDictionary<string, BlockRecord> operationIdMap,
             IImmutableList<OperationStatus> statuses)
         {
             var failedStatuses = statuses
                 .Where(s => FAILED_STATUS.Contains(s.State));
-            var hasFailures = false;
+            var failedBlocks = new List<BlockRecord>();
 
             foreach (var status in failedStatuses)
             {
@@ -264,16 +266,16 @@ namespace KustoCopyConsole.Runner
                 TraceWarning(warning);
                 if (status.ShouldRetry)
                 {
-                    hasFailures = true;
-                    Database.Blocks.UpdateRecord(block, ResetBlock(block));
+                    failedBlocks.Add(block);
                 }
                 else
                 {
                     throw new CopyException($"Permanent {block.State} error", false);
                 }
             }
+            RetryBlocks(failedBlocks);
 
-            return hasFailures;
+            return failedBlocks.Count > 0;
         }
 
         private async Task<bool> CompleteOperationsAsync(

@@ -48,6 +48,74 @@ namespace KustoCopyConsole.Kusto
                 ct);
         }
 
+        public async Task<IEnumerable<RowPartition>> SubDivideIntervalAsync(
+            KustoPriority priority,
+            string tableName,
+            string kqlQuery,
+            string? cursorStart,
+            string cursorEnd,
+            string minIngestionTime,
+            string maxIngestionTime,
+            CancellationToken ct)
+        {
+            return await RequestRunAsync(
+                priority,
+                async () =>
+                {
+                    var baseDataQuery = BuildBaseDataQuery(
+                        tableName,
+                        cursorStart,
+                        cursorEnd,
+                        minIngestionTime,
+                        maxIngestionTime,
+                        kqlQuery);
+                    var query = @$"
+{baseDataQuery}
+let MinIngestionTime = datetime({minIngestionTime});
+let MaxIngestionTime = datetime({maxIngestionTime});
+//  We use equal distance steps to avoid computing percentiles
+let Step = (MaxIngestionTime - MinIngestionTime) / 4;
+//  Construct intervals
+BaseData
+| project IngestionTime = ingestion_time()
+| extend Interval = case(
+    IngestionTime < MinIngestionTime + Step, 1,
+    IngestionTime < MinIngestionTime + 2*Step, 2,
+    IngestionTime < MinIngestionTime + 3*Step, 3,
+    4)
+| summarize
+    SubRowCount = count(),
+    SubMinIngestionTime = min(IngestionTime),
+    SubMaxIngestionTime = max(IngestionTime)
+    by Interval
+| where SubRowCount > 0
+//  Eliminate duplicates
+| summarize take_any(SubRowCount) by SubMinIngestionTime, SubMaxIngestionTime
+| order by SubMinIngestionTime asc
+| project
+    SubRowCount,
+    SubMinIngestionTime=tostring(SubMinIngestionTime),
+    SubMaxIngestionTime=tostring(SubMaxIngestionTime)
+";
+                    var reader = await _provider.ExecuteQueryAsync(
+                        _databaseName,
+                        query,
+                        EMPTY_PROPERTIES,
+                        ct);
+                    var rowPartitions = reader
+                        .ToEnumerable(r => new RowPartition(
+                            (long)r["SubRowCount"],
+                            0,
+                            new TimeInterval(
+                                (string)r["SubMinIngestionTime"],
+                                (string)r["SubMaxIngestionTime"])))
+                        .ToImmutableArray();
+
+                    return rowPartitions;
+                },
+                ct);
+        }
+
         public async Task<IEnumerable<TimeInterval>> PartitionRowsWithoutMergeAsync(
             KustoPriority priority,
             string tableName,

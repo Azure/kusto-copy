@@ -3,6 +3,7 @@
     internal enum BlockMetric
     {
         Planned,
+        Replanning,
         Exporting,
         Exported,
         Queued,
