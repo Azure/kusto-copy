@@ -62,7 +62,9 @@ namespace KustoCopyConsole.Runner
                 //  Only take the states part of the metrics
                 .Where(p => (int)p.Key < Enum.GetValues<BlockState>().Length)
                 .Sum(p => p.Value);
-            var planned = metrics[BlockMetric.Planned] + metrics[BlockMetric.Exporting];
+            var planned = metrics[BlockMetric.Planned]
+                + metrics[BlockMetric.Replanning]
+                + metrics[BlockMetric.Exporting];
             var exported = metrics[BlockMetric.Exported] + metrics[BlockMetric.Queued];
             var ingested = metrics[BlockMetric.Ingested] + metrics[BlockMetric.ExtentMoving];
             var moved = metrics[BlockMetric.ExtentMoved];

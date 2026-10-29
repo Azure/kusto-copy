@@ -29,13 +29,28 @@ namespace KustoCopyConsole.Runner.Source
 
         protected override BlockState TransitionState => BlockState.Exporting;
 
-        protected override BlockRecord ResetBlock(BlockRecord block)
+        protected override void ResetLostBlock(BlockRecord lostBlock)
         {
-            return block with
-            {
-                State = BlockState.Planned,
-                ExportOperationId = string.Empty
-            };
+            Database.Blocks.UpdateRecord(
+                lostBlock,
+                lostBlock with
+                {
+                    State = BlockState.Planned,
+                    MoveOperationId = string.Empty
+                });
+        }
+
+        protected override void RetryFailedBlock(BlockRecord failedBlock, string status)
+        {
+            var isExportTooLarge = status.Contains("E_RUNAWAY_QUERY");
+
+            Database.Blocks.UpdateRecord(
+                failedBlock,
+                failedBlock with
+                {
+                    State = isExportTooLarge ? BlockState.Replanning : BlockState.Planned,
+                    MoveOperationId = string.Empty
+                });
         }
 
         protected override async Task<int> FetchCapacityAsync(Uri clusterUri, CancellationToken ct)
